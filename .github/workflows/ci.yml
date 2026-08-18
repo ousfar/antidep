@@ -28,10 +28,10 @@ jobs:
       - name: Produksjonsbygg
         run: npm run build
 
-  supabase-dev:
-    name: Lokal Supabase-stack booter fra clean checkout
+  database:
+    name: Migrasjoner og databasetester på lokal Supabase-stack
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,7 +42,10 @@ jobs:
         run: npm ci
       - name: Start lokal Supabase-stack
         run: npx supabase start
-      - name: Vis status
-        run: npx supabase status
+      - name: Kjør migrasjonene fra bunnen av
+        run: npx supabase db reset
+      - name: Databasetester (pgTAP)
+        run: npm run db:test
       - name: Stopp stacken
+        if: always()
         run: npx supabase stop

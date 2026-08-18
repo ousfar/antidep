@@ -10,7 +10,11 @@ enabled = true
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+# Antidep eksponerer bare kontraktslaget `api`. De kanoniske schemaene (`catalog`, `knowledge`,
+# `workflow`, `provenance`, `audit`) skal aldri stå her, jf. docs/DATABASE_ARCHITECTURE.md §5/§47.
+# Eksponering av schema er bare det ene laget: hvert view og hver funksjon i `api` trenger i tillegg
+# eksplisitt GRANT i migrasjonen som oppretter objektet.
+schemas = ["public", "graphql_public", "api"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
