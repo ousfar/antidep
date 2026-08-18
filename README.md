@@ -20,13 +20,15 @@ All utvikling styres av dokumentene i [`docs/`](./docs):
 ## Teknisk stack
 
 React, TypeScript og Vite i klientlaget; Vitest og React Testing Library for tester;
-ESLint og Prettier for kodekvalitet. Supabase/PostgreSQL er valgt som kanonisk dataplattform
-og innføres fra og med de første databaseslicene (se `supabase/README.md`). Hosting er
-planlagt på Vercel.
+ESLint og Prettier for kodekvalitet. Supabase/PostgreSQL er valgt som kanonisk dataplattform;
+det lokale utviklingsmiljøet er satt opp med pinnet Supabase CLI (se `supabase/README.md`),
+og schema/migrasjoner innføres fra og med de første databaseslicene. Hosting er planlagt
+på Vercel.
 
 ## Kom i gang
 
-Krav: Node.js 22 (se `.nvmrc`) og npm.
+Krav: Node.js 22 (se `.nvmrc`) og npm. Docker kreves i tillegg for den lokale
+Supabase-stacken (valgfritt inntil databaseslicene tar den i bruk).
 
 ```bash
 npm ci        # installer avhengigheter fra package-lock.json
@@ -45,16 +47,23 @@ npm run format:check # Prettier (kun kontroll, brukes i CI)
 npm run typecheck    # TypeScript uten emit
 npm run test         # Vitest, én kjøring (brukes i CI)
 npm run test:watch   # Vitest i watch-modus
+npm run db:start     # lokal Supabase-stack (krever Docker), se supabase/README.md
+npm run db:status    # status og lokale nøkler
+npm run db:reset     # gjenskap lokal database (kjører migrasjoner når de finnes)
+npm run db:stop      # stopp lokal Supabase-stack
 ```
 
 CI (GitHub Actions, `.github/workflows/ci.yml`) kjører lint, formatkontroll, typecheck,
-tester og produksjonsbygg på alle pull requests og på `main`.
+tester og produksjonsbygg på alle pull requests og på `main`, og verifiserer i en egen jobb
+at den lokale Supabase-stacken booter fra clean checkout.
 
 ## Miljøvariabler
 
-Kopier `.env.example` til `.env.local` og fyll inn verdier ved behov. Kun variabler med
-`VITE_`-prefiks eksponeres til nettleseren. Reelle nøkler skal aldri committes, og Supabase
-`service_role`-/secret-nøkler skal aldri finnes i klientkode eller i repoet.
+Kopier `.env.example` til `.env.local` og fyll inn verdier ved behov; for lokal utvikling
+skrives verdiene ut av `npm run db:start`/`npm run db:status`. Kun variabler med
+`VITE_`-prefiks eksponeres til nettleseren, og klienten skal kun bruke publishable-nøkkelen.
+Reelle nøkler skal aldri committes, og Supabase secret-/`service_role`-nøkler skal aldri
+finnes i klientkode eller i repoet.
 
 ## Prosjektstruktur
 
@@ -62,7 +71,7 @@ Kopier `.env.example` til `.env.local` og fyll inn verdier ved behov. Kun variab
 docs/        styringsdokumenter (arkitektur, governance, plan)
 src/
   app/       app-skall og applikasjonsoppsett
-supabase/    databasegrunnlag; migrasjoner kommer fra og med PR B
+supabase/    lokal Supabase-konfigurasjon; migrasjoner kommer fra og med PR B
 tests/       testoppsett og tverrgående tester (e2e kommer i senere slices)
 ```
 

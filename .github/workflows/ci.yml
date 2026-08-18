@@ -27,3 +27,22 @@ jobs:
         run: npm run test
       - name: Produksjonsbygg
         run: npm run build
+
+  supabase-dev:
+    name: Lokal Supabase-stack booter fra clean checkout
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Installer avhengigheter
+        run: npm ci
+      - name: Start lokal Supabase-stack
+        run: npx supabase start
+      - name: Vis status
+        run: npx supabase status
+      - name: Stopp stacken
+        run: npx supabase stop

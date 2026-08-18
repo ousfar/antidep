@@ -6,10 +6,10 @@ interface ImportMetaEnv {
    */
   readonly VITE_SUPABASE_URL?: string
   /**
-   * Supabase publishable/anon-nøkkel for nettleserklienten.
-   * Aldri legg service_role-/secret-nøkler i klientkode eller i repoet.
+   * Supabase publishable-nøkkel for nettleserklienten.
+   * Legg ALDRI secret-/service_role-nøkler i klientkode eller i repoet.
    */
-  readonly VITE_SUPABASE_ANON_KEY?: string
+  readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string
 }
 
 interface ImportMeta {
