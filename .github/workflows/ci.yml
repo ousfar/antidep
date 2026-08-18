@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    name: Lint, format, typecheck, test og build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Installer avhengigheter
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Formatkontroll
+        run: npm run format:check
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tester
+        run: npm run test
+      - name: Produksjonsbygg
+        run: npm run build
+
+  supabase-dev:
+    name: Lokal Supabase-stack booter fra clean checkout
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Installer avhengigheter
+        run: npm ci
+      - name: Start lokal Supabase-stack
+        run: npx supabase start
+      - name: Vis status
+        run: npx supabase status
+      - name: Stopp stacken
+        run: npx supabase stop
