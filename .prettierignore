@@ -1,0 +1,9 @@
+# Styringsdokumenter skal ikke maskinreformateres; de endres kun redaksjonelt.
+docs/
+CLAUDE.md
+
+# Genererte filer og avhengigheter
+node_modules/
+dist/
+coverage/
+package-lock.json

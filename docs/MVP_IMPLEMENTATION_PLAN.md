@@ -1215,7 +1215,7 @@ Hvis en MVP-forenkling bryter en ønsket langsiktig egenskap uten å bryte en in
 [x] Product information architecture
 [x] MVP implementation plan drafted
 
-[ ] Web application bootstrap
+[~] Web application bootstrap
 [ ] Supabase schema/security foundation
 [ ] Golden evidence slice
 [ ] First admin workflow

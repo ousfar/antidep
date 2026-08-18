@@ -1,0 +1,19 @@
+# Avhengigheter og byggeresultater
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Lokale miljøvariabler – aldri commit reelle nøkler
+.env
+.env.*
+!.env.example
+*.local
+
+# Verktøy og OS
+.vercel/
+.vite/
+supabase/.temp/
+supabase/.branches/
+.DS_Store
+*.log
