@@ -12,7 +12,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(37);
+select plan(40);
 
 -- ---------------------------------------------------------------------------
 -- Tabellene i migrasjon 002, og ingen flere
@@ -39,8 +39,7 @@ select is_empty(
 -- kilde- og evidenslaget i knowledge og migrasjon 004 påstandslaget, og listen
 -- under er uttømmende: den skal utvides av den migrasjonen som legger til en
 -- tabell, slik at et objekt ingen har bestemt seg for ikke kan gli inn
--- ubemerket. Review og proveniens hører til migrasjon 005 og
--- knowledge.publication_events til 006.
+-- ubemerket. knowledge.publication_events hører til migrasjon 006.
 select set_eq(
   $$
     select c.relname
@@ -55,16 +54,52 @@ select set_eq(
   'knowledge inneholder nøyaktig tabellene fra migrasjon 003 og 004'
 );
 
--- De øvrige schemaene er fortsatt tomme.
+-- Samme uttømmende vaktpost for de øvrige schemaene. Migrasjon 005 tok
+-- workflow og provenance i bruk, og listene under er like uttømmende som listen
+-- over knowledge: en tabell eller et view ingen har bestemt seg for skal ikke
+-- kunne gli inn ubemerket bare fordi schemaet allerede er tatt i bruk.
+select set_eq(
+  $$
+    select c.relname
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'workflow'
+      and c.relkind in ('r', 'p', 'v', 'm')
+  $$,
+  $$values ('user_roles'), ('evidence_verifications'), ('claim_verifications'),
+           ('review_decisions')$$,
+  'workflow inneholder nøyaktig tabellene fra migrasjon 005'
+);
+select set_eq(
+  $$
+    select c.relname
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'provenance'
+      and c.relkind in ('r', 'p', 'v', 'm')
+  $$,
+  $$values ('actors')$$,
+  'provenance inneholder nøyaktig aktørtabellen fra migrasjon 005'
+);
+
+-- provenance.agent_runs er bevisst utsatt til migrasjonen som innfører den
+-- første automatiske evidenspipelinen, og skal ikke ha sneket seg inn før den
+-- har en faktisk skrivevei (MVP_IMPLEMENTATION_PLAN.md §22).
+select hasnt_table(
+  'provenance', 'agent_runs',
+  'provenance.agent_runs er ikke opprettet ennå'
+);
+
+-- audit.events hører til migrasjon 008 og api-projeksjonene til 007.
 select is_empty(
   $$
     select n.nspname || '.' || c.relname
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname in ('workflow', 'provenance', 'audit', 'api')
+    where n.nspname in ('audit', 'api')
       and c.relkind in ('r', 'p', 'v', 'm')
   $$,
-  'workflow, provenance, audit og api har ingen objekter ennå'
+  'audit og api har ingen objekter ennå'
 );
 
 -- ---------------------------------------------------------------------------
