@@ -24,13 +24,14 @@
 --
 -- Konvensjoner som gjelder fra og med denne migrasjonen, og som håndheves
 -- maskinelt i supabase/tests/030_conventions_test.sql:
---   1. Kanoniske objekter har databasegenerert UUID som primærnøkkel:
+--   1. Kanoniske objekter har én databasegenerert UUID som primærnøkkel:
 --        id uuid primary key default gen_random_uuid()
---      Eksterne identifikatorer (DOI, PMID, ATC, FEST-ID, varenummer) lagres
---      som egne felter eller identifikatorrelasjoner, aldri som eneste interne
---      primærnøkkel (DATABASE_ARCHITECTURE.md §8).
+--      Eksterne identifikatorer (DOI, PMID, ATC, FEST-ID, varenummer) og
+--      naturlige nøkler lagres som egne felter eller identifikatorrelasjoner med
+--      unike constraints, aldri som intern primærnøkkel
+--      (DATABASE_ARCHITECTURE.md §8).
 --   2. Alle tidspunkter er timestamptz. timestamp without time zone brukes
---      ikke. Registreringstidspunkt heter created_at og har
+--      ikke. Registreringstidspunkt heter created_at og settes av databasen med
 --      default now(). Tidsbegreper med ulik betydning holdes adskilt i egne
 --      kolonner: created_at, recorded_at, valid_from/valid_to, published_at,
 --      review_due_at (DATABASE_ARCHITECTURE.md §7.3).
@@ -38,6 +39,10 @@
 --      opprettes med RLS aktivert og uten grants til anon/authenticated.
 --      Manglende eksplisitt grant er ønsket standardtilstand
 --      (DATABASE_ARCHITECTURE.md §5, §48).
+--   4. Views i api opprettes med security_invoker. Funksjoner er SECURITY
+--      INVOKER som normalvalg; en SECURITY DEFINER-funksjon skal ha
+--      search_path = '' med schemakvalifiserte objektnavn og ikke være kjørbar
+--      for PUBLIC (DATABASE_ARCHITECTURE.md §42, §50).
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------

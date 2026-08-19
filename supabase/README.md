@@ -55,11 +55,12 @@ ingen tilgang til Antidep-schemaene og er ikke applikasjonens universalnøkkel
 Konvensjoner som gjelder for alle senere migrasjoner, håndhevet av
 `tests/030_conventions_test.sql`:
 
-- databasegenerert `uuid`-primærnøkkel med `default gen_random_uuid()`
+- primærnøkkelen er én databasegenerert `uuid`-kolonne med `default gen_random_uuid()`
 - alle tidspunkter som `timestamptz`, med `created_at timestamptz not null default now()`
 - RLS aktivert på alle tabeller i de kanoniske schemaene, uten grants til klientrollene
 - `security_invoker` på views i `api`
-- `SECURITY DEFINER`-funksjoner kun med eksplisitt `search_path` og uten `EXECUTE` til `PUBLIC`
+- `SECURITY DEFINER`-funksjoner kun med `search_path = ''` og schemakvalifiserte navn, og
+  uten `EXECUTE` til `PUBLIC`
 
 Schemaendringer skal alltid ligge som versjonerte migrasjoner her i repoet; manuelle
 endringer i Supabase Dashboard skal ikke være kilden til produksjonsschema

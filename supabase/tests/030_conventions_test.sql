@@ -12,7 +12,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(18);
+select plan(23);
 
 -- ---------------------------------------------------------------------------
 -- Regeldefinisjoner. Hver view returnerer bruddene på én konvensjon.
@@ -39,7 +39,24 @@ where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit', '
   and not a.attisdropped
   and a.atttypid in ('pg_catalog.timestamp'::regtype, 'pg_catalog.time'::regtype);
 
--- 3. UUID-primærnøkler genereres av databasen.
+-- 3. Primærnøkkelen er én enkelt uuid-kolonne (DATABASE_ARCHITECTURE.md §8).
+-- Eksterne identifikatorer og naturlige nøkler modelleres som egne kolonner med
+-- unike constraints, ikke som intern primærnøkkel.
+create view pg_temp.violation_non_uuid_primary_key as
+select n.nspname as schema_name,
+       c.relname as object_name,
+       a.attname as column_name,
+       format_type(a.atttypid, a.atttypmod) as column_type
+from pg_index i
+join pg_class c on c.oid = i.indrelid
+join pg_namespace n on n.oid = c.relnamespace
+join pg_attribute a on a.attrelid = c.oid and a.attnum = any (i.indkey)
+where i.indisprimary
+  and n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
+  and c.relkind in ('r', 'p')
+  and (i.indnkeyatts <> 1 or a.atttypid <> 'pg_catalog.uuid'::regtype);
+
+-- 4. UUID-primærnøkler genereres av databasen.
 create view pg_temp.violation_uuid_primary_key_default as
 select n.nspname as schema_name, c.relname as object_name, a.attname as column_name
 from pg_index i
@@ -52,7 +69,7 @@ where i.indisprimary
   and a.atttypid = 'pg_catalog.uuid'::regtype
   and coalesce(pg_get_expr(d.adbin, d.adrelid), '') not like '%gen_random_uuid()%';
 
--- 4. Alle tabeller registrerer når raden ble opprettet.
+-- 5. Alle tabeller registrerer når raden ble opprettet.
 create view pg_temp.violation_missing_created_at as
 select n.nspname as schema_name, c.relname as object_name
 from pg_class c
@@ -70,7 +87,24 @@ where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
       and a.attnotnull
   );
 
--- 5. RLS er default deny og skal være aktivert på kanoniske tabeller.
+-- 6. created_at settes av databasen, ikke av klienten.
+create view pg_temp.violation_created_at_without_default as
+select n.nspname as schema_name,
+       c.relname as object_name,
+       coalesce(pg_get_expr(d.adbin, d.adrelid), '(ingen default)') as default_expression
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+join pg_attribute a
+  on a.attrelid = c.oid
+  and a.attname = 'created_at'
+  and a.attnum > 0
+  and not a.attisdropped
+left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
+  and c.relkind in ('r', 'p')
+  and coalesce(pg_get_expr(d.adbin, d.adrelid), '') !~* '^(now\(\)|current_timestamp|transaction_timestamp\(\)|statement_timestamp\(\)|clock_timestamp\(\))$';
+
+-- 7. RLS er default deny og skal være aktivert på kanoniske tabeller.
 create view pg_temp.violation_rls_disabled as
 select n.nspname as schema_name, c.relname as object_name
 from pg_class c
@@ -79,7 +113,7 @@ where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
   and c.relkind in ('r', 'p')
   and not c.relrowsecurity;
 
--- 6. Ingen kanoniske objekter er gitt til klientrollene.
+-- 8. Ingen kanoniske objekter er gitt til klientrollene.
 create view pg_temp.violation_client_grants as
 select n.nspname as schema_name,
        c.relname as object_name,
@@ -91,7 +125,7 @@ cross join lateral aclexplode(c.relacl) a
 where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
   and (a.grantee = 0 or a.grantee::regrole::text in ('anon', 'authenticated', 'service_role'));
 
--- 7. Views i api skal ikke omgå underliggende tilgangskontroll.
+-- 9. Views i api skal ikke omgå underliggende tilgangskontroll.
 create view pg_temp.violation_api_view_security_invoker as
 select n.nspname as schema_name, c.relname as object_name
 from pg_class c
@@ -105,9 +139,15 @@ where n.nspname = 'api'
         'false'
       ) not in ('true', 'on');
 
--- 8. SECURITY DEFINER-funksjoner skal ha eksplisitt search_path.
+-- 10. SECURITY DEFINER-funksjoner skal ha et kontrollert og tomt search_path.
+-- En eksplisitt, men utrygg verdi (`public`, `"$user", public`, `pg_temp`) lar
+-- kalleren styre navneoppslag i en funksjon som kjører med eierens rettigheter,
+-- og skal derfor behandles som brudd. Konvensjonen er `set search_path = ''`
+-- kombinert med schemakvalifiserte objektnavn (DATABASE_ARCHITECTURE.md §50).
 create view pg_temp.violation_security_definer_search_path as
-select n.nspname as schema_name, p.proname as object_name
+select n.nspname as schema_name,
+       p.proname as object_name,
+       coalesce(array_to_string(p.proconfig, ', '), '(ingen search_path)') as configuration
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit', 'api')
@@ -115,10 +155,10 @@ where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit', '
   and not exists (
     select 1
     from unnest(coalesce(p.proconfig, array[]::text[])) as cfg
-    where cfg ~ '^search_path='
+    where cfg in ('search_path=""', 'search_path=')
   );
 
--- 9. SECURITY DEFINER-funksjoner skal ikke være kjørbare for PUBLIC.
+-- 11. SECURITY DEFINER-funksjoner skal ikke være kjørbare for PUBLIC.
 create view pg_temp.violation_security_definer_public_execute as
 select n.nspname as schema_name, p.proname as object_name
 from pg_proc p
@@ -140,11 +180,25 @@ where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit', '
 create table knowledge.bad_probe_a (id uuid primary key, noted_at timestamp);
 create table knowledge.bad_probe_b (x integer);
 grant select on knowledge.bad_probe_b to anon;
+create table knowledge.bad_probe_c (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now()
+);
+create table knowledge.bad_probe_d (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null
+);
 create view api.bad_probe_view as select 1 as x;
 create function knowledge.bad_probe_fn() returns integer
   language sql
   security definer
   as $fn$ select 1 $fn$;
+create function knowledge.bad_probe_fn_unsafe_path() returns integer
+  language sql
+  security definer
+  set search_path = public
+  as $fn$ select 1 $fn$;
+revoke execute on function knowledge.bad_probe_fn_unsafe_path() from public;
 
 select isnt_empty(
   'select * from pg_temp.violation_missing_primary_key',
@@ -155,12 +209,20 @@ select isnt_empty(
   'regelen fanger en kolonne uten tidssone'
 );
 select isnt_empty(
+  'select * from pg_temp.violation_non_uuid_primary_key',
+  'regelen fanger en primærnøkkel som ikke er én uuid-kolonne'
+);
+select isnt_empty(
   'select * from pg_temp.violation_uuid_primary_key_default',
   'regelen fanger en uuid-primærnøkkel uten gen_random_uuid()'
 );
 select isnt_empty(
   'select * from pg_temp.violation_missing_created_at',
   'regelen fanger en tabell uten created_at'
+);
+select isnt_empty(
+  'select * from pg_temp.violation_created_at_without_default',
+  'regelen fanger en created_at uten databasegenerert default'
 );
 select isnt_empty(
   'select * from pg_temp.violation_rls_disabled',
@@ -176,15 +238,36 @@ select isnt_empty(
 );
 select isnt_empty(
   'select * from pg_temp.violation_security_definer_search_path',
-  'regelen fanger en SECURITY DEFINER-funksjon uten search_path'
+  'regelen fanger en SECURITY DEFINER-funksjon uten trygt search_path'
 );
 select isnt_empty(
   'select * from pg_temp.violation_security_definer_public_execute',
   'regelen fanger en SECURITY DEFINER-funksjon som PUBLIC kan kjøre'
 );
 
+-- En funksjon med tomt search_path og uten EXECUTE til PUBLIC er konform og
+-- skal ikke flagges av noen av funksjonsreglene.
+create function knowledge.good_probe_fn() returns integer
+  language sql
+  security definer
+  set search_path = ''
+  as $fn$ select 1 $fn$;
+revoke execute on function knowledge.good_probe_fn() from public;
+
+select is_empty(
+  $$
+    select * from pg_temp.violation_security_definer_search_path
+    where object_name = 'good_probe_fn'
+  $$,
+  'en SECURITY DEFINER-funksjon med search_path = '''' regnes som konform'
+);
+
+drop function knowledge.good_probe_fn();
+drop function knowledge.bad_probe_fn_unsafe_path();
 drop function knowledge.bad_probe_fn();
 drop view api.bad_probe_view;
+drop table knowledge.bad_probe_d;
+drop table knowledge.bad_probe_c;
 drop table knowledge.bad_probe_b;
 drop table knowledge.bad_probe_a;
 
@@ -200,12 +283,20 @@ select is_empty(
   'ingen kolonne bruker timestamp eller time uten tidssone'
 );
 select is_empty(
+  'select * from pg_temp.violation_non_uuid_primary_key',
+  'alle kanoniske tabeller har én uuid-kolonne som primærnøkkel'
+);
+select is_empty(
   'select * from pg_temp.violation_uuid_primary_key_default',
   'alle uuid-primærnøkler har default gen_random_uuid()'
 );
 select is_empty(
   'select * from pg_temp.violation_missing_created_at',
   'alle kanoniske tabeller har created_at timestamptz not null'
+);
+select is_empty(
+  'select * from pg_temp.violation_created_at_without_default',
+  'alle created_at-kolonner har databasegenerert default'
 );
 select is_empty(
   'select * from pg_temp.violation_rls_disabled',
@@ -221,7 +312,7 @@ select is_empty(
 );
 select is_empty(
   'select * from pg_temp.violation_security_definer_search_path',
-  'alle SECURITY DEFINER-funksjoner har eksplisitt search_path'
+  'alle SECURITY DEFINER-funksjoner har search_path = '''''
 );
 select is_empty(
   'select * from pg_temp.violation_security_definer_public_execute',
