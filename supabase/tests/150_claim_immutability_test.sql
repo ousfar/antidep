@@ -23,7 +23,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(26);
+select plan(30);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
@@ -189,6 +189,43 @@ select is(
   1::bigint,
   'de to revisjonene har samme fingeravtrykk, fordi det faglige innholdet er likt'
 );
+-- Revisjon 1 er vurdert, og evidenssettet er dermed forseglet. Uten den regelen
+-- kunne et nytt funn blitt hengt på en allerede vurdert revisjon, og vurderingen
+-- ville stilltiende gjeldt et annet grunnlag enn det som står registrert.
+select throws_ok(
+  $$
+    insert into knowledge.claim_evidence_links (
+      claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note
+    )
+    select r.id, e.id, 'contradicts', 'direct',
+           'Motstridende funn oppdaget etter at vurderingen forelå.'
+    from knowledge.claim_revisions r
+    join knowledge.evidence_items e on true
+    join catalog.drugs d on d.id = e.intervention_drug_id
+    where r.claim_id = pg_temp.test_claim() and r.revision_number = 1
+      and d.canonical_name = 'mirtazapin'
+  $$,
+  '23001', null,
+  'en vurdert revisjon kan ikke få nye evidenslenker'
+);
+
+-- Den nye revisjonen bygger sitt eget, fullstendige evidenssett før den vurderes.
+select lives_ok(
+  $$
+    insert into knowledge.claim_evidence_links (
+      claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note
+    )
+    select r.id, e.id, 'contradicts', 'direct',
+           'Motstridende funn tatt med i den nye revisjonens evidenssett.'
+    from knowledge.claim_revisions r
+    join knowledge.evidence_items e on true
+    join catalog.drugs d on d.id = e.intervention_drug_id
+    where r.claim_id = pg_temp.test_claim() and r.revision_number = 2
+      and d.canonical_name = 'mirtazapin'
+  $$,
+  'en revisjon som ennå ikke er vurdert kan bygge opp evidenssettet sitt'
+);
+
 select lives_ok(
   $$
     insert into knowledge.evidence_assessments (
@@ -204,6 +241,39 @@ select lives_ok(
     where r.claim_id = pg_temp.test_claim() and r.revision_number = 2
   $$,
   'den nye revisjonen kan få den korrigerte evidensvurderingen'
+);
+
+-- Og forseglingen gjelder også den: rekkefølgen lenker-så-vurdering er den
+-- eneste lovlige, uansett hvilken revisjon det gjelder.
+select throws_ok(
+  $$
+    insert into knowledge.claim_evidence_links (
+      claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note
+    )
+    select r.id, e.id, 'supports', 'direct', 'Enda et funn, etter vurderingen.'
+    from knowledge.claim_revisions r
+    join knowledge.evidence_items e on true
+    join catalog.drugs d on d.id = e.intervention_drug_id
+    where r.claim_id = pg_temp.test_claim() and r.revision_number = 2
+      and d.canonical_name = 'sertralin'
+  $$,
+  '23001', null,
+  'forseglingen gjelder enhver vurdert revisjon, ikke bare den første'
+);
+
+-- Kontroll av at innsettingene over faktisk traff rader: en lives_ok på en
+-- setning som ikke berører noen rad ville passert uten å bevise noe.
+select results_eq(
+  $$
+    select r.revision_number, count(l.id)
+    from knowledge.claim_revisions r
+    left join knowledge.claim_evidence_links l on l.claim_revision_id = r.id
+    where r.claim_id = pg_temp.test_claim()
+    group by r.revision_number
+    order by r.revision_number
+  $$,
+  $$values (1, 1::bigint), (2, 1::bigint)$$,
+  'begge revisjonene har sitt eget evidenssett, og forseglingen har hindret utvidelse av dem'
 );
 select is(
   (select count(*) from knowledge.evidence_assessments a

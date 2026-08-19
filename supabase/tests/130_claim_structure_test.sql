@@ -10,7 +10,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(56);
+select plan(58);
 
 -- ---------------------------------------------------------------------------
 -- Tabellene i migrasjon 004
@@ -45,10 +45,15 @@ select enum_has_labels(
 
 -- DATABASE_ARCHITECTURE.md §21 og ANTIDEP_CONSTITUTION.md §9: motstridende
 -- evidens skal kunne registreres like presist som støttende.
+-- KNOWLEDGE_MODEL.md §12 lister neutral/contextual som en egen stance-verdi.
+-- Uten den ville et funn som er direkte relevant, men verken støtter eller
+-- motsier påstanden, ikke kunne registreres uten samtidig å bli feilmerket som
+-- indirekte.
 select enum_has_labels(
   'knowledge', 'claim_evidence_relationship',
-  array['supports', 'partially_supports', 'contradicts', 'indirect'],
-  'knowledge.claim_evidence_relationship dekker de fire relasjonstypene i §21'
+  array['supports', 'partially_supports', 'contradicts', 'neutral_contextual',
+        'indirect'],
+  'knowledge.claim_evidence_relationship dekker stance-verdiene i §12 og indirect fra §21'
 );
 select enum_has_labels(
   'knowledge', 'evidence_directness', array['direct', 'indirect'],
@@ -336,6 +341,16 @@ select has_trigger(
 select has_trigger(
   'knowledge', 'evidence_assessments', 'evidence_assessments_reject_mutation',
   'knowledge.evidence_assessments er append-only'
+);
+-- Tverradsinvariantene som append-only alene ikke dekker: evidenssettet
+-- forsegles av vurderingen, og videreføringskjeden er monoton.
+select has_trigger(
+  'knowledge', 'claim_evidence_links', 'claim_evidence_links_reject_after_assessment',
+  'evidenssettet til en revisjon forsegles når revisjonen får sin evidensvurdering'
+);
+select has_trigger(
+  'knowledge', 'claim_revisions', 'claim_revisions_enforce_supersedes_order',
+  'en revisjon kan bare erstatte en revisjon med lavere revisjonsnummer'
 );
 
 -- content_hash på en revisjon er bevisst ikke unik (DATABASE_ARCHITECTURE.md

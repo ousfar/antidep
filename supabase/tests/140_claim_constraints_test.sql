@@ -18,7 +18,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(59);
+select plan(64);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
@@ -249,6 +249,32 @@ select lives_ok(
     ))
   $$,
   'en revisjon kan erstatte en tidligere revisjon av samme påstand'
+);
+
+-- Revisjonsnummeret er monotont (KNOWLEDGE_MODEL.md §9), så en videreføring må
+-- peke bakover. Ellers kunne kjeden gå framover eller i sirkel, og «hvilken
+-- revisjon erstattet hvilken?» ville ikke lenger vært entydig. 23001 =
+-- restrict_violation.
+select lives_ok(
+  $$select pg_temp.insert_revision(
+      '{"claim_kind": "deterministic_fact", "revision_number": 2,
+        "statement": "Testfaktum, revisjon 2."}'::jsonb)$$,
+  'en revisjon kan opprettes selv om lavere revisjonsnumre ennå ikke finnes'
+);
+select throws_ok(
+  $$
+    select pg_temp.insert_revision(jsonb_build_object(
+      'claim_kind', 'deterministic_fact',
+      'revision_number', 1,
+      'statement', 'Testfaktum som viderefører en senere revisjon.',
+      'supersedes_revision_id',
+        (select r.id from knowledge.claim_revisions r
+         where r.claim_id = pg_temp.test_claim('deterministic_fact')
+           and r.revision_number = 2)
+    ))
+  $$,
+  '23001', null,
+  'en revisjon kan ikke erstatte en revisjon med høyere eller likt revisjonsnummer'
 );
 
 -- ---------------------------------------------------------------------------
@@ -484,6 +510,14 @@ select lives_ok(
       'Testbegrunnelse for et indirekte funn som delvis underbygger påstanden.')$$,
   'et indirekte funn som delvis underbygger påstanden kan registreres'
 );
+-- KNOWLEDGE_MODEL.md §12: et funn kan være direkte relevant og likevel verken
+-- støtte eller motsi påstanden. Uten en egen nøytral stance-verdi måtte det
+-- enten feilmerkes som støttende eller framstilles som indirekte.
+select lives_ok(
+  $$select pg_temp.insert_link(3, 'neutral_contextual', 'direct',
+      'Testbegrunnelse for et direkte relevant funn som verken støtter eller motsier påstanden.')$$,
+  'et direkte relevant, men nøytralt funn kan registreres uten å bli merket indirekte'
+);
 select throws_ok(
   $$
     insert into knowledge.claim_evidence_links (
@@ -556,6 +590,23 @@ select throws_ok(
   $$select pg_temp.insert_assessment()$$,
   '23505', null,
   'en påstandsrevisjon kan bare ha én evidensvurdering'
+);
+
+-- Vurderingen forsegler evidenssettet. Uten denne regelen ville sekvensen
+-- «revisjon → lenke → vurder → ny lenke» vært lovlig, og vurderingen ville ikke
+-- lenger beskrevet det grunnlaget som faktisk står registrert på revisjonen.
+select throws_ok(
+  $$select pg_temp.insert_link(1, 'contradicts', 'direct',
+      'Testbegrunnelse for et motstridende funn oppdaget etter vurderingen.', 'mirtazapin')$$,
+  '23001', null,
+  'en revisjon kan ikke få nye evidenslenker etter at den har fått sin evidensvurdering'
+);
+-- Vaktposten skal ikke overblokkere: en revisjon som ennå ikke er vurdert, skal
+-- fortsatt kunne bygge opp evidenssettet sitt.
+select lives_ok(
+  $$select pg_temp.insert_link(3, 'supports', 'direct',
+      'Testbegrunnelse for en lenke på en revisjon som ennå ikke er vurdert.', 'mirtazapin')$$,
+  'en revisjon uten evidensvurdering kan fortsatt få nye evidenslenker'
 );
 
 -- «Ingen vurderbar evidens» er en egen tilstand, ikke svært lav sikkerhet, og

@@ -106,11 +106,12 @@ create type knowledge.claim_evidence_relationship as enum (
   'supports',
   'partially_supports',
   'contradicts',
+  'neutral_contextual',
   'indirect'
 );
 
 comment on type knowledge.claim_evidence_relationship is
-  'Hvordan et evidensfunn forholder seg til en bestemt påstandsrevisjon (DATABASE_ARCHITECTURE.md §21): supports (underbygger påstanden slik den er formulert), partially_supports (underbygger deler av den, for eksempel retningen men ikke størrelsen), contradicts (taler mot den) og indirect (funnet er relevant, men taler verken klart for eller mot påstanden slik den er formulert). Motstridende lenker er like bevaringsverdige som støttende (ANTIDEP_CONSTITUTION.md §9), og systemet krever aldri at alle lenker på en revisjon har samme verdi (KNOWLEDGE_MODEL.md §13.2). Hvor direkte evidensen treffer påstanden er en egen akse, knowledge.evidence_directness.';
+  'Hvordan et evidensfunn forholder seg til en bestemt påstandsrevisjon: supports (underbygger påstanden slik den er formulert), partially_supports (underbygger deler av den, for eksempel retningen men ikke størrelsen), contradicts (taler mot den), neutral_contextual (funnet er relevant og belyser spørsmålet, men taler verken for eller mot påstanden) og indirect. De fire første er stance-verdiene i KNOWLEDGE_MODEL.md §12. indirect er med fordi DATABASE_ARCHITECTURE.md §21 krever verdien, og betyr at funnets forhold til påstanden bare kan bedømmes indirekte; verdien forutsetter derfor directness = indirect. Et funn som treffer påstanden direkte, men verken støtter eller motsier den, er neutral_contextual med directness = direct — det er stance-aksen som bærer nøytraliteten, ikke indirekthetsaksen. Motstridende lenker er like bevaringsverdige som støttende (ANTIDEP_CONSTITUTION.md §9), og systemet krever aldri at alle lenker på en revisjon har samme verdi (KNOWLEDGE_MODEL.md §13.2).';
 
 create type knowledge.evidence_directness as enum ('direct', 'indirect');
 
@@ -573,6 +574,16 @@ alter table knowledge.claims
 -- Numeriske verdier normaliseres med trim_scale, og tidsrom hashes som sekunder,
 -- slik at 0.80 og 0.8, og «8 uker» skrevet på to måter, gir samme verdi.
 --
+-- Kanoniseringen er lengdeprefikset, ikke skilletegnbasert. Et utkast skjøtet
+-- feltene med concat_ws('|', ...), men fritekstfeltene kan selv inneholde «|».
+-- To ulike revisjoner kunne da gi samme kanoniske streng — for eksempel
+-- statement = 'A|B', scope = 'C' og statement = 'A', scope = 'B|C' — og en
+-- senere skrivevei ville sett dem som identiske forslag. Det er en
+-- serialiseringskollisjon før SHA-256, ikke en kryptografisk kollisjon, og den
+-- er reell uansett hvor sterk hashfunksjonen er. Hvert felt kodes derfor som
+-- «lengde:verdi», med «~:» for NULL, slik at avbildningen fra feltverdier til
+-- kanonisk streng er entydig og NULL ikke kan forveksles med tom streng.
+--
 -- Dette er en bevisst og snever trigger (DATABASE_ARCHITECTURE.md §60): den
 -- utleder ett teknisk felt fra radens egne kolonner og inneholder ingen klinisk
 -- logikk og ingen arbeidsflyt.
@@ -582,26 +593,32 @@ create function knowledge.set_claim_revision_content_hash()
   set search_path = ''
 as $$
 declare
-  canonical text;
+  fields text[];
+  field text;
+  canonical text := 'sha256-v1';
 begin
-  canonical := concat_ws(
-    '|',
-    'sha256-v1',
+  fields := array[
     new.claim_id::text,
     new.statement,
     new.scope,
-    coalesce(new.population_id::text, ''),
-    coalesce(extract(epoch from new.timeframe_min)::text, ''),
-    coalesce(extract(epoch from new.timeframe_max)::text, ''),
+    new.population_id::text,
+    extract(epoch from new.timeframe_min)::text,
+    extract(epoch from new.timeframe_max)::text,
     new.comparator_kind::text,
-    coalesce(new.comparator_drug_id::text, ''),
-    coalesce(new.direction::text, ''),
-    coalesce(new.magnitude_measure::text, ''),
-    coalesce(trim_scale(new.magnitude_value)::text, ''),
-    coalesce(new.magnitude_unit::text, ''),
-    coalesce(new.qualifiers, ''),
-    coalesce(new.uncertainty_summary, '')
-  );
+    new.comparator_drug_id::text,
+    new.direction::text,
+    new.magnitude_measure::text,
+    trim_scale(new.magnitude_value)::text,
+    new.magnitude_unit::text,
+    new.qualifiers,
+    new.uncertainty_summary
+  ];
+
+  foreach field in array fields loop
+    -- Lengdeprefiks gjør skjøten entydig; «~» skiller NULL fra tom streng.
+    canonical := canonical || '|' || coalesce(length(field)::text, '~') || ':'
+                 || coalesce(field, '');
+  end loop;
 
   new.content_hash := 'sha256-v1:' || encode(sha256(convert_to(canonical, 'UTF8')), 'hex');
 
@@ -610,7 +627,7 @@ end;
 $$;
 
 comment on function knowledge.set_claim_revision_content_hash() is
-  'Trigger-funksjon som utleder content_hash fra påstandens identitet og revisjonens faglige innhold ved innsetting. Gir databasen eierskap til fingeravtrykket, slik at det ikke kan oppgis av kalleren. Hashen er et oppslagshjelpemiddel og håndheves bevisst ikke som unikhetsregel (DATABASE_ARCHITECTURE.md §14.1).';
+  'Trigger-funksjon som utleder content_hash fra påstandens identitet og revisjonens faglige innhold ved innsetting. Feltene kanoniseres lengdeprefikset, slik at to ulike revisjoner ikke kan gi samme kanoniske streng selv om fritekstfeltene inneholder skilletegnet. Gir databasen eierskap til fingeravtrykket, slik at det ikke kan oppgis av kalleren. Hashen er et oppslagshjelpemiddel og håndheves bevisst ikke som unikhetsregel (DATABASE_ARCHITECTURE.md §14.1).';
 
 revoke execute on function knowledge.set_claim_revision_content_hash() from public;
 
@@ -642,6 +659,56 @@ create trigger claim_revisions_set_content_hash
 -- ikke ennå. En UPDATE på en kanonisk kunnskapsrad ville derfor ikke etterlatt
 -- noe spor overhodet — verken hvem, når eller hvorfor — og det er direkte i
 -- strid med ANTIDEP_CONSTITUTION.md §14.
+-- Revisjonsnummeret er dokumentert som monotont (KNOWLEDGE_MODEL.md §9), og en
+-- videreføring skal derfor peke bakover i historikken. At den erstattede
+-- revisjonen tilhører samme påstand er allerede håndhevet av den sammensatte
+-- fremmednøkkelen, men rekkefølgen er en tverradsregel: den avhenger av
+-- revisjonsnummeret på en annen rad og kan verken uttrykkes i en CHECK eller i
+-- en fremmednøkkel (DATABASE_ARCHITECTURE.md §59). Uten regelen kunne en kjede
+-- gå i sirkel eller framover, og «hvilken revisjon erstattet hvilken?» ville
+-- ikke lenger vært entydig.
+--
+-- Finnes ikke den erstattede revisjonen, sier funksjonen ingenting: da er det
+-- fremmednøkkelen som skal avvise raden, med sin egen feilkode.
+create function knowledge.enforce_revision_supersedes_order()
+  returns trigger
+  language plpgsql
+  set search_path = ''
+as $$
+declare
+  superseded_number integer;
+begin
+  if new.supersedes_revision_id is null then
+    return new;
+  end if;
+
+  select r.revision_number into superseded_number
+  from knowledge.claim_revisions r
+  where r.id = new.supersedes_revision_id;
+
+  if superseded_number is not null and superseded_number >= new.revision_number then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format(
+        'Revisjon %s kan ikke erstatte revisjon %s; en videreføring må peke på et lavere revisjonsnummer.',
+        new.revision_number, superseded_number
+      ),
+      hint = 'Gi den nye revisjonen et høyere revisjonsnummer enn den den erstatter. Revisjonsnummeret er monotont innenfor påstanden.';
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function knowledge.enforce_revision_supersedes_order() is
+  'Tverradsinvariant: sikrer at en revisjon bare kan erstatte en revisjon med lavere revisjonsnummer, slik at videreføringskjeden er monoton og entydig.';
+
+revoke execute on function knowledge.enforce_revision_supersedes_order() from public;
+
+create trigger claim_revisions_enforce_supersedes_order
+  before insert on knowledge.claim_revisions
+  for each row execute function knowledge.enforce_revision_supersedes_order();
+
 create trigger claim_revisions_reject_mutation
   before update or delete on knowledge.claim_revisions
   for each row execute function knowledge.reject_append_only_mutation(
@@ -684,10 +751,12 @@ create table knowledge.claim_evidence_links (
   constraint claim_evidence_links_revision_item_key
     unique (claim_revision_id, evidence_item_id),
 
-  -- De to aksene kan ikke motsi hverandre: en relasjon som i seg selv er
-  -- indirekte kan ikke samtidig påstås å treffe påstanden direkte. Den motsatte
-  -- kombinasjonen er derimot tillatt og nødvendig — et funn kan støtte eller
-  -- motsi påstanden indirekte.
+  -- Stance og indirekthet er to akser, og bare den ene verdien som selv er en
+  -- påstand om indirekthet er bundet: relationship_type = 'indirect' kan ikke
+  -- samtidig hevde at funnet treffer påstanden direkte. Alle øvrige
+  -- kombinasjoner er frie, og de trengs: et funn kan støtte, motsi eller være
+  -- nøytralt til påstanden både direkte og indirekte. Et direkte relevant funn
+  -- som verken støtter eller motsier påstanden er neutral_contextual + direct.
   constraint claim_evidence_links_directness_check
     check (relationship_type <> 'indirect' or directness = 'indirect'),
 
@@ -701,7 +770,7 @@ comment on table knowledge.claim_evidence_links is
 comment on column knowledge.claim_evidence_links.claim_revision_id is
   'Den eksakte påstandsrevisjonen lenken gjelder. Referanser peker til revisjoner, ikke bare til stabile objekter (KNOWLEDGE_MODEL.md §19.3).';
 comment on column knowledge.claim_evidence_links.relationship_type is
-  'Hvordan funnet forholder seg til påstanden. Motstridende lenker skal bevares på lik linje med støttende (ANTIDEP_CONSTITUTION.md §9), og en revisjon kan ha lenker med ulik verdi samtidig.';
+  'Stance: hvordan funnet forholder seg til påstanden. Et funn som er direkte relevant, men verken støtter eller motsier påstanden, er neutral_contextual, ikke indirect. Motstridende lenker skal bevares på lik linje med støttende (ANTIDEP_CONSTITUTION.md §9), og en revisjon kan ha lenker med ulik verdi samtidig.';
 comment on column knowledge.claim_evidence_links.directness is
   'Om funnet treffer påstandens populasjon, endepunkt, komparator og tidsrom direkte. Egen akse, slik at et indirekte funn som motsier påstanden kan uttrykkes. Et avvik mellom studert og påstått populasjon er indirekthet, og vurderes samlet i knowledge.evidence_assessments.';
 comment on column knowledge.claim_evidence_links.relevance_note is
@@ -722,6 +791,78 @@ create trigger claim_evidence_links_reject_mutation
   for each row execute function knowledge.reject_append_only_mutation(
     'Opprett en ny revisjon av påstanden med det korrigerte settet av evidenslenker. En registrert vurdering av hvordan et funn forholder seg til en revisjon skal ikke overskrives eller slettes.'
   );
+
+-- Evidensvurderingen forsegler evidenssettet til revisjonen.
+--
+-- At lenkene ikke kan endres eller slettes er ikke nok. Uten denne regelen er
+-- sekvensen «opprett revisjon → lenke → vurder → ny lenke» lovlig, og da
+-- beskriver knowledge.evidence_assessments ikke lenger det evidensgrunnlaget den
+-- faktisk vurderte. Vurderingen finnes i nøyaktig ett eksemplar per revisjon og
+-- er selv append-only, så den kan ikke følge etter: resultatet ville vært en
+-- GRADE-vurdering som stilltiende gjaldt et annet grunnlag enn det som står
+-- registrert. Det er alvorlig når review og publisering peker på revisjons-ID,
+-- og det bryter med KNOWLEDGE_MODEL.md §19.2, som krever ny revisjon når
+-- evidensgrunnlaget endres på en måte som påvirker vurderingen.
+--
+-- Vurderingen er derfor forseglingshandlingen: før den er evidenssettet under
+-- arbeid, etter den er det låst. Ny eller motstridende evidens som dukker opp
+-- senere hører til en ny revisjon med sitt eget lenkesett og sin egen vurdering
+-- — som er nettopp den korreksjonsveien content_hash bevisst holder åpen.
+--
+-- Cross-row-regel som ikke kan uttrykkes deklarativt: en CHECK kan ikke lese en
+-- annen tabell (DATABASE_ARCHITECTURE.md §59), og en fremmednøkkel kan kreve at
+-- en rad finnes, ikke at den ikke finnes. Dette er derfor en av
+-- tverradsinvariantene §60 navngir som legitim triggerbruk.
+--
+-- Samtidighet: raden i knowledge.claim_revisions låses med FOR UPDATE før
+-- kontrollen. Uten låsen kunne en samtidig transaksjon rekke å opprette
+-- vurderingen mellom kontrollen og commit. Innsetting i
+-- knowledge.evidence_assessments tar selv FOR KEY SHARE på den samme raden
+-- gjennom fremmednøkkelen sin, og FOR UPDATE er uforenlig med den, så de to
+-- operasjonene serialiseres mot hverandre. Merk avhengigheten: fjernes
+-- fremmednøkkelen fra evidence_assessments til claim_revisions, åpnes kappløpet
+-- igjen.
+--
+-- Deterministiske fakta får ingen evidensvurdering og forsegles derfor ikke av
+-- denne regelen. For dem er publisering forseglingen, og den hører til
+-- migrasjon 006 — som uansett må hindre at en publisert revisjon får nye lenker.
+create function knowledge.reject_evidence_link_after_assessment()
+  returns trigger
+  language plpgsql
+  set search_path = ''
+as $$
+begin
+  perform 1
+  from knowledge.claim_revisions r
+  where r.id = new.claim_revision_id
+  for update;
+
+  if exists (
+    select 1
+    from knowledge.evidence_assessments a
+    where a.claim_revision_id = new.claim_revision_id
+  ) then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format(
+        'Evidensgrunnlaget for revisjon %L er forseglet av en evidensvurdering og kan ikke utvides.',
+        new.claim_revision_id
+      ),
+      hint = 'Opprett en ny revisjon av påstanden med det fullstendige evidenssettet, og gi den sin egen evidensvurdering. En vurdering skal alltid beskrive hele grunnlaget for den revisjonen den gjelder.';
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function knowledge.reject_evidence_link_after_assessment() is
+  'Tverradsinvariant: hindrer at evidenssettet til en påstandsrevisjon utvides etter at revisjonen har fått sin evidensvurdering, slik at vurderingen alltid beskriver hele grunnlaget den gjelder for.';
+
+revoke execute on function knowledge.reject_evidence_link_after_assessment() from public;
+
+create trigger claim_evidence_links_reject_after_assessment
+  before insert on knowledge.claim_evidence_links
+  for each row execute function knowledge.reject_evidence_link_after_assessment();
 
 -- ----------------------------------------------------------------------------
 -- 6. knowledge.evidence_assessments — hvor sikkert er grunnlaget
@@ -1052,8 +1193,24 @@ where d.canonical_name = 'mirtazapin';
 -- Evidensvurderingene. Begge er svært lav sikkerhet, og begge domenevurderinger
 -- er begrunnet i egenskaper ved grunnlaget, ikke i antall kilder
 -- (DATABASE_ARCHITECTURE.md §22). Konsistens og publikasjonsskjevhet står som
--- not_assessable fordi ett enkelt funn ikke gir grunnlag for å bedømme dem;
--- not_serious ville vært falsk presisjon.
+-- not_assessable på begge fordi ett enkelt funn ikke gir grunnlag for å bedømme
+-- dem; not_serious ville vært falsk presisjon.
+--
+-- Presisjonsdomenet skiller de to, og skillet er prinsipielt: for sertralin er
+-- ingen tallverdi og intet konfidensintervall gjengitt i den verifiserte
+-- kildeversjonen, så domenet lar seg ikke bedømme og står som not_assessable.
+-- At en verdi ikke er rapportert er allerede modellert på evidensfunnet som
+-- not_reported, og det dokumenterer ikke i seg selv at estimatet er upresist —
+-- å gradere ned til very_serious på det grunnlaget ville vært å lese manglende
+-- rapportering som et metodisk funn. For mirtazapin rapporterer kilden derimot
+-- et gjennomsnitt og et standardavvik, og spredningen er stor sammenlignet med
+-- endringen, så der er presisjonen faktisk vurderbar og gradert ned til serious.
+--
+-- Vurderingen er samtidig forseglingshandlingen for evidenssettet: etter at den
+-- er registrert kan revisjonen ikke få flere evidenslenker.
+
+-- Rekkefølgen under er derfor ikke tilfeldig: lenkene registreres før
+-- vurderingene.
 insert into knowledge.evidence_assessments (
   claim_revision_id, assessed_knowledge_type, framework, certainty_level,
   risk_of_bias, inconsistency, indirectness, imprecision, publication_bias,
@@ -1067,9 +1224,9 @@ select
   'serious'::knowledge.grade_domain_rating,
   'not_assessable'::knowledge.grade_domain_rating,
   'not_serious'::knowledge.grade_domain_rating,
-  'very_serious'::knowledge.grade_domain_rating,
   'not_assessable'::knowledge.grade_domain_rating,
-  'Ett evidensfunn fra én randomisert studie ligger til grunn. Vektanalysen omfatter bare de 48 av 96 randomiserte som fullførte, noe som gir risiko for frafallsskjevhet. Verken estimat eller konfidensintervall er gjengitt i den verifiserte kildeversjonen, så presisjonen kan ikke bedømmes i det hele tatt og er vurdert som svært alvorlig mangel. Konsistens og publikasjonsskjevhet lar seg ikke vurdere ut fra ett funn. Populasjon, endepunkt og tidsrom i funnet svarer til påstanden, så indirekthet er ikke vurdert som alvorlig.',
+  'not_assessable'::knowledge.grade_domain_rating,
+  'Ett evidensfunn fra én randomisert studie ligger til grunn. Vektanalysen omfatter bare de 48 av 96 randomiserte som fullførte, noe som gir risiko for frafallsskjevhet. Verken estimat eller konfidensintervall er gjengitt i den verifiserte kildeversjonen, så presisjonen lar seg ikke bedømme. Domenet står derfor som ikke vurderbart og ikke som en nedgradering: at en verdi ikke er rapportert der raden peker, dokumenterer ikke i seg selv at estimatet er upresist. Konsistens og publikasjonsskjevhet lar seg heller ikke vurdere ut fra ett enkelt funn. Populasjon, endepunkt og tidsrom i funnet svarer til påstanden, så indirekthet er ikke vurdert som alvorlig. Samlet sikkerhet er svært lav: grunnlaget har alvorlig risiko for skjevhet, og tre av fem domener lar seg ikke bedømme i det hele tatt.',
   'Størrelsen på vektendringen er ikke tallfestet i det registrerte grunnlaget, og det finnes ingen registrert sammenligning mot placebo eller mot andre antidepressiver.',
   timestamptz '2026-08-19T12:45:00Z'
 from knowledge.claim_revisions r
@@ -1092,7 +1249,7 @@ select
   'serious'::knowledge.grade_domain_rating,
   'serious'::knowledge.grade_domain_rating,
   'not_assessable'::knowledge.grade_domain_rating,
-  'Ett evidensfunn fra én randomisert studie ligger til grunn. Antallet som inngår i vektanalysen er ikke oppgitt, så verken frafall eller analysepopulasjon lar seg bedømme, og spredningen er rapportert som standardavvik uten konfidensintervall. Studiepopulasjonen var alvorlig deprimerte pasienter uten oppgitt nedre aldersgrense, mens påstanden gjelder voksne med depressiv lidelse; avviket er vurdert som alvorlig indirekthet. Konsistens og publikasjonsskjevhet lar seg ikke vurdere ut fra ett funn.',
+  'Ett evidensfunn fra én randomisert studie ligger til grunn. Antallet som inngår i vektanalysen er ikke oppgitt, så verken frafall eller analysepopulasjon lar seg bedømme. Presisjonen er derimot vurderbar her, fordi kilden faktisk rapporterer spredningen: standardavviket på 2,7 kg er stort sammenlignet med gjennomsnittsendringen på 0,8 kg, og domenet er gradert ned til alvorlig. Et konfidensintervall er ikke oppgitt, og uten analysestørrelse kan det ikke beregnes. Studiepopulasjonen var alvorlig deprimerte pasienter uten oppgitt nedre aldersgrense, mens påstanden gjelder voksne med depressiv lidelse; avviket er vurdert som alvorlig indirekthet. Konsistens og publikasjonsskjevhet lar seg ikke vurdere ut fra ett enkelt funn.',
   'Grunnlaget dekker bare åtte ukers behandling, oppgir ikke antallet som inngår i vektanalysen, og inneholder ingen registrert sammenligning mot placebo eller mot sertralin.',
   timestamptz '2026-08-19T12:45:00Z'
 from knowledge.claim_revisions r

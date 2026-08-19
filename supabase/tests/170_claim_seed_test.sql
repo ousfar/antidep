@@ -13,7 +13,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(20);
+select plan(21);
 
 -- ---------------------------------------------------------------------------
 -- Påstandene i slicen
@@ -214,8 +214,28 @@ select results_eq(
     ('mirtazapin', 'grade', 'very_low', 'serious', 'not_assessable', 'serious',
      'serious', 'not_assessable'),
     ('sertralin', 'grade', 'very_low', 'serious', 'not_assessable', 'not_serious',
-     'very_serious', 'not_assessable')$$,
+     'not_assessable', 'not_assessable')$$,
   'begge vurderingene er svært lav sikkerhet med eksplisitt vurderte GRADE-domener'
+);
+
+-- Presisjonsdomenet skal følge av hva kilden faktisk rapporterer, ikke settes
+-- skjønnsmessig. Er ingen tallverdi gjengitt, lar presisjonen seg ikke bedømme,
+-- og domenet skal stå som not_assessable: en manglende rapportert verdi er
+-- allerede modellert som not_reported på evidensfunnet og dokumenterer ikke i
+-- seg selv at estimatet er upresist. Er verdien rapportert, er domenet
+-- vurderbart og kan graderes ned. Assertionen knytter de to lagene sammen, slik
+-- at en senere endring i det ene ikke kan gli fra det andre.
+select results_eq(
+  $$
+    select e.estimate_availability::text, a.imprecision::text
+    from knowledge.evidence_assessments a
+    join knowledge.claim_revisions r on r.id = a.claim_revision_id
+    join knowledge.claim_evidence_links l on l.claim_revision_id = r.id
+    join knowledge.evidence_items e on e.id = l.evidence_item_id
+    order by e.estimate_availability::text
+  $$,
+  $$values ('not_reported', 'not_assessable'), ('reported_value', 'serious')$$,
+  'presisjonsdomenet er ikke vurderbart der kilden ikke oppgir noen tallverdi, og gradert ned der den gjør det'
 );
 
 -- Ett enkelt funn gir ikke grunnlag for å bedømme konsistens eller
