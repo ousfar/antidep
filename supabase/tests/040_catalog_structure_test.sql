@@ -36,11 +36,11 @@ select is_empty(
 );
 
 -- Vaktpost for hvor langt schemaet faktisk har kommet. Migrasjon 003 la til
--- kilde- og evidenslaget i knowledge, og listen under er uttømmende: den skal
--- utvides av den migrasjonen som legger til en tabell, slik at et objekt ingen
--- har bestemt seg for ikke kan gli inn ubemerket. Claims, claim_evidence_links
--- og evidence_assessments hører til migrasjon 004, review og proveniens til 005
--- og publisering til 006.
+-- kilde- og evidenslaget i knowledge og migrasjon 004 påstandslaget, og listen
+-- under er uttømmende: den skal utvides av den migrasjonen som legger til en
+-- tabell, slik at et objekt ingen har bestemt seg for ikke kan gli inn
+-- ubemerket. Review og proveniens hører til migrasjon 005 og
+-- knowledge.publication_events til 006.
 select set_eq(
   $$
     select c.relname
@@ -49,8 +49,10 @@ select set_eq(
     where n.nspname = 'knowledge'
       and c.relkind in ('r', 'p', 'v', 'm')
   $$,
-  $$values ('sources'), ('source_identifiers'), ('source_versions'), ('evidence_items')$$,
-  'knowledge inneholder nøyaktig tabellene fra migrasjon 003'
+  $$values ('sources'), ('source_identifiers'), ('source_versions'), ('evidence_items'),
+           ('claims'), ('claim_revisions'), ('claim_evidence_links'),
+           ('evidence_assessments')$$,
+  'knowledge inneholder nøyaktig tabellene fra migrasjon 003 og 004'
 );
 
 -- De øvrige schemaene er fortsatt tomme.

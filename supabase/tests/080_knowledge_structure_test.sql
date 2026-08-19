@@ -5,12 +5,18 @@
 -- DATABASE_ARCHITECTURE.md §16-§20 krever. Constraint-atferd testes i
 -- 090_knowledge_constraints_test.sql, immutabilitet i
 -- 100_knowledge_immutability_test.sql, tilgang i 110_knowledge_access_test.sql
--- og selve slicedataene i 120_knowledge_seed_test.sql.
+-- og selve slicedataene i 120_knowledge_seed_test.sql. Påstandslaget fra
+-- migrasjon 004 kontrolleres i 130-170.
+--
+-- To av vaktpostene her gjelder hele knowledge-schemaet og ikke bare migrasjon
+-- 003: regelen om tidsstempeltriggere og regelen om at PUBLIC ikke kan kjøre
+-- funksjoner i schemaet. Begge er formulert uttømmende, slik at en senere
+-- migrasjon utvider dem framfor å måtte føres opp i en liste.
 begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(48);
+select plan(44);
 
 -- ---------------------------------------------------------------------------
 -- Tabellene i migrasjon 003
@@ -20,18 +26,9 @@ select has_table('knowledge', 'source_identifiers', 'knowledge.source_identifier
 select has_table('knowledge', 'source_versions', 'knowledge.source_versions finnes');
 select has_table('knowledge', 'evidence_items', 'knowledge.evidence_items finnes');
 
--- Claims, evidenslenker, vurderinger og review hører til migrasjon 004-005 og
--- skal ikke ha sneket seg inn i dette steget.
-select hasnt_table('knowledge', 'claims', 'knowledge.claims er ikke opprettet ennå');
-select hasnt_table(
-  'knowledge', 'claim_revisions', 'knowledge.claim_revisions er ikke opprettet ennå'
-);
-select hasnt_table(
-  'knowledge', 'claim_evidence_links', 'knowledge.claim_evidence_links er ikke opprettet ennå'
-);
-select hasnt_table(
-  'knowledge', 'evidence_assessments', 'knowledge.evidence_assessments er ikke opprettet ennå'
-);
+-- Påstandslaget ble opprettet av migrasjon 004 og kontrolleres i
+-- 130_claim_structure_test.sql. Publiseringshendelsene hører til migrasjon 006
+-- og skal ikke ha sneket seg inn ennå.
 select hasnt_table(
   'knowledge', 'publication_events', 'knowledge.publication_events er ikke opprettet ennå'
 );
@@ -240,7 +237,10 @@ select col_type_is(
 -- ---------------------------------------------------------------------------
 -- Tidsstempler, triggere og dokumentasjon
 -- ---------------------------------------------------------------------------
--- tgtype-bitene: 2 = BEFORE, 4 = INSERT, 16 = UPDATE, 8 = DELETE.
+-- Regelen er formulert som «hver tabell med updated_at eier tidsstemplene sine»,
+-- slik at en append-only tabell uten updated_at utvider vaktposten i stedet for
+-- å bli listet opp som et unntak. tgtype-bitene: 2 = BEFORE, 4 = INSERT,
+-- 16 = UPDATE, 8 = DELETE.
 select is_empty(
   $$
     select c.relname
@@ -248,7 +248,14 @@ select is_empty(
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'knowledge'
       and c.relkind = 'r'
-      and c.relname <> 'evidence_items'
+      and exists (
+        select 1
+        from pg_attribute a
+        where a.attrelid = c.oid
+          and a.attname = 'updated_at'
+          and a.attnum > 0
+          and not a.attisdropped
+      )
       and not exists (
         select 1
         from pg_trigger t
@@ -260,7 +267,7 @@ select is_empty(
           and (t.tgtype & 16) <> 0
       )
   $$,
-  'kildetabellene setter created_at og updated_at ved både INSERT og UPDATE'
+  'hver kunnskapstabell med updated_at setter created_at og updated_at ved både INSERT og UPDATE'
 );
 
 -- knowledge.evidence_items kan ikke endres og har derfor bevisst ingen
@@ -286,15 +293,17 @@ select has_trigger(
   'knowledge.source_versions har en immutable-row guard på observasjonen'
 );
 
+-- Uttømmende over schemaet, ikke en håndholdt liste: en ny funksjon i knowledge
+-- kan ikke slippe forbi vaktposten ved at noen glemmer å føre den opp.
 select is_empty(
   $$
-    select f.function_name
-    from (values ('knowledge.freeze_source_version()'),
-                 ('knowledge.set_evidence_item_content_hash()'),
-                 ('knowledge.reject_evidence_item_mutation()')) as f(function_name)
-    where has_function_privilege('public', f.function_name, 'execute')
+    select p.oid::regprocedure::text
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'knowledge'
+      and has_function_privilege('public', p.oid, 'execute')
   $$,
-  'PUBLIC kan ikke kjøre triggerfunksjonene i knowledge'
+  'PUBLIC kan ikke kjøre noen funksjon i knowledge'
 );
 
 select is_empty(
