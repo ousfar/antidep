@@ -7,8 +7,12 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
 - `config.toml` — prosjektkonfigurasjon for Supabase CLI (generert av `supabase init`,
   CLI-versjonen er pinnet i `package.json`). `[api].schemas` styrer hvilke schemaer som
   eksponeres i Data API.
-- `migrations/` — versjonerte migrasjoner. Migrasjon 001 etablerer schema- og
-  sikkerhetsfundamentet, migrasjon 002 katalogfundamentet.
+- `migrations/` — versjonerte migrasjoner:
+  - 001 schema- og sikkerhetsfundamentet
+  - 002 katalogfundamentet
+  - 003 `knowledge.sources`, kildeversjoner og `knowledge.evidence_items`
+  - 004 `knowledge.claims`, revisjoner, evidenslenker og evidensvurderinger
+  - 005 `provenance.actors`, medlemskapsmodellen, verifikasjon og review
 - `tests/` — pgTAP-tester som kjøres med `npm run db:test`.
 - `seed.sql` — kun lokal demodata. Kontrollert vokabular og pilotdata som produksjonen
   er avhengig av, ligger i migrasjonene (se «Hvor seed-data hører hjemme» under).
@@ -114,8 +118,64 @@ gjenfinner innhold og er ikke en gyldighetsgrense for en påstand, så en etiket
 der endrer ikke omfanget av historikk.
 
 Tabellene har RLS aktivert og ingen policies. De er derfor default deny for alle andre enn
-eieren. Redaksjonell lesetilgang forutsetter medlemskapsmodellen i migrasjon 005, og
-klientflaten skal uansett lese publiserte projeksjoner i `api` (migrasjon 007).
+eieren, og det samme gjelder tabellene i `knowledge`, `workflow` og `provenance`. Se
+«Review og proveniens» under for hvorfor policyene fortsatt ikke er skrevet.
+
+## Review og proveniens
+
+Migrasjon 005 innfører attribusjonen og kontrollene som `docs/ANTIDEP_CONSTITUTION.md` §10,
+§11, §12 og §14 krever:
+
+| Tabell                            | Innhold                                                                       |
+| --------------------------------- | ----------------------------------------------------------------------------- |
+| `provenance.actors`               | normalisert aktør: menneske, KI-agent, deterministisk prosess, import, system |
+| `workflow.user_roles`             | medlemskapsmodellen med scope og gyldighetsperiode                            |
+| `workflow.evidence_verifications` | kontroll av at et evidensfunn gjengir kilden riktig                           |
+| `workflow.claim_verifications`    | kontroll av at en påstandsrevisjon holder mot grunnlaget                      |
+| `workflow.review_decisions`       | menneskelig faglig beslutning som eget beslutningsobjekt                      |
+
+Samtidig får `knowledge.evidence_items`, `claims`, `claim_revisions`,
+`claim_evidence_links` og `evidence_assessments` en påkrevd `created_by_actor_id`.
+
+**Generering og verifikasjon er atskilte operasjoner.** Verifikasjonsraden ligger ved siden
+av objektet og endrer det aldri, og en speilkolonne låst til foreldreraden gjør at en
+radlokal `CHECK` kan avvise at verifikatoren er den samme aktøren som laget objektet. En
+bekreftelse kan heller ikke hvile på et avledet sammendrag alene, og en claim-verifikasjon
+kan bare konkluderes som `verified` når alle sju kontrollpunktene i
+`docs/DATABASE_ARCHITECTURE.md` §30 er bedømt og holder.
+
+**Tidsmodellen kan ikke konstrueres i etterkant.** `verified_at` og `decided_at` er
+kallerstyrte hendelsestidspunkter, og `decided_at` bestemmer hvilken rolletildeling som
+teller som gyldig. `created_at` på de tre append-only workflow-tabellene eies derfor av
+databasen, hendelsestidspunktet kan ikke ligge etter det, og kvalifikasjonskontrollen
+krever at selve rolletildelingsraden fantes senest på beslutningstidspunktet. En rolle
+opprettet i dag kan dermed ikke legitimere en «godkjenning» datert i fjor ved å
+tilbakedatere `valid_from`. En kontroll eller beslutning som faktisk fant sted tidligere
+kan fortsatt registreres i etterkant.
+
+**Bare mennesker kan godkjenne.** `workflow.review_decisions` krever en aktør av typen
+`human` — håndhevet av en sammensatt fremmednøkkel og en `CHECK` — og en trigger krever i
+tillegg at aktøren hadde gyldig `reviewer`-rolle for objektets innholdsområde på
+beslutningstidspunktet. Rollen leses fra `workflow.user_roles`, aldri fra en JWT-claim
+(`docs/DATABASE_ARCHITECTURE.md` §46). `admin` er brukerforvaltning og gir ikke faglig
+godkjenningsrett.
+
+**En tilbaketrukket ekstraksjon er en beslutning, ikke en statuskolonne.** Spørsmålet stod
+åpent fra migrasjon 003 og er avgjort her: `review_type = 'extraction_withdrawal'` i
+`workflow.review_decisions`. Publiseringsgaten i migrasjon 006 må lese den avledede
+tilstanden og nekte å publisere en revisjon som hviler på et tilbaketrukket evidensfunn.
+
+**Ingen RLS-policies ennå.** En policy har bare virkning for en rolle som allerede har et
+tabellprivilegium, og ingen klientrolle har `usage` på `knowledge`, `workflow` eller
+`provenance`. Policyene hører sammen med den første kontrollerte skriveveien og grantene som
+gjør dem virksomme (`docs/MVP_IMPLEMENTATION_PLAN.md` §48), altså migrasjon 006 og senere.
+Klientflaten skal uansett lese publiserte projeksjoner i `api` (migrasjon 007).
+
+**Seedomfang.** Migrasjon 005 seeder bare de to KI-aktørene som faktisk produserte radene i
+migrasjon 003 og 004. Ingen verifikasjon og ingen reviewbeslutning er seedet: begge deler er
+utførte handlinger, og en seedet godkjenning ville vært nøyaktig den fiktive godkjenningen
+`docs/ANTIDEP_CONSTITUTION.md` §12 forbyr. `provenance.agent_runs` opprettes først når en
+faktisk automatisk pipeline skriver kjøringer.
 
 ## Hvor seed-data hører hjemme
 

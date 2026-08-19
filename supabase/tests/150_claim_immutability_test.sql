@@ -28,8 +28,18 @@ select plan(30);
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
 -- ---------------------------------------------------------------------------
-insert into knowledge.claims (knowledge_type, topic_concept_id, subject_drug_id)
-select 'evidence_synthesis', c.id, d.id
+
+-- Migrasjon 005 gjorde created_by_actor_id påkrevd på kunnskapsobjektene
+-- (ANTIDEP_CONSTITUTION.md §14). Testdata attribueres til den samme aktøren som
+-- produserte de seedede radene, slik at fikstursradene ikke er mindre
+-- attribuerte enn kunnskapsbasen ellers.
+create function pg_temp.synthesis_actor() returns uuid language sql stable as $$
+  select id from provenance.actors where actor_key = 'agent:claim-synthesis'
+$$;
+
+insert into knowledge.claims
+  (knowledge_type, topic_concept_id, subject_drug_id, created_by_actor_id)
+select 'evidence_synthesis', c.id, d.id, pg_temp.synthesis_actor()
 from catalog.clinical_concepts c, catalog.drugs d
 where c.canonical_label = 'depressiv lidelse' and d.canonical_name = 'sertralin';
 
@@ -47,14 +57,14 @@ create function pg_temp.insert_revision(
   insert into knowledge.claim_revisions (
     claim_id, revision_number, knowledge_type, subject_drug_id,
     statement, scope, population_id, timeframe_min, timeframe_max,
-    comparator_kind, direction, uncertainty_summary
+    comparator_kind, direction, uncertainty_summary, created_by_actor_id
   )
   select
     cl.id, number, cl.knowledge_type, cl.subject_drug_id,
     claim_statement,
     'Gjelder gjennomsnittlig vektendring fra behandlingsstart i testdata.',
     p.id, interval '8 weeks', interval '8 weeks',
-    'none', 'increase', 'Ett evidensfunn i testdata.'
+    'none', 'increase', 'Ett evidensfunn i testdata.', pg_temp.synthesis_actor()
   from knowledge.claims cl
   cross join catalog.populations p
   where cl.id = pg_temp.test_claim()
@@ -65,9 +75,11 @@ $$;
 select pg_temp.insert_revision(1);
 
 insert into knowledge.claim_evidence_links (
-  claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note
+  claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note,
+  created_by_actor_id
 )
-select r.id, e.id, 'supports', 'direct', 'Testbegrunnelse for evidenslenken.'
+select r.id, e.id, 'supports', 'direct', 'Testbegrunnelse for evidenslenken.',
+       pg_temp.synthesis_actor()
 from knowledge.claim_revisions r
 join knowledge.evidence_items e on true
 join catalog.drugs d on d.id = e.intervention_drug_id
@@ -77,12 +89,12 @@ where r.claim_id = pg_temp.test_claim() and r.revision_number = 1
 insert into knowledge.evidence_assessments (
   claim_revision_id, assessed_knowledge_type, framework, certainty_level,
   risk_of_bias, inconsistency, indirectness, imprecision, publication_bias,
-  rationale, assessed_at
+  rationale, assessed_at, created_by_actor_id
 )
 select
   r.id, r.knowledge_type, 'grade', 'very_low',
   'serious', 'not_assessable', 'not_serious', 'very_serious', 'not_assessable',
-  'Testbegrunnelse for sikkerhetsgraden.', now()
+  'Testbegrunnelse for sikkerhetsgraden.', now(), pg_temp.synthesis_actor()
 from knowledge.claim_revisions r
 where r.claim_id = pg_temp.test_claim() and r.revision_number = 1;
 
@@ -195,10 +207,12 @@ select is(
 select throws_ok(
   $$
     insert into knowledge.claim_evidence_links (
-      claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note
+      claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note,
+      created_by_actor_id
     )
     select r.id, e.id, 'contradicts', 'direct',
-           'Motstridende funn oppdaget etter at vurderingen forelå.'
+           'Motstridende funn oppdaget etter at vurderingen forelå.',
+           pg_temp.synthesis_actor()
     from knowledge.claim_revisions r
     join knowledge.evidence_items e on true
     join catalog.drugs d on d.id = e.intervention_drug_id
@@ -213,10 +227,12 @@ select throws_ok(
 select lives_ok(
   $$
     insert into knowledge.claim_evidence_links (
-      claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note
+      claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note,
+      created_by_actor_id
     )
     select r.id, e.id, 'contradicts', 'direct',
-           'Motstridende funn tatt med i den nye revisjonens evidenssett.'
+           'Motstridende funn tatt med i den nye revisjonens evidenssett.',
+           pg_temp.synthesis_actor()
     from knowledge.claim_revisions r
     join knowledge.evidence_items e on true
     join catalog.drugs d on d.id = e.intervention_drug_id
@@ -231,12 +247,12 @@ select lives_ok(
     insert into knowledge.evidence_assessments (
       claim_revision_id, assessed_knowledge_type, framework, certainty_level,
       risk_of_bias, inconsistency, indirectness, imprecision, publication_bias,
-      rationale, assessed_at
+      rationale, assessed_at, created_by_actor_id
     )
     select
       r.id, r.knowledge_type, 'grade', 'low',
       'not_serious', 'not_assessable', 'not_serious', 'serious', 'not_assessable',
-      'Rettet begrunnelse for sikkerhetsgraden.', now()
+      'Rettet begrunnelse for sikkerhetsgraden.', now(), pg_temp.synthesis_actor()
     from knowledge.claim_revisions r
     where r.claim_id = pg_temp.test_claim() and r.revision_number = 2
   $$,
@@ -248,9 +264,11 @@ select lives_ok(
 select throws_ok(
   $$
     insert into knowledge.claim_evidence_links (
-      claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note
+      claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note,
+      created_by_actor_id
     )
-    select r.id, e.id, 'supports', 'direct', 'Enda et funn, etter vurderingen.'
+    select r.id, e.id, 'supports', 'direct', 'Enda et funn, etter vurderingen.',
+           pg_temp.synthesis_actor()
     from knowledge.claim_revisions r
     join knowledge.evidence_items e on true
     join catalog.drugs d on d.id = e.intervention_drug_id
@@ -297,12 +315,13 @@ select matches(
 -- lagret som den er.
 insert into knowledge.claim_revisions (
   claim_id, revision_number, knowledge_type, subject_drug_id,
-  statement, scope, comparator_kind, uncertainty_summary, content_hash
+  statement, scope, comparator_kind, uncertainty_summary, content_hash,
+  created_by_actor_id
 )
 select
   cl.id, 3, cl.knowledge_type, cl.subject_drug_id,
   'Testpåstand med forfalsket fingeravtrykk.', 'Testomfang.', 'none',
-  'Testusikkerhet.', 'sha256-v1:' || repeat('0', 64)
+  'Testusikkerhet.', 'sha256-v1:' || repeat('0', 64), pg_temp.synthesis_actor()
 from knowledge.claims cl
 where cl.id = pg_temp.test_claim();
 

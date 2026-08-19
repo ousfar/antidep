@@ -20,6 +20,15 @@ select plan(26);
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
 -- ---------------------------------------------------------------------------
+
+-- Migrasjon 005 gjorde created_by_actor_id påkrevd på kunnskapsobjektene
+-- (ANTIDEP_CONSTITUTION.md §14). Testdata attribueres til den samme aktøren som
+-- produserte de seedede radene, slik at fikstursradene ikke er mindre
+-- attribuerte enn kunnskapsbasen ellers.
+create function pg_temp.extraction_actor() returns uuid language sql stable as $$
+  select id from provenance.actors where actor_key = 'agent:evidence-extraction'
+$$;
+
 insert into knowledge.sources (source_type, title, authors_or_issuer)
 values ('journal_article', 'Immutabilitetstestkilde', 'Testforfatter I');
 
@@ -41,7 +50,8 @@ create function pg_temp.insert_evidence(
     comparator_kind, outcome_concept_id, outcome_detail,
     timepoint_min, timepoint_max, timepoint_availability,
     reported_direction, effect_measure, estimate, estimate_unit, estimate_availability,
-    confidence_interval_availability, source_locator, extraction_method, raw_extraction
+    confidence_interval_availability, source_locator, extraction_method, raw_extraction,
+    created_by_actor_id
   )
   select
     s.id, v.id, 'randomized_controlled_trial', p.id, 'reported_value',
@@ -49,7 +59,7 @@ create function pg_temp.insert_evidence(
     'none', c.id, 'Gjennomsnittlig vektendring i testdata',
     interval '8 weeks', interval '8 weeks', 'reported_value',
     'increase', 'mean_change', est, 'kg', 'reported_value',
-    'not_reported', locator, method, raw
+    'not_reported', locator, method, raw, pg_temp.extraction_actor()
   from knowledge.sources s
   join knowledge.source_versions v on v.source_id = s.id
   join catalog.drugs d on d.canonical_name = 'sertralin'
@@ -148,13 +158,14 @@ insert into knowledge.evidence_items (
   sample_size_availability, intervention_drug_id, comparator_kind,
   outcome_concept_id, outcome_detail, timepoint_availability,
   reported_direction, estimate_availability, confidence_interval_availability,
-  source_locator, extraction_method, content_hash
+  source_locator, extraction_method, content_hash, created_by_actor_id
 )
 select
   s.id, 'randomized_controlled_trial', 'not_extractable', 'Testpopulasjon',
   'not_reported', d.id, 'none', c.id, 'Testutfall', 'not_reported',
   'not_stated', 'not_reported', 'not_reported',
-  'Sammendrag, forfalsket hash', 'ai_assisted', 'sha256-v1:' || repeat('0', 64)
+  'Sammendrag, forfalsket hash', 'ai_assisted', 'sha256-v1:' || repeat('0', 64),
+  pg_temp.extraction_actor()
 from knowledge.sources s
 join catalog.drugs d on d.canonical_name = 'sertralin'
 join catalog.clinical_concepts c on c.canonical_label = 'vektendring'

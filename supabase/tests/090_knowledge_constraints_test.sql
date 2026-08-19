@@ -20,6 +20,15 @@ select plan(58);
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
 -- ---------------------------------------------------------------------------
+
+-- Migrasjon 005 gjorde created_by_actor_id påkrevd på kunnskapsobjektene
+-- (ANTIDEP_CONSTITUTION.md §14). Testdata attribueres til den samme aktøren som
+-- produserte de seedede radene, slik at fikstursradene ikke er mindre
+-- attribuerte enn kunnskapsbasen ellers.
+create function pg_temp.extraction_actor() returns uuid language sql stable as $$
+  select id from provenance.actors where actor_key = 'agent:evidence-extraction'
+$$;
+
 insert into knowledge.sources (source_type, title, authors_or_issuer)
 values ('journal_article', 'Testkilde om vektendring', 'Testforfatter T');
 
@@ -65,7 +74,7 @@ begin
     timepoint_min, timepoint_max, timepoint_availability,
     reported_direction, effect_measure, estimate, estimate_unit, estimate_availability,
     ci_lower, ci_upper, ci_level_percent, confidence_interval_availability,
-    source_locator, extraction_method
+    source_locator, extraction_method, created_by_actor_id
   )
   select
     (select id from knowledge.sources where title = 'Testkilde om vektendring'),
@@ -97,7 +106,8 @@ begin
     (payload ->> 'ci_level_percent')::numeric,
     (payload ->> 'confidence_interval_availability')::knowledge.value_availability,
     payload ->> 'source_locator',
-    (payload ->> 'extraction_method')::knowledge.extraction_method;
+    (payload ->> 'extraction_method')::knowledge.extraction_method,
+    pg_temp.extraction_actor();
 end;
 $$;
 
@@ -521,7 +531,7 @@ select throws_ok(
       sample_size_availability, intervention_drug_id, comparator_kind,
       outcome_concept_id, outcome_detail, timepoint_availability,
       reported_direction, estimate_availability, confidence_interval_availability,
-      source_locator, extraction_method
+      source_locator, extraction_method, created_by_actor_id
     )
     select
       (select id from knowledge.sources where title = 'Annen testkilde'),
@@ -534,7 +544,7 @@ select throws_ok(
       'none',
       (select id from catalog.clinical_concepts where canonical_label = 'vektendring'),
       'Testutfall', 'not_reported', 'not_stated', 'not_reported', 'not_reported',
-      'Sammendrag', 'ai_assisted'
+      'Sammendrag', 'ai_assisted', pg_temp.extraction_actor()
   $$,
   '23503', null,
   'en kildeversjon som tilhører en annen kilde avvises av den sammensatte fremmednøkkelen'
@@ -548,7 +558,7 @@ select throws_ok(
       sample_size_availability, intervention_drug_id, comparator_kind,
       outcome_concept_id, outcome_detail, timepoint_availability,
       reported_direction, estimate_availability, confidence_interval_availability,
-      source_locator, extraction_method
+      source_locator, extraction_method, created_by_actor_id
     )
     select
       (select id from knowledge.sources where title = 'Testkilde om vektendring'),
@@ -558,7 +568,7 @@ select throws_ok(
       'none',
       (select id from catalog.clinical_concepts where canonical_label = 'depressiv lidelse'),
       'Testutfall', 'not_reported', 'not_stated', 'not_reported', 'not_reported',
-      'Sammendrag', 'ai_assisted'
+      'Sammendrag', 'ai_assisted', pg_temp.extraction_actor()
   $$,
   '23503', null,
   'et begrep av typen condition kan ikke brukes som endepunkt'
@@ -572,7 +582,7 @@ select throws_ok(
       sample_size_availability, intervention_drug_id, comparator_kind,
       outcome_concept_id, outcome_detail, timepoint_availability,
       reported_direction, estimate_availability, confidence_interval_availability,
-      source_locator, extraction_method, raw_extraction
+      source_locator, extraction_method, raw_extraction, created_by_actor_id
     )
     select
       (select id from knowledge.sources where title = 'Testkilde om vektendring'),
@@ -582,7 +592,7 @@ select throws_ok(
       'none',
       (select id from catalog.clinical_concepts where canonical_label = 'vektendring'),
       'Testutfall', 'not_reported', 'not_stated', 'not_reported', 'not_reported',
-      'Sammendrag', 'ai_assisted', '"en løs streng"'::jsonb
+      'Sammendrag', 'ai_assisted', '"en løs streng"'::jsonb, pg_temp.extraction_actor()
   $$,
   '23514', null,
   'rå ekstraksjon må være et objekt, ikke en løs skalar'

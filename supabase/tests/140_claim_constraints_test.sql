@@ -28,13 +28,24 @@ select plan(64);
 -- condition kan brukes som tema er samtidig poenget: temaet er bevisst ikke
 -- låst til én begrepstype.
 -- ---------------------------------------------------------------------------
-insert into knowledge.claims (knowledge_type, topic_concept_id, subject_drug_id)
-select 'evidence_synthesis', c.id, d.id
+
+-- Migrasjon 005 gjorde created_by_actor_id påkrevd på kunnskapsobjektene
+-- (ANTIDEP_CONSTITUTION.md §14). Testdata attribueres til den samme aktøren som
+-- produserte de seedede radene, slik at fikstursradene ikke er mindre
+-- attribuerte enn kunnskapsbasen ellers.
+create function pg_temp.synthesis_actor() returns uuid language sql stable as $$
+  select id from provenance.actors where actor_key = 'agent:claim-synthesis'
+$$;
+
+insert into knowledge.claims
+  (knowledge_type, topic_concept_id, subject_drug_id, created_by_actor_id)
+select 'evidence_synthesis', c.id, d.id, pg_temp.synthesis_actor()
 from catalog.clinical_concepts c, catalog.drugs d
 where c.canonical_label = 'depressiv lidelse' and d.canonical_name = 'sertralin';
 
-insert into knowledge.claims (knowledge_type, topic_concept_id, subject_drug_id)
-select 'deterministic_fact', c.id, d.id
+insert into knowledge.claims
+  (knowledge_type, topic_concept_id, subject_drug_id, created_by_actor_id)
+select 'deterministic_fact', c.id, d.id, pg_temp.synthesis_actor()
 from catalog.clinical_concepts c, catalog.drugs d
 where c.canonical_label = 'depressiv lidelse' and d.canonical_name = 'mirtazapin';
 
@@ -72,7 +83,7 @@ begin
     supersedes_revision_id, statement, scope, population_id,
     timeframe_min, timeframe_max, comparator_kind, comparator_drug_id,
     direction, magnitude_measure, magnitude_value, magnitude_unit,
-    qualifiers, uncertainty_summary
+    qualifiers, uncertainty_summary, created_by_actor_id
   )
   select
     cl.id,
@@ -97,7 +108,8 @@ begin
     (payload ->> 'magnitude_value')::numeric,
     (payload ->> 'magnitude_unit')::knowledge.estimate_unit,
     payload ->> 'qualifiers',
-    payload ->> 'uncertainty_summary'
+    payload ->> 'uncertainty_summary',
+    pg_temp.synthesis_actor()
   from knowledge.claims cl
   where cl.id = pg_temp.test_claim(payload ->> 'claim_kind')
   returning id into new_id;
@@ -113,8 +125,9 @@ $$;
 -- tema skal derfor kunne ha flere selvstendige påstander.
 select lives_ok(
   $$
-    insert into knowledge.claims (knowledge_type, topic_concept_id, subject_drug_id)
-    select 'evidence_synthesis', c.id, d.id
+    insert into knowledge.claims
+      (knowledge_type, topic_concept_id, subject_drug_id, created_by_actor_id)
+    select 'evidence_synthesis', c.id, d.id, pg_temp.synthesis_actor()
     from catalog.clinical_concepts c, catalog.drugs d
     where c.canonical_label = 'vektendring' and d.canonical_name = 'sertralin'
   $$,
@@ -122,8 +135,9 @@ select lives_ok(
 );
 select throws_ok(
   $$
-    insert into knowledge.claims (knowledge_type, topic_concept_id, subject_drug_id)
-    select 'evidence_summary', c.id, d.id
+    insert into knowledge.claims
+      (knowledge_type, topic_concept_id, subject_drug_id, created_by_actor_id)
+    select 'evidence_summary', c.id, d.id, pg_temp.synthesis_actor()
     from catalog.clinical_concepts c, catalog.drugs d
     where c.canonical_label = 'vektendring' and d.canonical_name = 'sertralin'
   $$,
@@ -132,8 +146,9 @@ select throws_ok(
 );
 select throws_ok(
   $$
-    insert into knowledge.claims (knowledge_type, topic_concept_id, subject_drug_id)
-    select 'evidence_synthesis', c.id, gen_random_uuid()
+    insert into knowledge.claims
+      (knowledge_type, topic_concept_id, subject_drug_id, created_by_actor_id)
+    select 'evidence_synthesis', c.id, gen_random_uuid(), pg_temp.synthesis_actor()
     from catalog.clinical_concepts c where c.canonical_label = 'vektendring'
   $$,
   '23503', null,
@@ -221,7 +236,8 @@ select throws_ok(
   $$
     insert into knowledge.claim_revisions (
       claim_id, revision_number, knowledge_type, subject_drug_id,
-      supersedes_revision_id, statement, scope, comparator_kind, uncertainty_summary
+      supersedes_revision_id, statement, scope, comparator_kind, uncertainty_summary,
+      created_by_actor_id
     )
     select
       cl.id, 3, cl.knowledge_type, cl.subject_drug_id,
@@ -230,7 +246,7 @@ select throws_ok(
        join catalog.clinical_concepts cc on cc.id = c2.topic_concept_id
        where cc.canonical_label = 'vektendring' limit 1),
       'Testpåstand som erstatter en annen påstands revisjon.',
-      'Testomfang.', 'none', 'Testusikkerhet.'
+      'Testomfang.', 'none', 'Testusikkerhet.', pg_temp.synthesis_actor()
     from knowledge.claims cl
     where cl.id = pg_temp.test_claim('evidence_synthesis')
   $$,
@@ -445,7 +461,8 @@ create function pg_temp.insert_link(
   drug text default 'sertralin'
 ) returns uuid language sql as $$
   insert into knowledge.claim_evidence_links (
-    claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note
+    claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note,
+    created_by_actor_id
   )
   select
     (select r.id from knowledge.claim_revisions r
@@ -454,7 +471,8 @@ create function pg_temp.insert_link(
     e.id,
     relationship::knowledge.claim_evidence_relationship,
     direct::knowledge.evidence_directness,
-    note
+    note,
+    pg_temp.synthesis_actor()
   from knowledge.evidence_items e
   join catalog.drugs d on d.id = e.intervention_drug_id
   where d.canonical_name = drug
@@ -521,12 +539,14 @@ select lives_ok(
 select throws_ok(
   $$
     insert into knowledge.claim_evidence_links (
-      claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note
+      claim_revision_id, evidence_item_id, relationship_type, directness, relevance_note,
+      created_by_actor_id
     )
     select
       (select r.id from knowledge.claim_revisions r
        where r.claim_id = pg_temp.test_claim('evidence_synthesis') and r.revision_number = 1),
-      gen_random_uuid(), 'supports', 'direct', 'Testbegrunnelse for et ukjent evidensfunn.'
+      gen_random_uuid(), 'supports', 'direct', 'Testbegrunnelse for et ukjent evidensfunn.',
+      pg_temp.synthesis_actor()
   $$,
   '23503', null,
   'en lenke til et ukjent evidensfunn avvises'
@@ -558,7 +578,7 @@ begin
   insert into knowledge.evidence_assessments (
     claim_revision_id, assessed_knowledge_type, framework, certainty_level,
     risk_of_bias, inconsistency, indirectness, imprecision, publication_bias,
-    rationale, evidence_gap, assessed_at
+    rationale, evidence_gap, assessed_at, created_by_actor_id
   )
   select
     r.id,
@@ -572,7 +592,8 @@ begin
     (payload ->> 'publication_bias')::knowledge.grade_domain_rating,
     payload ->> 'rationale',
     payload ->> 'evidence_gap',
-    now()
+    now(),
+    pg_temp.synthesis_actor()
   from knowledge.claim_revisions r
   where r.claim_id = pg_temp.test_claim(payload ->> 'claim_kind')
     and r.revision_number = (payload ->> 'revision_number')::integer
