@@ -1,0 +1,16 @@
+-- Antidep — lokal seed
+--
+-- Denne filen kjøres bare av `supabase db reset` i lokalt utviklingsmiljø
+-- (supabase/config.toml, [db.seed]). Den er derfor reservert for rent lokal
+-- demodata og hjelpedata for manuell utprøving.
+--
+-- Kontrollert vokabular og pilotdata som produksjonen er avhengig av, ligger i
+-- de versjonerte migrasjonene, ikke her. Katalogdataene for den første golden
+-- slicen — sertralin, mirtazapin, vektendring, depressiv lidelse og
+-- populasjonen — seedes av migrasjon 002, slik at kliniske objekter i senere
+-- migrasjoner kan ha fremmednøkler til dem i alle miljøer
+-- (docs/MVP_IMPLEMENTATION_PLAN.md §19, docs/DATABASE_ARCHITECTURE.md §65).
+--
+-- Filen er foreløpig tom med vilje. Den finnes fordi config.toml peker på den,
+-- og fordi plasseringsregelen over skal være dokumentert der neste utvikler
+-- leter etter den.
