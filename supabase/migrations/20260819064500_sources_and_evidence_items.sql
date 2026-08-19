@@ -90,7 +90,7 @@ create type knowledge.source_status as enum (
 );
 
 comment on type knowledge.source_status is
-  'Kildens status (KNOWLEDGE_MODEL.md §10): active (i bruk), outdated (fortsatt gyldig som historikk, men ikke lenger dekkende), superseded (erstattet av en nyere kilde, se superseded_by_source_id), retracted (trukket tilbake av tidsskrift eller utgiver) og withdrawn (dokumentet er tatt ut av bruk av utgiveren). retracted og withdrawn er egne tilstander nettopp fordi en publiseringsgate senere skal kunne nekte å bruke slike kilder (DATABASE_ARCHITECTURE.md §58); de skal aldri kunne passere som om statusen var normal.';
+  'Kildens status (KNOWLEDGE_MODEL.md §10): active (i bruk), outdated (ikke lenger dekkende, uten at en bestemt etterfølger er registrert), superseded (erstattet av en bestemt nyere kilde, som superseded_by_source_id peker på; statusen og pekeren forutsetter hverandre), retracted (trukket tilbake av tidsskrift eller utgiver) og withdrawn (dokumentet er tatt ut av bruk av utgiveren). retracted og withdrawn er egne tilstander nettopp fordi en publiseringsgate senere skal kunne nekte å bruke slike kilder (DATABASE_ARCHITECTURE.md §58); de skal aldri kunne passere som om statusen var normal.';
 
 create type knowledge.source_identifier_system as enum ('doi', 'pmid');
 
@@ -148,7 +148,7 @@ create type knowledge.value_availability as enum (
 );
 
 comment on type knowledge.value_availability is
-  'Hvorfor et klinisk viktig felt har eller ikke har en verdi (DATABASE_ARCHITECTURE.md §19.1). reported_value: kilden oppgir verdien, og den står i kolonnen. not_measured: kilden opplyser at størrelsen ikke ble målt. not_reported: størrelsen kunne vært oppgitt, men kilden oppgir den ikke. not_applicable: størrelsen gir ikke mening for dette funnet. not_extractable: verdien finnes i kilden, men kan ikke leses entydig ut av den kildeversjonen og det stedet raden peker på. uncertain_extraction: en verdi er lest ut, men ekstraksjonen er usikker. Statusen gjelder alltid den kildeversjonen og den kildepekeren raden viser til, ikke nødvendigvis hele publikasjonen. reported_value og uncertain_extraction er de to tilstandene der en verdi faktisk står i kolonnen; de øvrige krever NULL. NULL alene er for tvetydig, og et nullfunn er en verdi, ikke et fravær.';
+  'Hvorfor et klinisk viktig felt har eller ikke har en verdi (DATABASE_ARCHITECTURE.md §19.1). reported_value: kilden oppgir verdien, og den står i kolonnen. not_measured: kilden opplyser at størrelsen ikke ble målt. not_reported: størrelsen kunne vært oppgitt, men kilden oppgir den ikke. not_applicable: størrelsen gir ikke mening for dette funnet. not_extractable: verdien står i den kildeversjonen og på det stedet raden peker på, men kan ikke leses entydig ut, for eksempel fordi den bare finnes i en figur eller en uklar tabell. Er verdien rett og slett ikke gjengitt der raden peker, er det not_reported, ikke not_extractable, uansett om publikasjonen ellers måtte inneholde den. uncertain_extraction: en verdi er lest ut, men ekstraksjonen er usikker. Statusen gjelder alltid den kildeversjonen og den kildepekeren raden viser til, ikke nødvendigvis hele publikasjonen. reported_value og uncertain_extraction er de to tilstandene der en verdi faktisk står i kolonnen; de øvrige krever NULL. NULL alene er for tvetydig, og et nullfunn er en verdi, ikke et fravær.';
 
 create type knowledge.extraction_method as enum (
   'manual',
@@ -256,9 +256,12 @@ create table knowledge.sources (
   constraint sources_status_note_trimmed_check
     check (status_note is null
            or (status_note = btrim(status_note) and length(status_note) between 1 and 1000)),
-  -- Erstatningspekeren gir statusen superseded et faktisk referansepunkt.
-  constraint sources_superseded_by_requires_status_check
-    check (superseded_by_source_id is null or source_status = 'superseded'),
+  -- Statusen superseded og erstatningspekeren forutsetter hverandre. Uten den
+  -- ene retningen ville superseded kunne stå uten referansepunkt, og statusen
+  -- ville lovet mer enn raden holder. En kilde som er utdatert uten at en
+  -- bestemt etterfølger er registrert, hører til outdated.
+  constraint sources_superseded_requires_pointer_check
+    check ((source_status = 'superseded') = (superseded_by_source_id is not null)),
   constraint sources_no_self_supersession_check
     check (superseded_by_source_id is null or superseded_by_source_id <> id)
 );
@@ -278,7 +281,7 @@ comment on column knowledge.sources.source_status is
 comment on column knowledge.sources.status_note is
   'Begrunnelse for en status som ikke er active, for eksempel tilbaketrekkingsgrunn med dato. Påkrevd for alle andre statuser enn active, slik at en tilbaketrukket kilde ikke kan bli det uten spor.';
 comment on column knowledge.sources.superseded_by_source_id is
-  'Kilden som erstatter denne. Kan bare settes når status er superseded. Den gamle raden slettes ikke (DATABASE_ARCHITECTURE.md §36).';
+  'Kilden som erstatter denne. Settes hvis og bare hvis status er superseded; en kilde som er utdatert uten registrert etterfølger får status outdated. Den gamle raden slettes ikke (DATABASE_ARCHITECTURE.md §36).';
 
 -- Kilder skal kunne søkes opp etter status, blant annet av den senere
 -- publiseringsgaten som må kunne finne tilbaketrukne kilder.
@@ -657,9 +660,10 @@ create table knowledge.evidence_items (
   -- kan endres av en senere migrasjon uten at gamle verdier blir tvetydige.
   constraint evidence_items_content_hash_format_check
     check (content_hash ~ '^sha256-v[0-9]+:[0-9a-f]{64}$'),
-  -- Nøyaktig samme funn skal ikke kunne registreres to ganger; en dublett ville
-  -- blitt dobbelttalt i enhver senere syntese. En kontroll av en eksisterende
-  -- ekstraksjon er en arbeidsflytregistrering (migrasjon 005), ikke et nytt
+  -- Nøyaktig samme registrering skal ikke kunne føres inn to ganger. Siden
+  -- hashen dekker hele radens innhold, blokkerer regelen bare ekte dubletter og
+  -- aldri en korreksjon. En kontroll av en eksisterende ekstraksjon er
+  -- dessuten en arbeidsflytregistrering (migrasjon 005), ikke et nytt
   -- evidensobjekt.
   constraint evidence_items_content_hash_key unique (content_hash)
 );
@@ -695,7 +699,7 @@ comment on column knowledge.evidence_items.source_locator is
 comment on column knowledge.evidence_items.raw_extraction is
   'Kildens egne formuleringer og tall, bevart ordrett for reproduksjon og for verifikasjon mot originalen. Skal aldri være eneste sted et kanonisk felt finnes (DATABASE_ARCHITECTURE.md §20).';
 comment on column knowledge.evidence_items.content_hash is
-  'Fingeravtrykk av de kanoniske feltene, satt av databasen ved innsetting. Identifiserer samme funn på tvers av systemer og hindrer at en dublett dobbelttelles. Prefikset angir hvilken hashdefinisjon som er brukt.';
+  'Fingeravtrykk av hele radens faglige innhold, satt av databasen ved innsetting og unikt. Hindrer at nøyaktig samme registrering føres inn to ganger, og sikrer at en korreksjon av et hvilket som helst felt gir en ny rad som slipper inn. Den sier ikke at to rader med ulik hash beskriver ulike funn; det er en syntesevurdering. Prefikset angir hvilken hashdefinisjon som er brukt.';
 comment on column knowledge.evidence_items.required_outcome_type is
   'Teknisk konstant som lar fremmednøkkelen kreve concept_type = outcome. Ingen klinisk betydning.';
 
@@ -711,9 +715,27 @@ create index evidence_items_intervention_outcome_idx
   on knowledge.evidence_items (intervention_drug_id, outcome_concept_id);
 
 -- Fingeravtrykket eies av databasen, ikke av kalleren. En hash klienten kunne
--- oppgi selv ville sett ut som en garanti uten å være det. Funksjonen hasher
--- bare de kanoniske feltene: to ekstraksjoner av samme funn er samme funn selv
--- om rå payload eller ekstraksjonsmetode er ulik.
+-- oppgi selv ville sett ut som en garanti uten å være det.
+--
+-- Hashen dekker hele det faglige innholdet i raden, også source_locator,
+-- extraction_method og raw_extraction. Et tidligere utkast hashet bare de
+-- kanoniske feltene, med den begrunnelsen at to ekstraksjoner av samme funn er
+-- samme funn. Kombinert med UNIQUE og en append-only-tabell ga det en blindvei:
+-- var det ordrette sitatet i raw_extraction feilsitert, kunne raden verken
+-- oppdateres eller erstattes av en korrigert rad, fordi den korrigerte raden
+-- hadde identiske kanoniske felter og ble avvist som dublett. Nettopp
+-- raw_extraction er det en verifikator kontrollerer mot originalen
+-- (ANTIDEP_CONSTITUTION.md §11), så et feilsitat der er en reell og alvorlig
+-- feilklasse som må kunne rettes.
+--
+-- Hashen identifiserer derfor en identisk registrering, ikke et semantisk likt
+-- funn. Den hindrer at nøyaktig samme rad føres inn to ganger — ved en
+-- gjentatt migrering eller et agentforsøk som kjøres om igjen — og den gjør at
+-- enhver retting av et hvilket som helst felt gir en ny hash og dermed en
+-- gyldig korreksjonsvei. Å oppdage at to ulikt formulerte ekstraksjoner
+-- beskriver samme underliggende funn er en syntesevurdering, ikke noe en
+-- likhetstest på én rad kan avgjøre; det hører til claim_evidence_links og
+-- Study-modellen (DATABASE_ARCHITECTURE.md §17, §21).
 --
 -- Numeriske verdier normaliseres med trim_scale, og tidsrom hashes som sekunder,
 -- slik at 0.80 og 0.8, og «8 uker» skrevet på to måter, gir samme verdi.
@@ -763,7 +785,9 @@ begin
     coalesce(trim_scale(new.ci_level_percent)::text, ''),
     new.confidence_interval_availability::text,
     coalesce(new.limitations_text, ''),
-    new.source_locator
+    new.source_locator,
+    new.extraction_method::text,
+    coalesce(new.raw_extraction::text, '')
   );
 
   new.content_hash := 'sha256-v1:' || encode(sha256(convert_to(canonical, 'UTF8')), 'hex');
@@ -799,8 +823,14 @@ create trigger evidence_items_set_content_hash
 -- vedlikeholdsoperasjon må slå av triggeren eksplisitt, som en synlig og
 -- reviewbar handling, på samme måte som i migrasjon 002.
 --
+-- Korreksjonsveien er reell for alle felter: fordi content_hash dekker hele
+-- radens innhold, får en korrigert ekstraksjon en annen hash og slipper inn ved
+-- siden av den gamle.
+--
 -- Kjent konsekvens: et evidensfunn kan foreløpig ikke merkes som tilbaketrukket
--- eller erstattet, fordi raden ikke har en livssyklus å endre. Det er
+-- eller erstattet, fordi raden ikke har en livssyklus å endre. Etter en
+-- korreksjon står derfor begge radene der uten at databasen sier hvilken som
+-- gjelder. Det er
 -- akseptabelt her fordi ingenting ennå konsumerer evidensfunn — det finnes
 -- verken claims, publisering eller api-projeksjoner — men spørsmålet må
 -- avgjøres når review og verifikasjon kommer i migrasjon 005: en trukket
@@ -958,8 +988,10 @@ join knowledge.sources s on s.id = i.source_id;
 --
 -- Sammendraget rapporterer retningen, men ikke tallet: metodeavsnittet sier at
 -- gjennomsnittlig prosentvis vektendring ble sammenlignet, og resultatavsnittet
--- karakteriserer sertralinarmen uten å oppgi verdien. Estimatet er derfor tomt
--- med statusen not_extractable, mens effektmål og enhet er kjent. Funnet er
+-- karakteriserer sertralinarmen uten å oppgi verdien. Verdien er altså ikke
+-- gjengitt i den kildeversjonen raden peker på, og statusen er derfor
+-- not_reported, ikke not_extractable — det siste ville betydd at tallet står
+-- der, men ikke kan leses entydig. Effektmål og enhet er kjent. Funnet er
 -- armspesifikt: studien sammenlignet fluoksetin, sertralin og paroksetin, men
 -- ingen av komparatorene er registrert i Antideps katalog, og den kontrasten er
 -- derfor ikke påstått her.
@@ -997,9 +1029,9 @@ select
   'mean_change',
   null,
   'percent',
-  'not_extractable',
-  'not_extractable',
-  'Kilden karakteriserer vektøkningen som beskjeden og ikke statistisk signifikant, men oppgir ingen tallverdi i den verifiserte kildeversjonen. Analysen omfatter bare de 48 av 96 randomiserte som fullførte, noe som gir risiko for frafallsskjevhet. Funnet er armspesifikt og hentet fra en studie som sammenlignet fluoksetin, sertralin og paroksetin; sammenligningen mellom armene er ikke registrert her fordi komparatorene ikke finnes i katalogen.',
+  'not_reported',
+  'not_reported',
+  'Kilden karakteriserer vektøkningen som beskjeden og ikke statistisk signifikant, men verken tallverdien eller et konfidensintervall er gjengitt i den verifiserte kildeversjonen; metodeavsnittet viser at gjennomsnittlig prosentvis vektendring ble beregnet, så fulltekstartikkelen kan inneholde tallet. Analysen omfatter bare de 48 av 96 randomiserte som fullførte, noe som gir risiko for frafallsskjevhet. Funnet er armspesifikt og hentet fra en studie som sammenlignet fluoksetin, sertralin og paroksetin; sammenligningen mellom armene er ikke registrert her fordi komparatorene ikke finnes i katalogen.',
   'Sammendrag (MEDLINE-post), avsnittene METHOD og RESULTS',
   'ai_assisted',
   jsonb_build_object(
@@ -1025,6 +1057,13 @@ where i.identifier_system = 'pmid' and i.identifier_value = '11105740';
 -- MEDLINE-indekseringen også omfatter Adolescent. Koblingen til «voksne med
 -- depressiv lidelse» er derfor merket uncertain_extraction framfor å bli
 -- framstilt som sikker.
+--
+-- sample_size står tomt. Sammendraget oppgir 147 randomisert til mirtazapin,
+-- 294 behandlet og 292 i ITT-populasjonen, men ikke hvor mange som inngår i
+-- vektanalysen. Kolonnen er definert som antallet analysen faktisk omfatter, så
+-- å lagre 147 der ville gjort et kjent randomiseringstall om til et ukjent
+-- analysetall — og en senere syntese ville vektet funnet på det. Tallet hører
+-- hjemme i intervention_detail, der det står som det er: antall randomisert.
 insert into knowledge.evidence_items (
   source_id, source_version_id, design_code,
   population_id, population_availability, population_detail,
@@ -1044,8 +1083,8 @@ select
   p.id,
   'uncertain_extraction',
   'Alvorlig deprimerte pasienter, definert som minst 25 poeng på de 17 første leddene i Hamilton Depression Rating Scale. Nedre aldersgrense er ikke oppgitt i den verifiserte kildeversjonen, og MEDLINE-indekseringen omfatter Adolescent i tillegg til Adult, Middle Aged og Aged.',
-  147,
-  'uncertain_extraction',
+  null,
+  'not_reported',
   d.id,
   'Mirtazapin 15-60 mg per dag i 8 uker. 147 pasienter ble randomisert til mirtazapin.',
   'none',
@@ -1061,7 +1100,7 @@ select
   'kg',
   'reported_value',
   'not_reported',
-  'Kilden oppgir spredningen som standardavvik, 0,8 +/- 2,7 kg, ikke som konfidensintervall; standardavviket er bevart ordrett i raw_extraction. Signifikansnivået p < 0,001 gjelder sammenligningen mot fluoksetin, ikke den armspesifikke endringen alene. Antallet som faktisk inngår i vektanalysen er ikke oppgitt, så 147 er antallet randomisert til mirtazapin. Studien er ikke avgrenset til den populasjonen funnet er indeksert under.',
+  'Kilden oppgir spredningen som standardavvik, 0,8 +/- 2,7 kg, ikke som konfidensintervall; standardavviket er bevart ordrett i raw_extraction. Signifikansnivået p < 0,001 gjelder sammenligningen mot fluoksetin, ikke den armspesifikke endringen alene. Antallet som inngår i vektanalysen er ikke oppgitt: sammendraget oppgir 147 randomisert til mirtazapin, 294 behandlet og 292 i ITT-populasjonen, men ingen N for vektsammenligningen. Studien er ikke avgrenset til den populasjonen funnet er indeksert under.',
   'Sammendrag (MEDLINE-post), avsnittene METHODS og RESULTS',
   'ai_assisted',
   jsonb_build_object(

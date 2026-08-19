@@ -14,7 +14,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(16);
+select plan(18);
 
 -- ---------------------------------------------------------------------------
 -- Kildene i slicen
@@ -106,10 +106,10 @@ select results_eq(
     ('mirtazapin', 'vektendring', 'voksne med depressiv lidelse',
      'randomized_controlled_trial', 'none', 'increase', 'mean_change',
      0.8::numeric, 'kg', 'reported_value', 'not_reported',
-     147, interval '8 weeks', interval '8 weeks', 'ai_assisted'),
+     null::integer, interval '8 weeks', interval '8 weeks', 'ai_assisted'),
     ('sertralin', 'vektendring', 'voksne med depressiv lidelse',
      'randomized_controlled_trial', 'none', 'increase', 'mean_change',
-     null::numeric, 'percent', 'not_extractable', 'not_extractable',
+     null::numeric, 'percent', 'not_reported', 'not_reported',
      48, interval '26 weeks', interval '32 weeks', 'ai_assisted')$$,
   'begge evidensfunnene er registrert slik den verifiserte kildeversjonen faktisk rapporterer dem'
 );
@@ -121,8 +121,29 @@ select is(
   (select estimate_availability::text from knowledge.evidence_items e
    join catalog.drugs d on d.id = e.intervention_drug_id
    where d.canonical_name = 'sertralin'),
-  'not_extractable',
-  'et estimat kilden ikke oppgir i den verifiserte representasjonen er merket not_extractable, ikke gjettet'
+  'not_reported',
+  'et estimat den verifiserte kildeversjonen ikke gjengir er merket not_reported, ikke gjettet'
+);
+
+-- Et randomiseringstall er ikke et analysetall. sample_size er definert som
+-- antallet analysen faktisk omfatter, og når kilden ikke oppgir det, skal
+-- kolonnen stå tom framfor å låne armstørrelsen fra randomiseringen — ellers
+-- ville en senere syntese vektet funnet på et tall kilden aldri oppga.
+select results_eq(
+  $$
+    select e.sample_size, e.sample_size_availability::text
+    from knowledge.evidence_items e
+    join catalog.drugs d on d.id = e.intervention_drug_id
+    where d.canonical_name = 'mirtazapin'
+  $$,
+  $$values (null::integer, 'not_reported')$$,
+  'antallet i vektanalysen er ikke oppgitt av kilden og lånes ikke fra randomiseringen'
+);
+select ok(
+  (select intervention_detail from knowledge.evidence_items e
+   join catalog.drugs d on d.id = e.intervention_drug_id
+   where d.canonical_name = 'mirtazapin') like '%147%',
+  'randomisert armstørrelse er bevart i intervention_detail, der den hører hjemme'
 );
 
 -- Usikkerhet i selve ekstraksjonen skal være maskinlesbar, ikke bare stå i prosa.

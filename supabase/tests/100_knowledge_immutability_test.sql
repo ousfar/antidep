@@ -15,7 +15,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(23);
+select plan(26);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
@@ -29,15 +29,19 @@ select id, timestamptz '2026-01-02T03:04:05Z', 'https://example.invalid/immutabi
        'testversjon 1', 'sha256:' || repeat('b', 64)
 from knowledge.sources where title = 'Immutabilitetstestkilde';
 
-create function pg_temp.insert_evidence(locator text, est numeric default 1.5)
-  returns uuid language sql as $$
+create function pg_temp.insert_evidence(
+  locator text,
+  est numeric default 1.5,
+  raw jsonb default null,
+  method knowledge.extraction_method default 'ai_assisted'
+) returns uuid language sql as $$
   insert into knowledge.evidence_items (
     source_id, source_version_id, design_code, population_id, population_availability,
     population_detail, sample_size, sample_size_availability, intervention_drug_id,
     comparator_kind, outcome_concept_id, outcome_detail,
     timepoint_min, timepoint_max, timepoint_availability,
     reported_direction, effect_measure, estimate, estimate_unit, estimate_availability,
-    confidence_interval_availability, source_locator, extraction_method
+    confidence_interval_availability, source_locator, extraction_method, raw_extraction
   )
   select
     s.id, v.id, 'randomized_controlled_trial', p.id, 'reported_value',
@@ -45,7 +49,7 @@ create function pg_temp.insert_evidence(locator text, est numeric default 1.5)
     'none', c.id, 'Gjennomsnittlig vektendring i testdata',
     interval '8 weeks', interval '8 weeks', 'reported_value',
     'increase', 'mean_change', est, 'kg', 'reported_value',
-    'not_reported', locator, 'ai_assisted'
+    'not_reported', locator, method, raw
   from knowledge.sources s
   join knowledge.source_versions v on v.source_id = s.id
   join catalog.drugs d on d.canonical_name = 'sertralin'
@@ -161,6 +165,35 @@ select isnt(
    where source_locator = 'Sammendrag, forfalsket hash'),
   'sha256-v1:' || repeat('0', 64),
   'en hash oppgitt av kalleren ignoreres og overskrives av databasen'
+);
+
+-- Korreksjonsveien må virke for hvert felt, ikke bare for de kanoniske. Et
+-- feilsitat i raw_extraction er nettopp det en verifikator kontrollerer mot
+-- originalen (ANTIDEP_CONSTITUTION.md §11). Hashet bare de kanoniske feltene,
+-- ville en rettet rad hatt samme hash som den feilsiterte og blitt avvist som
+-- dublett — og raden kunne heller ikke oppdateres. Da hadde feilen vært umulig
+-- å rette.
+-- Egen kildepeker for denne gruppen, slik at radene ikke forstyrrer
+-- oppslagene over. source_locator er selv et kanonisk felt, så den må være lik
+-- på tvers av de tre radene for at testen skal si det den påstår.
+select pg_temp.insert_evidence('Sammendrag, korreksjonsvei', 1.5,
+  '{"resultat": "feilsitert ordrett sitat"}'::jsonb);
+
+select lives_ok(
+  $$select pg_temp.insert_evidence('Sammendrag, korreksjonsvei', 1.5,
+      '{"resultat": "rettet ordrett sitat"}'::jsonb)$$,
+  'en rettet råekstraksjon kan registreres selv om de kanoniske feltene er uendret'
+);
+select lives_ok(
+  $$select pg_temp.insert_evidence('Sammendrag, korreksjonsvei', 1.5,
+      '{"resultat": "feilsitert ordrett sitat"}'::jsonb, 'manual')$$,
+  'en rettet ekstraksjonsmetode kan registreres selv om de kanoniske feltene er uendret'
+);
+select throws_ok(
+  $$select pg_temp.insert_evidence('Sammendrag, korreksjonsvei', 1.5,
+      '{"resultat": "feilsitert ordrett sitat"}'::jsonb)$$,
+  '23505', null,
+  'en helt identisk registrering avvises fortsatt som dublett'
 );
 
 -- Samme kanoniske innhold gir samme fingeravtrykk, og en dublett avvises.

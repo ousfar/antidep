@@ -15,7 +15,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(55);
+select plan(58);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
@@ -205,6 +205,39 @@ select throws_ok(
   $$,
   '23514', null,
   'en erstatningspeker krever status superseded'
+);
+
+-- Motsatt retning: statusen skal ikke kunne love en erstatning som ikke finnes.
+select throws_ok(
+  $$
+    update knowledge.sources
+    set source_status = 'superseded', status_note = 'Erstattet i testdata'
+    where title = 'Gyldig testretningslinje'
+  $$,
+  '23514', null,
+  'statusen superseded uten erstatningspeker avvises'
+);
+select lives_ok(
+  $$
+    update knowledge.sources
+    set source_status = 'superseded',
+        status_note = 'Erstattet i testdata',
+        superseded_by_source_id =
+          (select id from knowledge.sources where title = 'Annen testkilde')
+    where title = 'Gyldig testretningslinje'
+  $$,
+  'status og erstatningspeker kan settes sammen'
+);
+
+-- Vaktposten skal ikke overblokkere: en kilde som er utdatert uten at en
+-- bestemt etterfølger er registrert, hører til outdated og trenger ingen peker.
+select lives_ok(
+  $$
+    update knowledge.sources
+    set source_status = 'outdated', status_note = 'Utdatert uten registrert etterfølger'
+    where title = 'Ekte dagpresisjon'
+  $$,
+  'en utdatert kilde uten registrert etterfølger er tillatt'
 );
 
 -- ---------------------------------------------------------------------------
