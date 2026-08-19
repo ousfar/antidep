@@ -98,32 +98,47 @@ revoke usage on type
   from public;
 
 -- ----------------------------------------------------------------------------
--- 2. Felles hjelpefunksjon for updated_at
+-- 2. Felles hjelpefunksjon for radens tidsstempler
 --
--- KNOWLEDGE_MODEL.md §4 krever updated_at på Drug. Et updated_at som
--- applikasjonen kan glemme å sette, er verre enn ingen kolonne, fordi det ser
--- ut som en garanti. Kolonnen vedlikeholdes derfor av databasen.
+-- KNOWLEDGE_MODEL.md §4 krever updated_at på Drug. Et tidsstempel kalleren kan
+-- glemme å sette — eller sette til hva som helst — er verre enn ingen kolonne,
+-- fordi det ser ut som en garanti. Begge kolonnene eies derfor av databasen:
+--
+--   INSERT: created_at og updated_at settes til now(); en verdi fra kalleren
+--           ignoreres. En default alene ville bare gjelde når kolonnen utelates.
+--   UPDATE: created_at bevares fra den eksisterende raden, updated_at settes
+--           til now().
+--
+-- created_at betyr «når Antidep opprettet raden» (DATABASE_ARCHITECTURE.md
+-- §7.3). Tidspunkter fra den eksterne virkeligheten hører til recorded_at eller
+-- valid_from/valid_to, ikke hit, så det finnes ingen legitim grunn for en
+-- kaller til å oppgi created_at.
 --
 -- Dette er en bevisst og snever trigger (DATABASE_ARCHITECTURE.md §60): den
--- skriver ett teknisk metadatafelt på egen rad og inneholder ingen klinisk
+-- skriver to tekniske metadatafelt på egen rad og inneholder ingen klinisk
 -- logikk og ingen arbeidsflyt. Funksjonen er SECURITY INVOKER med tomt
 -- search_path og uten EXECUTE til PUBLIC.
 -- ----------------------------------------------------------------------------
-create function catalog.set_updated_at()
+create function catalog.set_row_timestamps()
   returns trigger
   language plpgsql
   set search_path = ''
 as $$
 begin
+  if tg_op = 'INSERT' then
+    new.created_at := now();
+  else
+    new.created_at := old.created_at;
+  end if;
   new.updated_at := now();
   return new;
 end;
 $$;
 
-comment on function catalog.set_updated_at() is
-  'Trigger-funksjon som setter updated_at ved UPDATE på katalogtabellene. Teknisk metadata; endrer ingen klinisk verdi.';
+comment on function catalog.set_row_timestamps() is
+  'Trigger-funksjon som gir databasen eierskap til created_at og updated_at på katalogtabellene, ved INSERT og UPDATE. Teknisk metadata; endrer ingen klinisk verdi.';
 
-revoke execute on function catalog.set_updated_at() from public;
+revoke execute on function catalog.set_row_timestamps() from public;
 
 -- ----------------------------------------------------------------------------
 -- 3. catalog.drugs — stabil identitet for virkestoff
@@ -160,9 +175,9 @@ comment on column catalog.drugs.updated_at is
 create unique index drugs_canonical_name_key
   on catalog.drugs (lower(canonical_name));
 
-create trigger drugs_set_updated_at
-  before update on catalog.drugs
-  for each row execute function catalog.set_updated_at();
+create trigger drugs_set_row_timestamps
+  before insert or update on catalog.drugs
+  for each row execute function catalog.set_row_timestamps();
 
 -- ----------------------------------------------------------------------------
 -- 4. catalog.drug_identifiers — eksterne identifikatorer
@@ -199,9 +214,9 @@ comment on column catalog.drug_identifiers.identifier_value is
 create index drug_identifiers_drug_id_idx
   on catalog.drug_identifiers (drug_id);
 
-create trigger drug_identifiers_set_updated_at
-  before update on catalog.drug_identifiers
-  for each row execute function catalog.set_updated_at();
+create trigger drug_identifiers_set_row_timestamps
+  before insert or update on catalog.drug_identifiers
+  for each row execute function catalog.set_row_timestamps();
 
 -- ----------------------------------------------------------------------------
 -- 5. catalog.drug_names — aliaser, handelsnavn og historiske navn
@@ -236,9 +251,9 @@ create unique index drug_names_drug_type_name_key
 -- indeksen over, som ledes av drug_id.
 create index drug_names_name_idx on catalog.drug_names (lower(name));
 
-create trigger drug_names_set_updated_at
-  before update on catalog.drug_names
-  for each row execute function catalog.set_updated_at();
+create trigger drug_names_set_row_timestamps
+  before insert or update on catalog.drug_names
+  for each row execute function catalog.set_row_timestamps();
 
 -- ----------------------------------------------------------------------------
 -- 6. catalog.clinical_concepts — kontrollert begrepsvokabular
@@ -286,9 +301,9 @@ create unique index clinical_concepts_canonical_label_key
 create index clinical_concepts_parent_concept_id_idx
   on catalog.clinical_concepts (parent_concept_id);
 
-create trigger clinical_concepts_set_updated_at
-  before update on catalog.clinical_concepts
-  for each row execute function catalog.set_updated_at();
+create trigger clinical_concepts_set_row_timestamps
+  before insert or update on catalog.clinical_concepts
+  for each row execute function catalog.set_row_timestamps();
 
 -- ----------------------------------------------------------------------------
 -- 7. catalog.populations — strukturerte gyldighetsgrenser
@@ -375,9 +390,66 @@ create index populations_indication_concept_id_idx
 create index populations_comorbidity_concept_id_idx
   on catalog.populations (comorbidity_concept_id);
 
-create trigger populations_set_updated_at
+create trigger populations_set_row_timestamps
+  before insert or update on catalog.populations
+  for each row execute function catalog.set_row_timestamps();
+
+-- Populasjonsdefinisjonen er uforanderlig (DATABASE_ARCHITECTURE.md §7).
+--
+-- En populasjon er en gyldighetsgrense, ikke bare en etikett: den avgjør hvem
+-- en påstand eller et evidensfunn gjelder for (KNOWLEDGE_MODEL.md §7).
+-- ClaimRevision og EvidenceItem peker på population_id, og revisjonene er
+-- uforanderlige. Hvis de definerende feltene kunne endres etterpå, ville en
+-- redigering her stille endre omfanget av all historikk som allerede peker hit,
+-- uten at det ble opprettet en ny revisjon. Det er nøyaktig mønsteret §7 og
+-- §7.1 forbyr.
+--
+-- Et endret omfang er derfor en ny populasjon: opprett en ny rad og sett den
+-- gamle til status = 'deprecated'. Status og tidsstempler er bevisst utenfor
+-- vernet, slik at utfasing er mulig uten å røre betydningen — utfasing er en
+-- statusendring, ikke en sletting (DATABASE_ARCHITECTURE.md §36).
+--
+-- Dette er en immutable-row guard, som §60 navngir som en god triggerbruk.
+-- Vernet gjelder også eieren. En reell datakorreksjon i en senere migrasjon må
+-- derfor slå av triggeren eksplisitt, som en synlig og reviewbar handling.
+--
+-- Begrepshierarkiet er bevisst ikke vernet på samme måte: en ClinicalConcept
+-- organiserer og gjenfinner innhold (§11) og er ikke en gyldighetsgrense for en
+-- påstand, så en etikettkorreksjon der endrer ikke omfanget av historikk.
+create function catalog.freeze_population_definition()
+  returns trigger
+  language plpgsql
+  set search_path = ''
+as $$
+begin
+  if new.canonical_label is distinct from old.canonical_label
+    or new.age_min_years is distinct from old.age_min_years
+    or new.age_max_years is distinct from old.age_max_years
+    or new.indication_concept_id is distinct from old.indication_concept_id
+    or new.pregnancy_context is distinct from old.pregnancy_context
+    or new.comorbidity_concept_id is distinct from old.comorbidity_concept_id
+  then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format(
+        'Populasjonsdefinisjonen for %L er uforanderlig og kan ikke endres.',
+        old.canonical_label
+      ),
+      hint = 'Opprett en ny populasjon for det endrede omfanget, og sett den gamle til status = deprecated. Historikk som peker på den gamle populasjonen skal beholde sin opprinnelige betydning.';
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function catalog.freeze_population_definition() is
+  'Immutable-row guard: hindrer at de definerende feltene på en populasjon endres etter innsetting, slik at eksisterende ClaimRevision- og EvidenceItem-referanser beholder sin opprinnelige betydning. Status og tidsstempler kan endres.';
+
+revoke execute on function catalog.freeze_population_definition() from public;
+
+create trigger populations_freeze_definition
   before update on catalog.populations
-  for each row execute function catalog.set_updated_at();
+  for each row execute function catalog.freeze_population_definition();
 
 -- ----------------------------------------------------------------------------
 -- 8. RLS og grants (DATABASE_ARCHITECTURE.md §5, §48, §73)

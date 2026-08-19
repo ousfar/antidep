@@ -11,7 +11,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(31);
+select plan(40);
 
 -- Testdata som bare finnes inne i denne transaksjonen.
 insert into catalog.drugs (canonical_name) values ('testvirkestoff');
@@ -57,17 +57,31 @@ select lives_ok(
   'status kan endres uten at raden slettes'
 );
 
--- updated_at eies av databasen. Raden settes inn med en gammel verdi, slik at
--- triggeren må overskrive den; now() er transaksjonstid, så en test som bare
--- sammenligner med created_at ville ikke skille trigger fra default.
-insert into catalog.drugs (canonical_name, updated_at)
-values ('triggertestvirkestoff', '2000-01-01T00:00:00Z');
-update catalog.drugs set status = 'historical'
+-- Tidsstemplene eies av databasen ved både INSERT og UPDATE. Testen oppgir
+-- bevisst forfalskede verdier: en default alene gjelder bare når kolonnen
+-- utelates, så uten trigger ville verdiene under blitt lagret som de er.
+insert into catalog.drugs (canonical_name, created_at, updated_at)
+values ('triggertestvirkestoff', '2000-01-01T00:00:00Z', '2000-01-01T00:00:00Z');
+select results_eq(
+  $$
+    select created_at = now(), updated_at = now()
+    from catalog.drugs where canonical_name = 'triggertestvirkestoff'
+  $$,
+  $$values (true, true)$$,
+  'created_at og updated_at settes av databasen ved INSERT, ikke av klienten'
+);
+
+update catalog.drugs
+set status = 'historical', created_at = '2000-01-01T00:00:00Z',
+    updated_at = '2000-01-01T00:00:00Z'
 where canonical_name = 'triggertestvirkestoff';
-select is(
-  (select updated_at from catalog.drugs where canonical_name = 'triggertestvirkestoff'),
-  now(),
-  'updated_at settes av databasen ved endring, ikke av klienten'
+select results_eq(
+  $$
+    select created_at = now(), updated_at = now()
+    from catalog.drugs where canonical_name = 'triggertestvirkestoff'
+  $$,
+  $$values (true, true)$$,
+  'created_at bevares og updated_at settes av databasen ved UPDATE, ikke av klienten'
 );
 
 -- ---------------------------------------------------------------------------
@@ -270,6 +284,71 @@ select throws_ok(
   $$delete from catalog.clinical_concepts where canonical_label = 'testtilstand'$$,
   '23503', null,
   'et begrep en populasjon peker på kan ikke slettes'
+);
+
+-- ---------------------------------------------------------------------------
+-- Populasjonsdefinisjonen er uforanderlig (DATABASE_ARCHITECTURE.md §7, §7.1)
+--
+-- En populasjon er en gyldighetsgrense. Hvis de definerende feltene kunne
+-- endres etterpå, ville omfanget av all historikk som peker hit endre seg uten
+-- ny revisjon. Et endret omfang skal derfor bli en ny populasjon.
+-- SQLSTATE 23001 = restrict_violation.
+-- ---------------------------------------------------------------------------
+select throws_ok(
+  $$update catalog.populations set age_min_years = 6 where canonical_label = 'testpopulasjon'$$,
+  '23001', null,
+  'nedre aldersgrense kan ikke endres etter innsetting'
+);
+select throws_ok(
+  $$update catalog.populations set age_max_years = 99 where canonical_label = 'testpopulasjon'$$,
+  '23001', null,
+  'øvre aldersgrense kan ikke endres etter innsetting'
+);
+select throws_ok(
+  $$update catalog.populations set canonical_label = 'omdøpt testpopulasjon'
+    where canonical_label = 'testpopulasjon'$$,
+  '23001', null,
+  'etiketten kan ikke endres etter innsetting'
+);
+select throws_ok(
+  $$update catalog.populations set indication_concept_id = null
+    where canonical_label = 'testpopulasjon'$$,
+  '23001', null,
+  'indikasjonen kan ikke endres etter innsetting'
+);
+select throws_ok(
+  $$update catalog.populations set pregnancy_context = 'breastfeeding'
+    where canonical_label = 'testpopulasjon'$$,
+  '23001', null,
+  'graviditets-/ammedimensjonen kan ikke endres etter innsetting'
+);
+select throws_ok(
+  $$
+    update catalog.populations
+    set comorbidity_concept_id = (
+      select id from catalog.clinical_concepts where canonical_label = 'testtilstand'
+    )
+    where canonical_label = 'testpopulasjon'
+  $$,
+  '23001', null,
+  'komorbiditeten kan ikke endres etter innsetting'
+);
+
+-- Utfasing skal fortsatt være mulig: den endrer status, ikke betydning, og
+-- sletter ingen historikk (DATABASE_ARCHITECTURE.md §36).
+select lives_ok(
+  $$update catalog.populations set status = 'deprecated'
+    where canonical_label = 'testpopulasjon'$$,
+  'en populasjon kan fases ut uten at definisjonen røres'
+);
+
+-- Et endret omfang blir en ny populasjon ved siden av den gamle.
+select lives_ok(
+  $$
+    insert into catalog.populations (canonical_label, age_min_years, age_max_years)
+    values ('testpopulasjon, revidert omfang', 16, 64)
+  $$,
+  'et endret omfang registreres som en ny populasjon'
 );
 
 select * from finish();

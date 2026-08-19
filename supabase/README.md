@@ -93,6 +93,26 @@ I `catalog.populations` betyr `NULL` i en dimensjon at populasjonen **ikke er av
 den dimensjonen. `NULL` betyr ikke «ukjent» og ikke «vurdert og funnet irrelevant»
 (`docs/ANTIDEP_CONSTITUTION.md` §6).
 
+`created_at` og `updated_at` eies av databasen på alle katalogtabellene. En trigger setter
+dem ved både `INSERT` og `UPDATE`, så en kaller kan verken glemme eller forfalske dem; en
+`default` alene ville bare gjelde når kolonnen utelates. Tidspunkter fra den eksterne
+virkeligheten hører til `recorded_at` eller `valid_from`/`valid_to`, ikke hit
+(`docs/DATABASE_ARCHITECTURE.md` §7.3).
+
+**Populasjonsdefinisjonen er uforanderlig.** En populasjon er en gyldighetsgrense, ikke bare
+en etikett, og `ClaimRevision`/`EvidenceItem` peker på `population_id`. Kunne de definerende
+feltene endres etterpå, ville en redigering stille endret omfanget av all historikk som
+allerede peker dit, uten ny revisjon (`docs/DATABASE_ARCHITECTURE.md` §7, §7.1). En trigger
+avviser derfor endring av etikett, aldersgrenser, indikasjon, graviditetskontekst og
+komorbiditet. **Et endret omfang er en ny populasjon:** opprett en ny rad og sett den gamle
+til `status = 'deprecated'`. Status og tidsstempler er utenfor vernet, så utfasing er mulig
+uten å røre betydningen. Vernet gjelder også eieren; en reell datakorreksjon i en senere
+migrasjon må slå av triggeren eksplisitt, som en synlig og reviewbar handling.
+
+Begrepshierarkiet er bevisst ikke vernet på samme måte: en `ClinicalConcept` organiserer og
+gjenfinner innhold og er ikke en gyldighetsgrense for en påstand, så en etikettkorreksjon
+der endrer ikke omfanget av historikk.
+
 Tabellene har RLS aktivert og ingen policies. De er derfor default deny for alle andre enn
 eieren. Redaksjonell lesetilgang forutsetter medlemskapsmodellen i migrasjon 005, og
 klientflaten skal uansett lese publiserte projeksjoner i `api` (migrasjon 007).

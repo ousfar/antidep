@@ -8,7 +8,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(35);
+select plan(36);
 
 -- ---------------------------------------------------------------------------
 -- Tabellene i migrasjon 002, og ingen flere
@@ -169,7 +169,11 @@ select col_is_null(
 );
 
 -- ---------------------------------------------------------------------------
--- updated_at vedlikeholdes av databasen, ikke av klienten
+-- Tidsstempler eies av databasen, ikke av klienten
+--
+-- Triggeren må dekke INSERT i tillegg til UPDATE. En default alene gjelder bare
+-- når kolonnen utelates, og etterlater created_at/updated_at forfalskbare.
+-- tgtype-bitene: 2 = BEFORE, 4 = INSERT, 16 = UPDATE.
 -- ---------------------------------------------------------------------------
 select is_empty(
   $$
@@ -183,15 +187,31 @@ select is_empty(
         from pg_trigger t
         where t.tgrelid = c.oid
           and not t.tgisinternal
-          and t.tgfoid = 'catalog.set_updated_at()'::regprocedure
+          and t.tgfoid = 'catalog.set_row_timestamps()'::regprocedure
+          and (t.tgtype & 2) <> 0
+          and (t.tgtype & 4) <> 0
+          and (t.tgtype & 16) <> 0
       )
   $$,
-  'alle katalogtabeller vedlikeholder updated_at med catalog.set_updated_at()'
+  'alle katalogtabeller setter created_at og updated_at ved både INSERT og UPDATE'
 );
 
-select ok(
-  not has_function_privilege('public', 'catalog.set_updated_at()', 'execute'),
-  'PUBLIC kan ikke kjøre catalog.set_updated_at()'
+-- Populasjonsdefinisjonen er uforanderlig, slik at eksisterende
+-- ClaimRevision-/EvidenceItem-referanser beholder sin betydning
+-- (DATABASE_ARCHITECTURE.md §7, §7.1).
+select has_trigger(
+  'catalog', 'populations', 'populations_freeze_definition',
+  'catalog.populations har en immutable-row guard på definisjonen'
+);
+
+select is_empty(
+  $$
+    select f.function_name
+    from (values ('catalog.set_row_timestamps()'),
+                 ('catalog.freeze_population_definition()')) as f(function_name)
+    where has_function_privilege('public', f.function_name, 'execute')
+  $$,
+  'PUBLIC kan ikke kjøre katalogets triggerfunksjoner'
 );
 
 -- ---------------------------------------------------------------------------
