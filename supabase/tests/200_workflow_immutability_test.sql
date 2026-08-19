@@ -21,7 +21,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(26);
+select plan(29);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
@@ -219,6 +219,63 @@ select throws_ok(
   $$,
   '23001', null,
   'brukerkoblingen kan ikke flyttes til en annen konto etterpå'
+);
+
+-- Blokken ligger bevisst før rollen tilbakekalles lenger nede. Med en avsluttet
+-- reviewer-rolle ville kvalifikasjonskontrollen avvist en framtidsdatert
+-- beslutning først, og assertionen om tidsregelen ville passert av feil grunn.
+-- ---------------------------------------------------------------------------
+-- created_at eies av databasen på de append-only workflow-tabellene
+--
+-- På disse radene er created_at ikke bare teknisk metadata: det er
+-- referansepunktet de kallerstyrte hendelsestidspunktene måles mot, og
+-- rollekontrollen hviler på at det ikke kan flyttes. En oppgitt verdi skal derfor
+-- ignoreres, ikke lagres.
+-- ---------------------------------------------------------------------------
+insert into workflow.evidence_verifications (
+  evidence_item_id, verified_item_creator_actor_id, verifier_actor_id,
+  outcome, source_access, checked_fields, rationale, verified_at, created_at
+)
+select e.id, e.created_by_actor_id, pg_temp.actor('agent:immutabilitet'),
+       'verified', 'original_source',
+       array['source_locator']::workflow.evidence_check_field[],
+       'Testkontroll med oppgitt registreringstid.',
+       timestamptz '2021-06-01T00:00:00Z', timestamptz '2021-06-01T00:00:00Z'
+from knowledge.evidence_items e
+join catalog.drugs d on d.id = e.intervention_drug_id
+where d.canonical_name = 'mirtazapin';
+
+select cmp_ok(
+  (select created_at from workflow.evidence_verifications
+   where rationale = 'Testkontroll med oppgitt registreringstid.'),
+  '>',
+  timestamptz '2026-01-01T00:00:00Z',
+  'en oppgitt created_at på en ekstraksjonsverifikasjon ignoreres av databasen'
+);
+select is(
+  (select verified_at from workflow.evidence_verifications
+   where rationale = 'Testkontroll med oppgitt registreringstid.'),
+  timestamptz '2021-06-01T00:00:00Z',
+  'hendelsestidspunktet er kallerstyrt og bevares; det er bare referansepunktet databasen eier'
+);
+select throws_ok(
+  $$
+    insert into workflow.review_decisions (
+      claim_revision_id, claim_revision_creator_actor_id,
+      review_type, decision, rationale,
+      reviewer_actor_id, reviewer_actor_type, decided_at, created_at
+    )
+    select r.id, r.created_by_actor_id, 'publication_approval', 'approved',
+           'Forsøk på å datere en beslutning fram i tid.',
+           pg_temp.actor('human:immutabilitet'), 'human',
+           now() + interval '1 day', now() + interval '2 days'
+    from knowledge.claim_revisions r
+    join knowledge.claims cl on cl.id = r.claim_id
+    join catalog.drugs d on d.id = cl.subject_drug_id
+    where d.canonical_name = 'sertralin'
+  $$,
+  '23514', null,
+  'en framtidsdatert beslutning kan ikke reddes ved å oppgi en enda senere created_at'
 );
 
 -- ---------------------------------------------------------------------------

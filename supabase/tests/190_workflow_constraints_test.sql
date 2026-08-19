@@ -16,7 +16,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(54);
+select plan(61);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
@@ -49,6 +49,7 @@ values (gen_random_uuid(), 'reviewer@test.invalid'),
        (gen_random_uuid(), 'editor@test.invalid'),
        (gen_random_uuid(), 'scoped@test.invalid'),
        (gen_random_uuid(), 'scopepair@test.invalid'),
+       (gen_random_uuid(), 'backdated@test.invalid'),
        (gen_random_uuid(), 'former@test.invalid');
 
 insert into provenance.actors
@@ -68,7 +69,10 @@ values
    'Menneskelig fagredaktør med reviewer-rolle avgrenset til ett innholdsområde i testdata.',
    pg_temp.user_id('scoped@test.invalid'), null),
   ('human', 'human:unlinked-test', 'Test Ukoblet Redaktør',
-   'Menneskelig aktør uten brukerkonto i testdata.', null, null);
+   'Menneskelig aktør uten brukerkonto i testdata.', null, null),
+  ('human', 'human:backdated-test', 'Test Tilbakedatert Reviewer',
+   'Menneskelig fagredaktør hvis rolletildeling er tilbakedatert i testdata.',
+   pg_temp.user_id('backdated@test.invalid'), null);
 
 insert into workflow.user_roles
   (user_id, role_code, scope_id, granted_by_actor_id, grant_reason)
@@ -98,6 +102,18 @@ select pg_temp.user_id('scopepair@test.invalid'), 'reviewer', c.id,
        'Testtildeling for det første innholdsområdet.'
 from catalog.clinical_concepts c
 where c.canonical_label = 'depressiv lidelse';
+
+-- Tilbakedatert tildeling: raden opprettes nå, men valid_from peker til 2020.
+-- Det er en legitim registrering av en eksisterende rettighet, og skal virke
+-- framover. Den skal derimot ikke kunne legitimere en beslutning fra før raden
+-- fantes.
+insert into workflow.user_roles
+  (user_id, role_code, granted_by_actor_id, grant_reason, valid_from)
+values
+  (pg_temp.user_id('backdated@test.invalid'), 'reviewer',
+   pg_temp.actor('system:rolleforvaltning'),
+   'Registrering av en rettighet som formelt gjaldt fra tidligere.',
+   timestamptz '2020-01-01T00:00:00Z');
 
 -- Tidligere reviewer: rollen var gyldig fram til 1. mars 2026.
 insert into workflow.user_roles
@@ -361,7 +377,7 @@ begin
      from jsonb_array_elements_text(payload -> 'checked_fields') as value),
     payload ->> 'findings',
     payload ->> 'rationale',
-    now()
+    coalesce((payload ->> 'verified_at')::timestamptz, now())
   from knowledge.evidence_items e
   where e.id = pg_temp.seeded_evidence('sertralin');
 end;
@@ -468,7 +484,7 @@ begin
     (payload ->> 'contradictory_evidence_represented')::workflow.verification_check_result,
     payload ->> 'findings',
     payload ->> 'rationale',
-    now()
+    coalesce((payload ->> 'verified_at')::timestamptz, now())
   from knowledge.claim_revisions r
   where r.id = pg_temp.seeded_revision('sertralin');
 end;
@@ -529,8 +545,7 @@ begin
     'object', 'claim_revision',
     'review_type', 'publication_approval',
     'decision', 'approved',
-    'rationale', 'Testgodkjenning av påstandsrevisjonen.',
-    'decided_at', '2026-08-19T18:00:00Z'
+    'rationale', 'Testgodkjenning av påstandsrevisjonen.'
   ) || overrides;
 
   if payload ->> 'object' in ('claim_revision', 'both') then
@@ -558,7 +573,10 @@ begin
     payload ->> 'rationale',
     pg_temp.actor(payload ->> 'reviewer'),
     (payload ->> 'reviewer_actor_type')::provenance.actor_type,
-    (payload ->> 'decided_at')::timestamptz;
+    -- Standard er now(). decided_at kan ikke ligge etter radens databaseeide
+    -- created_at, så et fast framtidig litteral ville gjort hver eneste
+    -- assertion i denne blokken avhengig av klokkeslettet testen kjøres på.
+    coalesce((payload ->> 'decided_at')::timestamptz, now());
 end;
 $$;
 
@@ -613,6 +631,83 @@ select lives_ok(
                                    "decision": "changes_requested",
                                    "rationale": "Testavslag med endringsønske."}'::jsonb)$$,
   'den samme scoped revieweren kan avgjøre innenfor sitt eget innholdsområde'
+);
+
+-- ---------------------------------------------------------------------------
+-- Tidsmodellen kan ikke konstrueres i etterkant
+--
+-- decided_at er kallerstyrt og bestemmer hvilken rolletildeling som teller som
+-- gyldig. Uten et databaseeid referansepunkt kunne en rolle opprettes i dag,
+-- tilbakedateres med valid_from, og deretter legitimere en «godkjenning» som
+-- aldri fant sted. De tre assertionene under dekker begge retninger og den
+-- lovlige mellomtingen.
+-- ---------------------------------------------------------------------------
+select throws_ok(
+  $$select pg_temp.insert_review('{"reviewer": "human:backdated-test",
+                                   "decided_at": "2021-06-01T00:00:00Z"}'::jsonb)$$,
+  '42501',
+  'Reviewaktøren hadde ikke gyldig reviewer-rolle for dette innholdsområdet på beslutningstidspunktet.',
+  'en tilbakedatert rolletildeling kan ikke legitimere en beslutning fra før tildelingen fantes'
+);
+select throws_ok(
+  $$
+    select pg_temp.insert_review(
+      ('{"decided_at": "' || (now() + interval '1 day') || '"}')::jsonb)
+  $$,
+  '23514', null,
+  'en beslutning kan ikke dateres til framtiden'
+);
+-- Kontroll av at forrige assertion ikke overblokkerer: den samme tilbakedaterte
+-- tildelingen skal virke for en beslutning tatt nå.
+select lives_ok(
+  $$select pg_temp.insert_review('{"reviewer": "human:backdated-test",
+                                   "decision": "rejected",
+                                   "rationale": "Testavslag fra tilbakedatert tildeling."}'::jsonb)$$,
+  'en tilbakedatert tildeling gjelder framover og kan avgjøre en beslutning tatt nå'
+);
+-- created_at eies av databasen, så referansepunktet kan ikke oppgis av kalleren.
+select throws_ok(
+  $$
+    insert into workflow.review_decisions (
+      claim_revision_id, claim_revision_creator_actor_id, review_type, decision,
+      rationale, reviewer_actor_id, reviewer_actor_type, decided_at, created_at
+    )
+    select r.id, r.created_by_actor_id, 'publication_approval', 'approved',
+           'Forsøk på å flytte referansepunktet.',
+           pg_temp.actor('human:backdated-test'), 'human',
+           timestamptz '2021-06-01T00:00:00Z', timestamptz '2021-06-01T00:00:00Z'
+    from knowledge.claim_revisions r
+    where r.id = pg_temp.seeded_revision('mirtazapin')
+  $$,
+  '42501',
+  'Reviewaktøren hadde ikke gyldig reviewer-rolle for dette innholdsområdet på beslutningstidspunktet.',
+  'en oppgitt created_at flytter ikke referansepunktet; databasen overskriver den'
+);
+
+-- Samme regel for verifikasjonene: en kontroll kan ikke ha funnet sted i framtiden.
+select throws_ok(
+  $$
+    select pg_temp.insert_evidence_verification(
+      ('{"verified_at": "' || (now() + interval '1 day') || '"}')::jsonb)
+  $$,
+  '23514', null,
+  'en ekstraksjonsverifikasjon kan ikke dateres til framtiden'
+);
+select throws_ok(
+  $$
+    select pg_temp.insert_claim_verification(
+      ('{"verified_at": "' || (now() + interval '1 day') || '"}')::jsonb)
+  $$,
+  '23514', null,
+  'en claim-verifikasjon kan ikke dateres til framtiden'
+);
+select lives_ok(
+  $$
+    select pg_temp.insert_evidence_verification(
+      '{"verified_at": "2026-08-01T00:00:00Z",
+        "rationale": "Kontroll utført tidligere, registrert i etterkant."}'::jsonb)
+  $$,
+  'en kontroll utført tidligere kan registreres i etterkant'
 );
 
 -- En reviewer kan ikke godkjenne sitt eget arbeid.

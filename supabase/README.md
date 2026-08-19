@@ -144,6 +144,15 @@ bekreftelse kan heller ikke hvile på et avledet sammendrag alene, og en claim-v
 kan bare konkluderes som `verified` når alle sju kontrollpunktene i
 `docs/DATABASE_ARCHITECTURE.md` §30 er bedømt og holder.
 
+**Tidsmodellen kan ikke konstrueres i etterkant.** `verified_at` og `decided_at` er
+kallerstyrte hendelsestidspunkter, og `decided_at` bestemmer hvilken rolletildeling som
+teller som gyldig. `created_at` på de tre append-only workflow-tabellene eies derfor av
+databasen, hendelsestidspunktet kan ikke ligge etter det, og kvalifikasjonskontrollen
+krever at selve rolletildelingsraden fantes senest på beslutningstidspunktet. En rolle
+opprettet i dag kan dermed ikke legitimere en «godkjenning» datert i fjor ved å
+tilbakedatere `valid_from`. En kontroll eller beslutning som faktisk fant sted tidligere
+kan fortsatt registreres i etterkant.
+
 **Bare mennesker kan godkjenne.** `workflow.review_decisions` krever en aktør av typen
 `human` — håndhevet av en sammensatt fremmednøkkel og en `CHECK` — og en trigger krever i
 tillegg at aktøren hadde gyldig `reviewer`-rolle for objektets innholdsområde på

@@ -71,6 +71,13 @@
 --     funksjonen byttes og at eksisterende rader rehashes under nytt prefiks,
 --     og hører til en egen liten migrasjon framfor å bli blandet inn i review og
 --     proveniens.
+--   * De append-only tabellene i knowledge (evidence_items, claim_revisions,
+--     claim_evidence_links, evidence_assessments) har fortsatt created_at med
+--     bare en default, ikke databaseeid registreringstid, og
+--     evidence_assessments.assessed_at er ikke bundet mot created_at slik
+--     verified_at og decided_at er her. Ingen gate leser de tidspunktene ennå,
+--     så det er ikke sikkerhetskritisk i dag, men samme invariant hører hjemme
+--     der og bør komme i migrasjonen som rører de tabellene neste gang.
 --   * catalog.set_row_timestamps() og knowledge.reject_append_only_mutation()
 --     brukes fra og med denne migrasjonen fra tre schemaer hver. Et felles
 --     hjelpeschema ville vært den ryddige plasseringen, men et sjuende schema
@@ -239,6 +246,40 @@ revoke usage on type
 -- bruken, som i migrasjon 003.
 comment on function catalog.set_row_timestamps() is
   'Trigger-funksjon som gir databasen eierskap til created_at og updated_at, ved INSERT og UPDATE. Brukes av katalogtabellene, av kildetabellene i knowledge og av aktør- og rolletabellene i provenance og workflow. Teknisk metadata; endrer ingen klinisk verdi.';
+
+-- De append-only tabellene i denne migrasjonen har ingen updated_at, og
+-- catalog.set_row_timestamps() kan ikke brukes på dem: den skriver til en kolonne
+-- de bevisst ikke har. De trenger likevel databaseeid registreringstid, og av en
+-- sterkere grunn enn ryddighet.
+--
+-- En default alene gjelder bare når kolonnen utelates. created_at ville derfor
+-- vært oppgivbar av kalleren — og på disse tabellene er created_at ikke teknisk
+-- metadata, men det eneste festepunktet mot uavhengig tid. Verifikasjons- og
+-- beslutningsradene bærer i tillegg et hendelsestidspunkt kalleren selv oppgir
+-- (verified_at, decided_at), og uten en databaseeid created_at å måle det mot
+-- kunne både hendelsen og registreringen av den dateres fritt. Da ville
+-- «når skjedde dette?» vært en påstand fra den som skriver, ikke en observasjon
+-- (ANTIDEP_CONSTITUTION.md §14, DATABASE_ARCHITECTURE.md §7.3).
+--
+-- Funksjonen ligger ved siden av catalog.set_row_timestamps(), som er den
+-- etablerte plasseringen for tidsstempeleierskap på tvers av schemaene. Samme
+-- forbehold gjelder som for søsterfunksjonen: et felles hjelpeschema ville vært
+-- ryddigere, men er en egen beslutning (se avgrensningen øverst).
+create function catalog.set_created_at()
+  returns trigger
+  language plpgsql
+  set search_path = ''
+as $$
+begin
+  new.created_at := now();
+  return new;
+end;
+$$;
+
+comment on function catalog.set_created_at() is
+  'Trigger-funksjon som gir databasen eierskap til created_at ved INSERT på append-only tabeller uten updated_at. Brukes av verifikasjons- og beslutningstabellene i workflow, der created_at er referansepunktet et kallerstyrt hendelsestidspunkt måles mot.';
+
+revoke execute on function catalog.set_created_at() from public;
 
 -- ----------------------------------------------------------------------------
 -- 3. provenance.actors — hvem eller hva som utførte handlingen
@@ -843,6 +884,14 @@ create table workflow.evidence_verifications (
   constraint evidence_verifications_findings_required_check
     check (outcome = 'verified' or (findings is not null and btrim(findings) <> '')),
 
+  -- En kontroll kan ikke ha funnet sted i framtiden. created_at er databaseeid
+  -- (se catalog.set_created_at()), så dette er en sammenligning mot uavhengig tid
+  -- og ikke mot et annet tall kalleren selv har oppgitt. En kontroll som
+  -- registreres i etterkant er fortsatt lovlig; det er bare den framtidsdaterte
+  -- som avvises.
+  constraint evidence_verifications_verified_at_not_future_check
+    check (verified_at <= created_at),
+
   constraint evidence_verifications_findings_format_check
     check (findings is null
            or (findings = btrim(findings) and length(findings) between 1 and 4000)),
@@ -865,12 +914,16 @@ comment on column workflow.evidence_verifications.findings is
 comment on column workflow.evidence_verifications.rationale is
   'Hvordan kontrollen ble gjennomført og hva den bygger på. Alltid utfylt.';
 comment on column workflow.evidence_verifications.verified_at is
-  'Når kontrollen ble utført. Et hendelsestidspunkt, ikke registreringstidspunktet for raden; det siste er created_at (DATABASE_ARCHITECTURE.md §7.3).';
+  'Når kontrollen ble utført. Et hendelsestidspunkt, ikke registreringstidspunktet for raden; det siste er created_at (DATABASE_ARCHITECTURE.md §7.3). Kan ligge før created_at, men aldri etter: en kontroll kan registreres i etterkant, men ikke dateres til framtiden.';
 
 create index evidence_verifications_evidence_item_id_idx
   on workflow.evidence_verifications (evidence_item_id);
 create index evidence_verifications_verifier_actor_id_idx
   on workflow.evidence_verifications (verifier_actor_id);
+
+create trigger evidence_verifications_set_created_at
+  before insert on workflow.evidence_verifications
+  for each row execute function catalog.set_created_at();
 
 create trigger evidence_verifications_reject_mutation
   before update or delete on workflow.evidence_verifications
@@ -946,6 +999,11 @@ create table workflow.claim_verifications (
   constraint claim_verifications_findings_required_check
     check (outcome = 'verified' or (findings is not null and btrim(findings) <> '')),
 
+  -- Samme regel som på ekstraksjonsverifikasjonen: en kontroll kan ikke ha
+  -- funnet sted i framtiden.
+  constraint claim_verifications_verified_at_not_future_check
+    check (verified_at <= created_at),
+
   constraint claim_verifications_findings_format_check
     check (findings is null
            or (findings = btrim(findings) and length(findings) between 1 and 4000)),
@@ -974,12 +1032,16 @@ comment on column workflow.claim_verifications.contradictory_evidence_represente
 comment on column workflow.claim_verifications.findings is
   'Avvikene kontrollen fant. Påkrevd når utfallet ikke er verified.';
 comment on column workflow.claim_verifications.verified_at is
-  'Når kontrollen ble utført. Et hendelsestidspunkt, ikke registreringstidspunktet for raden.';
+  'Når kontrollen ble utført. Et hendelsestidspunkt, ikke registreringstidspunktet for raden. Kan ligge før created_at, men aldri etter.';
 
 create index claim_verifications_claim_revision_id_idx
   on workflow.claim_verifications (claim_revision_id);
 create index claim_verifications_verifier_actor_id_idx
   on workflow.claim_verifications (verifier_actor_id);
+
+create trigger claim_verifications_set_created_at
+  before insert on workflow.claim_verifications
+  for each row execute function catalog.set_created_at();
 
 create trigger claim_verifications_reject_mutation
   before update or delete on workflow.claim_verifications
@@ -1096,6 +1158,13 @@ create table workflow.review_decisions (
            or (review_type = 'extraction_withdrawal'
                and decision in ('extraction_withdrawn', 'extraction_upheld'))),
 
+  -- En beslutning kan ikke være tatt i framtiden. Regelen er sikkerhetskritisk
+  -- og ikke bare ryddig: decided_at er kallerstyrt og styrer hvilken
+  -- rolletildeling som teller som gyldig, så uten et databaseeid referansepunkt
+  -- kunne en beslutning dateres dit rettighetene tilfeldigvis passet.
+  constraint review_decisions_decided_at_not_future_check
+    check (decided_at <= created_at),
+
   constraint review_decisions_rationale_check
     check (rationale = btrim(rationale) and length(rationale) between 1 and 4000)
 );
@@ -1119,7 +1188,7 @@ comment on column workflow.review_decisions.rationale is
 comment on column workflow.review_decisions.reviewer_actor_type is
   'Speil av aktørtypen, låst av den sammensatte fremmednøkkelen og begrenset til human av en CHECK. Gjør ANTIDEP_CONSTITUTION.md §12 til en strukturell umulighet framfor en regel som må håndheves i applikasjonskode.';
 comment on column workflow.review_decisions.decided_at is
-  'Når beslutningen ble tatt. Rollekontrollen bruker dette tidspunktet, ikke now(): en reviewer som senere mister rollen skal ikke få sine tidligere beslutninger ugyldiggjort, og en rolle tildelt i etterkant skal ikke kunne legitimere en beslutning som allerede var tatt.';
+  'Når beslutningen ble tatt. Rollekontrollen bruker dette tidspunktet, ikke now(): en reviewer som senere mister rollen skal ikke få sine tidligere beslutninger ugyldiggjort. Feltet er kallerstyrt og derfor bundet i begge retninger: det kan ikke ligge etter radens databaseeide created_at, og kvalifikasjonskontrollen krever at selve rolletildelingsraden fantes senest på dette tidspunktet. En rolle tildelt i etterkant kan derfor ikke legitimere en beslutning som allerede var tatt, heller ikke ved å tilbakedatere valid_from.';
 
 create index review_decisions_claim_revision_id_idx
   on workflow.review_decisions (claim_revision_id);
@@ -1139,8 +1208,18 @@ create index review_decisions_reviewer_actor_id_idx
 -- Kravet er strengt med hensikt:
 --   * aktøren må være knyttet til en brukerkonto,
 --   * kontoen må ha rollen reviewer,
+--   * selve tildelingsraden må ha eksistert senest på decided_at,
 --   * tildelingen må ha vært gyldig på decided_at, og
 --   * en scoped tildeling må dekke objektets kliniske tema.
+--
+-- Skillet mellom de to tidskravene er poenget. valid_from er kallerstyrt og kan
+-- settes bakover i tid, som er legitimt når en eksisterende rettighet
+-- registreres i systemet. Alene ville den likevel gjort kvalifikasjonen
+-- konstruerbar i etterkant: en rolle opprettet i dag med valid_from tilbake i
+-- 2020 ville legitimert en «godkjenning» datert 2021, som aldri fant sted.
+-- workflow.user_roles.created_at er derimot databaseeid (catalog.set_row_timestamps())
+-- og kan ikke tilbakedateres. Kontrollen krever derfor begge deler: raden må ha
+-- eksistert, og gyldighetsperioden må ha dekket tidspunktet.
 --
 -- admin kvalifiserer ikke. DATABASE_ARCHITECTURE.md §45 gjør admin til bruker-
 -- og systemforvaltning; å la den rollen godkjenne klinisk innhold ville gjort
@@ -1193,6 +1272,7 @@ begin
     from workflow.user_roles ur
     where ur.user_id = v_reviewer_user_id
       and ur.role_code = 'reviewer'
+      and ur.created_at <= new.decided_at
       and ur.valid_from <= new.decided_at
       and (ur.valid_to is null or ur.valid_to > new.decided_at)
       and (ur.scope_id is null or ur.scope_id = v_topic_concept_id)
@@ -1200,7 +1280,7 @@ begin
     raise exception using
       errcode = 'insufficient_privilege',
       message = 'Reviewaktøren hadde ikke gyldig reviewer-rolle for dette innholdsområdet på beslutningstidspunktet.',
-      hint = 'Rollen leses fra workflow.user_roles, ikke fra en JWT-claim (DATABASE_ARCHITECTURE.md §46). Tildelingen må ha vært gyldig på decided_at, og en scoped tildeling må dekke det kliniske temaet objektet hører under. admin, editor og publisher gir ikke faglig godkjenningsrett.';
+      hint = 'Rollen leses fra workflow.user_roles, ikke fra en JWT-claim (DATABASE_ARCHITECTURE.md §46). Tildelingsraden må ha eksistert senest på decided_at og ha vært gyldig på det tidspunktet, og en scoped tildeling må dekke det kliniske temaet objektet hører under. En tilbakedatert valid_from er ikke nok: registreringstidspunktet for tildelingen eies av databasen. admin, editor og publisher gir ikke faglig godkjenningsrett.';
   end if;
 
   return new;
@@ -1208,13 +1288,17 @@ end;
 $$;
 
 comment on function workflow.enforce_reviewer_qualification() is
-  'Tverradsinvariant: krever at en reviewbeslutning kommer fra en menneskelig aktør med en brukerkonto som hadde gyldig reviewer-rolle for objektets innholdsområde på beslutningstidspunktet (ANTIDEP_CONSTITUTION.md §12). SECURITY DEFINER fordi medlemskapstabellen har RLS og default deny; funksjonen leser bare, validerer bare, og returnerer ingen data.';
+  'Tverradsinvariant: krever at en reviewbeslutning kommer fra en menneskelig aktør med en brukerkonto som hadde gyldig reviewer-rolle for objektets innholdsområde på beslutningstidspunktet, og at selve rolletildelingen fantes senest da (ANTIDEP_CONSTITUTION.md §12). Det siste kravet hindrer at en rolle opprettet i etterkant konstruerer gyldighet retroaktivt ved å tilbakedatere valid_from. SECURITY DEFINER fordi medlemskapstabellen har RLS og default deny; funksjonen leser bare, validerer bare, og returnerer ingen data.';
 
 revoke execute on function workflow.enforce_reviewer_qualification() from public;
 
 create trigger review_decisions_enforce_reviewer_qualification
   before insert on workflow.review_decisions
   for each row execute function workflow.enforce_reviewer_qualification();
+
+create trigger review_decisions_set_created_at
+  before insert on workflow.review_decisions
+  for each row execute function catalog.set_created_at();
 
 create trigger review_decisions_reject_mutation
   before update or delete on workflow.review_decisions

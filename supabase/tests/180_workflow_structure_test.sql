@@ -14,7 +14,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(51);
+select plan(53);
 
 -- ---------------------------------------------------------------------------
 -- Tabellene i migrasjon 005
@@ -325,6 +325,58 @@ select is_empty(
       )
   $$,
   'hver tabell i workflow og provenance med updated_at setter created_at og updated_at ved både INSERT og UPDATE'
+);
+
+-- ... og hver append-only tabell uten updated_at eier likevel created_at.
+-- Regelen er ikke kosmetisk: created_at er referansepunktet de kallerstyrte
+-- hendelsestidspunktene verified_at og decided_at måles mot, og en default alene
+-- gjelder bare når kolonnen utelates. Uten triggeren kunne kalleren oppgi begge
+-- og datere en hendelse hvor som helst i tid.
+select is_empty(
+  $$
+    select n.nspname || '.' || c.relname
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname in ('workflow', 'provenance')
+      and c.relkind = 'r'
+      and not exists (
+        select 1
+        from pg_attribute a
+        where a.attrelid = c.oid
+          and a.attname = 'updated_at'
+          and a.attnum > 0
+          and not a.attisdropped
+      )
+      and not exists (
+        select 1
+        from pg_trigger t
+        where t.tgrelid = c.oid
+          and not t.tgisinternal
+          and t.tgfoid = 'catalog.set_created_at()'::regprocedure
+          and (t.tgtype & 2) <> 0
+          and (t.tgtype & 4) <> 0
+      )
+  $$,
+  'hver append-only tabell i workflow og provenance setter created_at selv ved INSERT'
+);
+
+-- Hendelsestidspunktene er bundet mot det databaseeide referansepunktet, slik at
+-- en hendelse ikke kan dateres til framtiden.
+select is_empty(
+  $$
+    select t.table_name
+    from (values ('workflow.evidence_verifications', 'verified_at'),
+                 ('workflow.claim_verifications', 'verified_at'),
+                 ('workflow.review_decisions', 'decided_at')) as t(table_name, event_column)
+    where not exists (
+      select 1
+      from pg_constraint con
+      where con.conrelid = t.table_name::regclass
+        and con.contype = 'c'
+        and pg_get_constraintdef(con.oid) like '%' || t.event_column || ' <= created_at%'
+    )
+  $$,
+  'hendelsestidspunktet på hver append-only workflow-tabell er bundet mot created_at'
 );
 
 -- De append-only tabellene har bevisst ingen updated_at: et sist endret-felt
