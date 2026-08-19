@@ -14,7 +14,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(12);
+select plan(14);
 
 -- ---------------------------------------------------------------------------
 -- Aktørene som faktisk produserte de eksisterende radene
@@ -72,10 +72,29 @@ select is(
 );
 
 -- Følgen av at ingenting er godkjent: ingenting er publisert heller.
+--
+-- Migrasjon 006 opprettet publiseringsgaten, og den endrer ikke dette bildet.
+-- Den kan ikke: publisering av en evidenssyntese krever en godkjenning fra en
+-- navngitt kvalifisert redaktør, og det finnes fortsatt ingen. Gaten leverer et
+-- bevis på at den nekter, ikke en publisert påstand, og disse tre assertionene
+-- er det maskinelle uttrykket for det. De skal justeres av migrasjonen som
+-- registrerer en reell godkjenning og en reell publisering, ikke omgås.
 select is(
   (select count(*) from knowledge.claims where current_published_revision_id is not null),
   0::bigint,
-  'ingen påstand er publisert; publiseringsgaten leser beslutningene og kommer i migrasjon 006'
+  'ingen påstand er publisert; ingen godkjenning finnes å publisere på'
+);
+select is(
+  (select count(*) from knowledge.publication_events),
+  0::bigint,
+  'ingen publiseringshendelse er seedet; en seedet publisering ville hvilt på en godkjenning som ikke finnes'
+);
+-- Kontroll av at de to assertionene over ikke passerer av feil grunn: det finnes
+-- faktisk revisjoner som kunne vært publisert dersom gaten hadde vært åpen.
+select is(
+  (select count(*) from knowledge.claim_revisions),
+  2::bigint,
+  'de to påstandsrevisjonene finnes fortsatt; det er gaten som stopper dem, ikke fravær av innhold'
 );
 
 -- ---------------------------------------------------------------------------

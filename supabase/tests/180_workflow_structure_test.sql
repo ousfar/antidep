@@ -14,7 +14,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(53);
+select plan(55);
 
 -- ---------------------------------------------------------------------------
 -- Tabellene i migrasjon 005
@@ -29,11 +29,42 @@ select has_table(
 );
 select has_table('workflow', 'review_decisions', 'workflow.review_decisions finnes');
 
--- knowledge.publication_events hører til migrasjon 006 og skal ikke ha sneket
--- seg inn her; publiseringsgaten leser beslutningene denne migrasjonen lager.
-select hasnt_table(
+-- Publiseringsgaten i migrasjon 006 leser beslutningene og verifikasjonene denne
+-- migrasjonen lager. Vaktposten her sto opprinnelig som en hasnt_table på
+-- knowledge.publication_events; nå som tabellen finnes, er den reelle
+-- assertionen at gaten faktisk henter tilstanden sin fra workflow og ikke fra en
+-- kopi et annet sted. Uten dette kunne gaten skrives om til å lese en
+-- statuskolonne uten at noen test sa fra, og overleveringen fra migrasjon 005 om
+-- tilbaketrukket ekstraksjon ville glidd ut.
+select has_table(
   'knowledge', 'publication_events',
-  'knowledge.publication_events er ikke opprettet ennå'
+  'knowledge.publication_events finnes; publiseringsgaten leser beslutningene fra denne migrasjonen'
+);
+select is_empty(
+  $$
+    select t.needle
+    from (values ('workflow.evidence_verifications'),
+                 ('workflow.claim_verifications'),
+                 ('workflow.review_decisions'),
+                 ('extraction_withdrawal'),
+                 ('publication_approval')) as t(needle)
+    where position(t.needle in
+           (select p.prosrc
+            from pg_proc p
+            where p.oid = 'knowledge.assert_claim_revision_publishable(uuid)'::regprocedure)) = 0
+  $$,
+  'publiseringsgaten leser verifikasjonene, godkjenningen og tilbaketrekkingsbeslutningen fra workflow'
+);
+select is_empty(
+  $$
+    select t.needle
+    from (values ('workflow.user_roles'), ('publisher')) as t(needle)
+    where position(t.needle in
+           (select p.prosrc
+            from pg_proc p
+            where p.oid = 'knowledge.assert_publisher_authorized(uuid, uuid)'::regprocedure)) = 0
+  $$,
+  'publiseringsretten leses fra medlemskapstabellen, ikke fra en JWT-claim (DATABASE_ARCHITECTURE.md §46)'
 );
 
 -- ---------------------------------------------------------------------------

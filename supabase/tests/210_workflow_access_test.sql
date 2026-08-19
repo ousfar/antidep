@@ -16,7 +16,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(27);
+select plan(28);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen, slik at et tomt resultat
@@ -62,17 +62,20 @@ select is_empty(
   $$,
   'ingen klientrolle har usage eller create på workflow eller provenance'
 );
+-- Uttømmende over schemaene framfor en håndholdt liste: en ny funksjon i
+-- workflow eller provenance skal ikke kunne bli kjørbar for en klientrolle ved
+-- at noen glemmer å føre den opp her.
 select is_empty(
   $$
-    select f.function_name, r.role_name
-    from (values ('workflow.enforce_reviewer_qualification()'),
-                 ('workflow.freeze_role_grant()'),
-                 ('provenance.freeze_actor_identity()')) as f(function_name)
+    select p.oid::regprocedure::text, r.role_name
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
     cross join (values ('anon'), ('authenticated'), ('service_role'), ('public'))
            as r(role_name)
-    where has_function_privilege(r.role_name, f.function_name, 'execute')
+    where n.nspname in ('workflow', 'provenance')
+      and has_function_privilege(r.role_name, p.oid, 'execute')
   $$,
-  'ingen klientrolle kan kjøre de privilegerte funksjonene i workflow eller provenance'
+  'ingen klientrolle kan kjøre noen funksjon i workflow eller provenance'
 );
 
 -- ---------------------------------------------------------------------------
@@ -97,7 +100,7 @@ select is_empty(
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname in ('workflow', 'provenance')
   $$,
-  'ingen RLS-policy er skrevet i workflow eller provenance; skriveveiene og grantene de skal styre kommer i migrasjon 006'
+  'ingen RLS-policy er skrevet i workflow eller provenance; den kontrollerte skriveveien i migrasjon 006 er en SECURITY DEFINER-funksjon og trenger verken tabellgrant eller policy for å virke'
 );
 
 -- ---------------------------------------------------------------------------
@@ -198,6 +201,16 @@ select throws_ok(
   $$select workflow.enforce_reviewer_qualification()$$,
   '42501', null,
   'vanlig innlogget bruker kan ikke kjøre den privilegerte kvalifikasjonskontrollen'
+);
+-- Publiseringsfunksjonene i migrasjon 006 leser nettopp medlemskapstabellen og
+-- reviewbeslutningene over. De er SECURITY DEFINER, så den eneste sperren mot at
+-- en vanlig bruker kjører dem er EXECUTE-privilegiet — og det er ikke gitt til
+-- noen. Testen hører hjemme her fordi det er workflow-tilgangen som ville vært
+-- omgått hvis den falt bort.
+select throws_ok(
+  $$select knowledge.publish_claim_revision(gen_random_uuid(), gen_random_uuid(), 'Forsøk.')$$,
+  '42501', null,
+  'vanlig innlogget bruker kan ikke kjøre publiseringsfunksjonen og dermed lese rollemodellen forbi RLS'
 );
 reset role;
 
