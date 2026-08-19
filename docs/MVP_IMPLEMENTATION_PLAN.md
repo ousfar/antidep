@@ -1217,7 +1217,7 @@ Hvis en MVP-forenkling bryter en ønsket langsiktig egenskap uten å bryte en in
 
 [~] Web application bootstrap
 [x] Supabase schema/security foundation
-[ ] Golden evidence slice
+[~] Golden evidence slice
 [ ] First admin workflow
 [ ] First published Claim
 [ ] First clinician UI
