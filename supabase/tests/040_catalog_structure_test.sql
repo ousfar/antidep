@@ -4,11 +4,15 @@
 -- med den identiteten, de vokabularene og de relasjonene
 -- DATABASE_ARCHITECTURE.md §8-§12 krever. Constraint-atferd testes i
 -- 050_catalog_constraints_test.sql, tilgang i 060_catalog_access_test.sql.
+--
+-- Filen holder i tillegg vaktposten over hvilke objekter som finnes utenfor
+-- catalog. Den vaktposten gjelder alle senere migrasjoner og må utvides, ikke
+-- omgås, når et nytt schema tas i bruk.
 begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(36);
+select plan(37);
 
 -- ---------------------------------------------------------------------------
 -- Tabellene i migrasjon 002, og ingen flere
@@ -31,16 +35,34 @@ select is_empty(
   'ingest-schemaet er ikke opprettet ennå'
 );
 
--- Kanoniske kunnskapstabeller kommer i migrasjon 003-006.
-select is_empty(
+-- Vaktpost for hvor langt schemaet faktisk har kommet. Migrasjon 003 la til
+-- kilde- og evidenslaget i knowledge, og listen under er uttømmende: den skal
+-- utvides av den migrasjonen som legger til en tabell, slik at et objekt ingen
+-- har bestemt seg for ikke kan gli inn ubemerket. Claims, claim_evidence_links
+-- og evidence_assessments hører til migrasjon 004, review og proveniens til 005
+-- og publisering til 006.
+select set_eq(
   $$
     select c.relname
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname in ('knowledge', 'workflow', 'provenance', 'audit', 'api')
+    where n.nspname = 'knowledge'
       and c.relkind in ('r', 'p', 'v', 'm')
   $$,
-  'migrasjon 002 oppretter ingen objekter utenfor catalog'
+  $$values ('sources'), ('source_identifiers'), ('source_versions'), ('evidence_items')$$,
+  'knowledge inneholder nøyaktig tabellene fra migrasjon 003'
+);
+
+-- De øvrige schemaene er fortsatt tomme.
+select is_empty(
+  $$
+    select n.nspname || '.' || c.relname
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname in ('workflow', 'provenance', 'audit', 'api')
+      and c.relkind in ('r', 'p', 'v', 'm')
+  $$,
+  'workflow, provenance, audit og api har ingen objekter ennå'
 );
 
 -- ---------------------------------------------------------------------------
