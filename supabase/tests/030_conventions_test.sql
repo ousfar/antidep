@@ -12,7 +12,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(23);
+select plan(28);
 
 -- ---------------------------------------------------------------------------
 -- Regeldefinisjoner. Hver view returnerer bruddene på én konvensjon.
@@ -113,8 +113,15 @@ where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
   and c.relkind in ('r', 'p')
   and not c.relrowsecurity;
 
--- 8. Ingen kanoniske objekter er gitt til klientrollene.
-create view pg_temp.violation_client_grants as
+-- 8. Klientrollene kan bare ha SELECT i de kanoniske schemaene.
+--
+-- Regelen var «ingen grants i det hele tatt» fram til migrasjon 007. Den
+-- api-lesemodellen krever SELECT på tabellene under viewene, fordi et
+-- security_invoker-view leser med kallerens rettigheter
+-- (DATABASE_ARCHITECTURE.md §42, §44). Alt annet er fortsatt forbudt: enhver
+-- skriverett, enhver rett til PUBLIC, og enhver rett til service_role, som
+-- omgår RLS og ikke er applikasjonens universalnøkkel (§49).
+create view pg_temp.violation_client_write_grants as
 select n.nspname as schema_name,
        c.relname as object_name,
        case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end as grantee,
@@ -123,7 +130,47 @@ from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
 cross join lateral aclexplode(c.relacl) a
 where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
-  and (a.grantee = 0 or a.grantee::regrole::text in ('anon', 'authenticated', 'service_role'));
+  and (
+    a.grantee = 0
+    or a.grantee::regrole::text = 'service_role'
+    or (a.grantee::regrole::text in ('anon', 'authenticated')
+        and a.privilege_type <> 'SELECT')
+  );
+
+-- 8b. En SELECT-grant til en klientrolle skal alltid ha en policy under seg.
+--
+-- Uten policy gir RLS null rader, så en grant alene lekker ingenting. Den er
+-- likevel et brudd: den signaliserer at noen mente å eksponere tabellen, og
+-- neste migrasjon som skriver en policy vil da åpne mer enn den tror. Grant og
+-- policy hører sammen og skal innføres sammen (DATABASE_ARCHITECTURE.md §44
+-- punkt 2 og 3, §48).
+create view pg_temp.violation_client_grant_without_policy as
+select n.nspname as schema_name,
+       c.relname as object_name,
+       case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end as grantee
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+cross join lateral aclexplode(c.relacl) a
+where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
+  and a.grantee::regrole::text in ('anon', 'authenticated')
+  and not exists (select 1 from pg_policy pol where pol.polrelid = c.oid);
+
+-- 8c. Ingen policy i de kanoniske schemaene åpner for skriving.
+--
+-- Skriveveien er og blir en kontrollert SECURITY DEFINER-funksjon
+-- (DATABASE_ARCHITECTURE.md §43). En policy for INSERT, UPDATE, DELETE eller
+-- ALL ville vært en skrivevei forbi publiseringsgaten. pg_policy.polcmd er
+-- 'r' for SELECT og '*' for ALL.
+create view pg_temp.violation_write_policy as
+select n.nspname as schema_name,
+       c.relname as object_name,
+       pol.polname as policy_name,
+       pol.polcmd::text as policy_command
+from pg_policy pol
+join pg_class c on c.oid = pol.polrelid
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
+  and pol.polcmd <> 'r';
 
 -- 9. Views i api skal ikke omgå underliggende tilgangskontroll.
 create view pg_temp.violation_api_view_security_invoker as
@@ -179,7 +226,14 @@ where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit', '
 -- ---------------------------------------------------------------------------
 create table knowledge.bad_probe_a (id uuid primary key, noted_at timestamp);
 create table knowledge.bad_probe_b (x integer);
+-- SELECT uten policy under: bruddet regel 8b beskriver.
 grant select on knowledge.bad_probe_b to anon;
+-- En skriverett til en klientrolle: bruddet regel 8a beskriver.
+grant insert on knowledge.bad_probe_b to authenticated;
+-- En policy som åpner for mer enn lesing: bruddet regel 8c beskriver.
+create table knowledge.bad_probe_e (id uuid primary key default gen_random_uuid());
+create policy bad_probe_e_write on knowledge.bad_probe_e
+  for all to authenticated using (true);
 create table knowledge.bad_probe_c (
   id bigint generated always as identity primary key,
   created_at timestamptz not null default now()
@@ -229,8 +283,16 @@ select isnt_empty(
   'regelen fanger en tabell uten RLS'
 );
 select isnt_empty(
-  'select * from pg_temp.violation_client_grants',
-  'regelen fanger en grant til en klientrolle'
+  'select * from pg_temp.violation_client_write_grants',
+  'regelen fanger en skriverett gitt til en klientrolle'
+);
+select isnt_empty(
+  'select * from pg_temp.violation_client_grant_without_policy',
+  'regelen fanger en SELECT-grant uten policy under seg'
+);
+select isnt_empty(
+  'select * from pg_temp.violation_write_policy',
+  'regelen fanger en policy som åpner for skriving'
 );
 select isnt_empty(
   'select * from pg_temp.violation_api_view_security_invoker',
@@ -263,9 +325,36 @@ select is_empty(
 );
 
 drop function knowledge.good_probe_fn();
+
+-- Og motsatt: en tabell med bare SELECT til klientrollene og en lesepolicy under
+-- er nettopp formen migrasjon 007 innfører, og skal ikke flagges av noen av de
+-- tre grantreglene. Uten denne kontrollen kunne reglene vært trivielt oppfylt
+-- ved å flagge alt.
+create table knowledge.good_probe_exposed (id uuid primary key default gen_random_uuid());
+alter table knowledge.good_probe_exposed enable row level security;
+create policy good_probe_exposed_read on knowledge.good_probe_exposed
+  for select to anon, authenticated using (true);
+grant select on knowledge.good_probe_exposed to anon, authenticated;
+
+select is_empty(
+  $$
+    select 'skriverett' as regel, schema_name, object_name
+    from pg_temp.violation_client_write_grants where object_name = 'good_probe_exposed'
+    union all
+    select 'grant uten policy', schema_name, object_name
+    from pg_temp.violation_client_grant_without_policy where object_name = 'good_probe_exposed'
+    union all
+    select 'skrivepolicy', schema_name, object_name
+    from pg_temp.violation_write_policy where object_name = 'good_probe_exposed'
+  $$,
+  'en tabell med bare SELECT til klientrollene og en lesepolicy under regnes som konform'
+);
+
+drop table knowledge.good_probe_exposed;
 drop function knowledge.bad_probe_fn_unsafe_path();
 drop function knowledge.bad_probe_fn();
 drop view api.bad_probe_view;
+drop table knowledge.bad_probe_e;
 drop table knowledge.bad_probe_d;
 drop table knowledge.bad_probe_c;
 drop table knowledge.bad_probe_b;
@@ -303,8 +392,16 @@ select is_empty(
   'alle kanoniske tabeller har RLS aktivert'
 );
 select is_empty(
-  'select * from pg_temp.violation_client_grants',
-  'ingen kanoniske objekter er gitt til anon, authenticated, service_role eller PUBLIC'
+  'select * from pg_temp.violation_client_write_grants',
+  'ingen kanonisk tabell gir skriverett til en klientrolle, og verken PUBLIC eller service_role har noe'
+);
+select is_empty(
+  'select * from pg_temp.violation_client_grant_without_policy',
+  'hver SELECT-grant til en klientrolle har en RLS-policy under seg'
+);
+select is_empty(
+  'select * from pg_temp.violation_write_policy',
+  'ingen RLS-policy i de kanoniske schemaene åpner for annet enn lesing'
 );
 select is_empty(
   'select * from pg_temp.violation_api_view_security_invoker',

@@ -1241,10 +1241,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ---
 
-## 74. Status etter migrasjon 006
+## 74. Status etter migrasjon 007
 
-**Oppdatert:** 20. august 2026 (etter korreksjonsmigrasjon 006a; forrige oppdatering
-etter at PR #15, migrasjon 006, ble merget)
+**Oppdatert:** 20. august 2026 (etter migrasjon 007, api-lesemodellen; forrige oppdatering
+etter korreksjonsmigrasjon 006a)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1288,28 +1288,31 @@ av en beslutning, ikke av kode. Se §74.4.
 ### 74.2 Faktisk PR-rekkefølge
 
 ```text
-PR A  chore: bootstrap Antidep web app                    (#9)   merget
-PR B  db: add schema and security foundation              (#10)  merget   migrasjon 001
-PR C  db: add drug and clinical concept catalog           (#11)  merget   migrasjon 002
-PR D  db: add sources and evidence items                  (#12)  merget   migrasjon 003
-PR E  db: add claims and evidence assessments             (#13)  merget   migrasjon 004
-PR F  db: add review and provenance                       (#14)  merget   migrasjon 005
-PR G  db: add publication events and gate                 (#15)  merget   migrasjon 006
+PR A  chore: bootstrap Antidep web app                        (#9)   merget
+PR B  db: add schema and security foundation                  (#10)  merget   migrasjon 001
+PR C  db: add drug and clinical concept catalog               (#11)  merget   migrasjon 002
+PR D  db: add sources and evidence items                      (#12)  merget   migrasjon 003
+PR E  db: add claims and evidence assessments                 (#13)  merget   migrasjon 004
+PR F  db: add review and provenance                           (#14)  merget   migrasjon 005
+PR G  db: add publication events and gate                     (#15)  merget   migrasjon 006
+      docs: record implementation status after migration 006  (#16)  merget   ingen migrasjon
+      db: make evidence item content hash unambiguous         (#17)  merget   migrasjon 006a
+      db: add api published read model                        (#18)  merget   migrasjon 007
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
 i tråd med §51. Den planlagte PR G — `feat: add admin golden-slice workflow` — er
 dermed ikke bygget ennå, og glir til etter migrasjon 007.
 
-Tabellen over er en logg over merget arbeid. Korreksjonsmigrasjon 006a kom til etter
-PR #15 og føres inn i tabellen når PR #17 er merget; hva den innfridde, står i §74.8.
+Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
+ferdig, ikke i en senere. Hva 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
-**Migrasjonsnumrene i §18-§27 navngir planlagt innhold, ikke filrekkefølge.** Den sjuende
-migrasjonsfilen er ikke migrasjon 007. En migrasjon som retter registrert gjeld står
-utenfor den planlagte rekken og får en bokstav — 006a — slik at «migrasjon 007 —
-API-lesemodell» (§24) fortsatt betyr det samme i plan, migrasjoner og tester.
+**Migrasjonsnumrene i §18-§27 navngir planlagt innhold, ikke filrekkefølge.** Den åttende
+migrasjonsfilen er migrasjon 007, fordi den sjuende — korreksjonsmigrasjonen 006a — står
+utenfor den planlagte rekken og fikk en bokstav. Konvensjonen finnes nettopp for at
+«migrasjon 007 — API-lesemodell» (§24) skal bety det samme i plan, migrasjoner og tester.
 
-Databaselaget teller nå 886 pgTAP-assertions over 28 testfiler.
+Databaselaget teller nå 960 pgTAP-assertions over 29 testfiler.
 
 ### 74.3 Hva databasen faktisk inneholder
 
@@ -1317,6 +1320,10 @@ Kunnskapsmodellen er komplett til og med publisering: katalog, kilder og kildeve
 evidensfunn, påstander med immutable revisjoner, evidenslenker, evidensvurderinger,
 aktører, rollemodell, ekstraksjons- og claim-verifikasjon, reviewbeslutninger, og
 publiseringshistorikk med en kontrollert publiseringsoperasjon.
+
+Fra migrasjon 007 finnes også leseveien ut: tre views i `api`, de første RLS-policyene, og
+`SELECT` til klientrollene på de tretten tabellene viewene leser. Kjeden er dermed lukket i
+begge ender — det som mangler mellom dem, er en publisering.
 
 Innholdet er derimot bevisst minimalt, og det er ikke det samme som at slicen er ferdig:
 
@@ -1345,23 +1352,38 @@ gyldig `reviewer`-rolle for innholdsområdet på beslutningstidspunktet.
 hvem er kvalifisert redaktør, og hvordan registreres vedkommende? Å seede en redaktør
 ville vært å oppfinne den godkjenningen konstitusjonen krever.
 
-Konsekvens for rekkefølgen: migrasjon 007 (§24) kan bygges nå, men api-projeksjonene
-vil vise et tomt publisert sett. Det er korrekt oppførsel, og 007 må testes mot data
-opprettet inne i en transaksjon — samme mønster som 006 — framfor mot seedet innhold.
+Konsekvens for rekkefølgen: migrasjon 007 (§24) er bygget, og api-projeksjonene viser et
+tomt publisert sett. Det er korrekt oppførsel. 007 er testet mot data opprettet inne i en
+transaksjon som rulles tilbake — samme mønster som 006 — framfor mot seedet innhold, og
+`220_provenance_seed_test.sql` bekrefter fortsatt at ingenting er publisert.
 
-### 74.5 Beslutninger som bør tas før migrasjon 007
+**Det som nå gjenstår for Milepæl B er én ting:** en navngitt kvalifisert redaktør,
+registrert som menneskelig aktør med brukerkonto og `reviewer`-rolle. Alt maskineri fra
+kilde til klientflate står ferdig og testet rundt det tomrommet.
 
-Disse er billigst å avgjøre før api-projeksjonene begynner å eksponere verdier utad,
-fordi de da blir en offentlig kontrakt:
+### 74.5 Beslutninger tatt før migrasjon 007 eksponerte verdier utad
 
-1. **Enum kontra oppslagstabell.** Det finnes nå 37 enum-typer, fordelt på
-   migrasjonene 001-006 med henholdsvis 1, 6, 11, 7, 10 og 2. Et bytte blir dyrere
-   etter at verdiene er eksponert.
-2. **Stabil, språkuavhengig nøkkel for katalogobjekter.** Skal api-en eksponere uuid-er
-   eller stabile nøkler? `provenance.actors.actor_key` (formatet `type:navn`) er et
-   mønster som allerede finnes.
-3. **Om `public` skal fjernes fra `[api].schemas`.** Hører naturlig sammen med at
-   `api`-schemaet faktisk tas i bruk.
+Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
+
+1. **Enum kontra oppslagstabell — utsatt, og gjort billigere å utsette.** Det finnes
+   37 enum-typer, fordelt på migrasjonene 001-006a med henholdsvis 1, 6, 11, 7, 10, 2
+   og 0. Migrasjon 007 la ikke til flere. Tallet er kontrollert mot kilden
+   (`grep -cE '^create type ' supabase/migrations/*.sql`) og mot databasen.
+   Viewene caster enum-kolonner til `text`, så den offentlige kontrakten er en streng
+   fra et dokumentert vokabular, ikke PostgreSQL-typen. Et senere bytte til
+   oppslagstabeller er dermed ikke en brytende API-endring. Castingen sparer også
+   klientrollene for `usage` på typene.
+2. **Katalogobjekter eksponeres med `uuid`, med ATC som ekstern nøkkel.** Radens
+   databasegenererte `uuid` er identiteten (`DATABASE_ARCHITECTURE.md` §8), og for
+   virkestoff følger ATC-kodene med som språkuavhengig ekstern nøkkel, som sortert
+   array — se §74.9 om hvorfor de aggregeres framfor å joines. En egen
+   slug-kolonne etter mønster av `provenance.actors.actor_key` ville krevd en
+   katalogmigrasjon utenfor §24 og er ikke innført. Spørsmålet kan tas opp igjen når
+   en klient faktisk trenger en menneskelesbar nøkkel i URL-er.
+3. **`public` er fjernet fra `[api].schemas`.** Verdien er nå
+   `["api", "graphql_public"]`. Schemaet inneholdt ingen Antidep-objekter — §5 er opt-in,
+   og en tom eksponering er fortsatt en eksponering. `api` står først og er dermed
+   standardprofilen i PostgREST. Endringen må synkes manuelt mot det hostede prosjektet.
 
 ### 74.6 Invariant etablert i migrasjon 006
 
@@ -1384,7 +1406,9 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Tidsbasert utløp av review er ikke håndhevet i publiseringsgaten | En godkjenning eldes uten at noe fanger det | Migrasjonen som innfører `workflow.review_requirements` / `review_due_at`. Krever først en klinisk policy for hvor lenge en godkjenning er gyldig per kunnskapstype og risiko |
 | Godkjenningens evidensavtrykk beregnes ved innsetting, ikke fra det reviewer faktisk så | En lenke som commiter mellom reviewers lesing og lagring av beslutningen havner i avtrykket | Admin-flyten oppgir avtrykket den viste reviewer. Kolonnen er utformet for det |
 | `knowledge.publication_object_type` har én verdi, og hendelsen har én ekte fremmednøkkel | En andre publiserbar objekttype kan friste til å gjenbruke `claim_id` som generisk `object_id` | Migrasjonen som innfører objekttype nummer to må legge til egen fremmednøkkelkolonne og eget speil |
-| Ingen RLS-policies og ingen grants på kanoniske tabeller | Ingen — skriveveien er en `SECURITY DEFINER`-funksjon som ikke trenger dem | Migrasjonen som eksponerer en RPC-flate i `api`, med egen trusselvurdering |
+| En tilbaketrukket ekstraksjon utløser ingen automatisk avpublisering eller ny review | En publisert påstand kan bli stående mens deler av grunnlaget er underkjent. Lesemodellen merker det nå (§74.9), men livssyklusen er ikke lukket | Admin-flyten (§29). Der hører beslutningen om hva som skal skje med berørte publiseringer hjemme — automatisk avpublisering er en klinisk policy, ikke en implementasjonsdetalj |
+| Publiseringstidspunkt og reviewtidspunkt er ikke eksponert i `api` | En kliniker ser «sist faglig vurdert» bare for de typene som har en evidensvurdering; et deterministisk faktum får ingen dato | Viewet som betjener kliniker-UI-et. Krever først en governance-beslutning om hvor mye av reviewhistorikken som skal være offentlig — `knowledge.publication_events` og `workflow.review_decisions` er begge stengt for klientrollene i dag |
+| `api.published_claims` eksponerer populasjonens etikett, ikke dens strukturerte grenser | Aldersgrenser, indikasjon, graviditetskontekst og komorbiditet ligger bare i etiketteksten | Det første viewet som faktisk trenger å filtrere på populasjon. `catalog.populations` er allerede lesbar for klientrollene, så det er en projeksjonsendring, ikke en tilgangsendring |
 | Felles hjelpefunksjoner (`catalog.set_row_timestamps()`, `catalog.set_created_at()`, `knowledge.reject_append_only_mutation()`) brukes fra flere schemaer | Lav; plasseringen er misvisende | Et `util`-schema endrer `DATABASE_ARCHITECTURE.md` §6 og hver schemauttømmende vaktpost i testpakken. Egen beslutning |
 
 ### 74.8 Gjeld innfridd i korreksjonsmigrasjon 006a
@@ -1426,6 +1450,91 @@ gjelden fikk ligge:
   `D` og `R`, og også `api`. En trigger satt til replica fyrer ikke i vanlig drift, og et
   vern som ikke fyrer, er ikke et vern.
 
+### 74.9 Hva migrasjon 007 innførte
+
+`20260820140000_api_published_read_model.sql` åpner den første leseveien fra klientflaten
+inn i kunnskapsbasen (§24): `api.published_drugs`, `api.published_claims` og
+`api.published_claim_evidence`, de tretten `SELECT`-grantene viewene trenger, og de første
+RLS-policyene i Antidep.
+
+**Grensen flyttet seg, og måtte skrives om framfor å strykes.** Fram til nå hadde ingen
+klientrolle noe privilegium i de kanoniske schemaene i det hele tatt, og fire testfiler
+påstod nettopp det. Et `security_invoker`-view leser med kallerens rettigheter
+(`DATABASE_ARCHITECTURE.md` §42), så granten er uunngåelig. Reglene er derfor gjort
+snevrere, ikke fjernet: klientrollene kan ha `SELECT` og ingenting annet, hver `SELECT`
+skal ha en policy under seg, og ingen policy i de kanoniske schemaene får åpne for annet
+enn lesing. Alle tre håndheves uttømmende i `030_conventions_test.sql`.
+
+**Tre lås, testet hver for seg.** Klientrollene mangler `usage` på de kanoniske schemaene
+og kan derfor ikke navngi tabellene — granten virker bare gjennom viewene, som ble
+navneoppslått da de ble opprettet. RLS slipper bare gjennom rader nådd fra en publisert,
+ikke tilbaketrukket påstand. Og bare `SELECT` er gitt, bare til `anon` og `authenticated`.
+`290_api_read_model_access_test.sql` publiserer sitt eget innhold inne i en transaksjon som
+rulles tilbake, og leser deretter som faktisk klientrolle.
+
+**Viewene bærer publiseringspredikatet i tillegg til RLS, og begge lagene testes alene.**
+Det er bevisst dobbeltarbeid. Muteringstestingen viste hvorfor det ikke er nok å teste dem
+sammen: da viewet ble endret til å følge høyeste revisjonsnummer framfor
+publiseringspekeren, overlevde feilen alle assertions lest som `anon` — RLS skjulte
+utkastrevisjonen, så også den feilaktige joinen landet på riktig rad. Bare en lesing som
+eier, altså forbi RLS, fanget den. Den assertionen ble lagt til som følge av mutasjonen.
+Tjuefire mutasjoner ble kjørt i alt; alle ble fanget etter dette.
+
+**Policyene danner en asyklisk kjede.** `knowledge.claims` er selvstendig, og hver øvrige
+policy spør bare om raden er nådd fra en rad som allerede er synlig — et `EXISTS` mot en
+RLS-beskyttet tabell filtreres av den tabellens egen policy, så synligheten forplanter seg
+gjennom `claims → claim_revisions → claim_evidence_links → evidence_items → sources` uten
+at noen policy gjentar publiseringspredikatet. En syklus ville gitt «infinite recursion
+detected in policy for relation» ved første spørring, ikke ved migrering.
+
+**Lesbarhet og utgivelse er bevisst ulike predikater.** `catalog.drugs`-policyen slipper
+gjennom virkestoff som er nevnt av en publisert revisjon eller et synlig evidensfunn, som
+subjekt, komparator eller intervensjon — komparatorens navn må kunne leses for at påstanden
+skal gi mening. `api.published_drugs` er snevrere og viser bare virkestoff Antidep faktisk
+har publisert påstander *om*. En oppføring der ville ellers antydet en dekning som ikke
+finnes.
+
+**To NULL-tilstander holdes fra hverandre i `certainty_level`.** Verdien
+`no_assessable_evidence` betyr at grunnlaget er vurdert og ikke lar seg gradere, med
+`evidence_gap` utfylt. `NULL` betyr at ingen GRADE-vurdering gjelder for påstandstypen, og
+forekommer hvis og bare hvis `knowledge_type` er `deterministic_fact` — publiseringsgaten
+G10 krever vurdering for de to andre typene. Ingen av dem betyr lav risiko eller ingen
+effekt (`ANTIDEP_CONSTITUTION.md` §6, §17), og skillet står i kolonnekommentaren.
+
+**En tilbaketrukket ekstraksjon merkes framfor å skjules.** Publiseringsgaten G6 behandler en
+tilbaketrukket ekstraksjon som en hard blokk ved publisering, men beslutningen er append-only og
+kan registreres etterpå — og da flytter den verken publiseringspekeren eller evidenslenkene.
+Lesemodellen avleder derfor den gjeldende tilstanden med nøyaktig samme regel som gaten bruker,
+og eksponerer den som `extraction_withdrawn` på evidensraden og `withdrawn_evidence_count` på
+påstanden. Funnet skjules ikke: da ville påstanden sett bedre underbygget ut enn den er.
+
+Dette er den ene grunnen `workflow.review_decisions` er åpnet, og policyen slipper bare gjennom
+`review_type = 'extraction_withdrawal'`. Begge utfallene må være lesbare, ikke bare
+`extraction_withdrawn`: skjulte vi `extraction_upheld`, ville avledningen «siste beslutning
+gjelder» svart forskjellig avhengig av hvem som spør. `workflow.user_roles` — autorisasjonskilden
+— er fortsatt helt stengt.
+
+**Identifikatorer aggregeres, de joines ikke.** `catalog.drug_identifiers` og
+`knowledge.source_identifiers` er unike på `(identifier_system, identifier_value)`, ikke på
+`(forelder, identifier_system)`. Ett virkestoff kan derfor ha flere ATC-koder, og ingenting
+hindrer to DOI-er på samme kilde. Var identifikatorene joinet inn i viewene, ville ett
+virkestoff blitt til to rader og ett evidensfunn til to — det siste ville fått ett funn til å
+se ut som to uavhengige, altså nøyaktig den oppblåsingen av evidensmengden
+`claim_evidence_links_revision_item_key` finnes for å hindre. ATC-kodene aggregeres derfor til
+en array, og DOI og PMID hentes med skalare underspørringer som velger deterministisk.
+
+Tre av punktene over kom fra reviewen på PR #18 og var reelle: at en tilbaketrukket ekstraksjon
+forble synlig som ordinær evidens, at `source_doi`/`source_pmid` som skalarer var tapsbringende
+— den ekte seedede DOI-en var faktisk den en «velg den laveste»-regel ville forkastet — og at
+kildeversjonen manglet i drilldownen.
+
+En vaktpost ble strammet underveis: kommentarvakten i `280` joinet `pg_description` mot tre
+systemkataloger på `objoid` alene. OID-er er unike innenfor hver katalog, ikke på tvers, så
+oppslaget kunne treffe en urelatert rad. Policykommentarene fra 007 er de første
+kommentarene i Antidep-schemaene som verken beskriver en relasjon, en funksjon eller en
+type, og gjorde svakheten nåbar. Hver gren binder nå sin egen `classoid`, og policyer er
+tatt inn i vakten framfor å falle utenfor den.
+
 ---
 
 # Del XIX — Ikke-forhandlingsbare implementeringsprinsipper
@@ -1452,7 +1561,7 @@ gjelden fikk ligge:
 
 > **Merk:** Avsnittet under er skrevet ved planens godkjenning og beskriver oppstarten.
 > Det er beholdt som historikk (§71). Planleggingsfasen er avsluttet, og PR A til PR G
-> er merget (§74.2). **Gjeldende neste steg står i §74.4 og §74.5.**
+> er merget (§74.2). **Gjeldende neste steg står i §74.4, og registrert gjeld i §74.7.**
 
 Når denne planen er godkjent, avsluttes planleggingsfasen som standard arbeidsmodus.
 

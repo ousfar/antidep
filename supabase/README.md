@@ -15,6 +15,8 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
   - 005 `provenance.actors`, medlemskapsmodellen, verifikasjon og review
   - 006 `knowledge.publication_events` og den kontrollerte publiseringsoperasjonen
   - 006a korreksjon: entydig serialisering av `content_hash` på evidensfunn
+  - 007 api-lesemodellen: `api.published_drugs`, `api.published_claims`,
+    `api.published_claim_evidence`, med RLS-policyene og grantene under dem
 
   Nummereringen følger planlagt innhold i `docs/MVP_IMPLEMENTATION_PLAN.md` §18-§27, ikke
   filrekkefølge. Korreksjonsmigrasjoner står utenfor den rekken og får en bokstav, slik at
@@ -58,12 +60,23 @@ Migrasjon 001 oppretter de logiske schemaene fra `docs/DATABASE_ARCHITECTURE.md`
 | `audit`      | append-only hendelseslogg                          | privat    |
 | `api`        | publiserte views og kontrollerte RPC-er            | eksponert |
 
+Fra migrasjon 007 er `[api].schemas` i `config.toml` satt til `["api", "graphql_public"]`.
+`public` ble tatt ut fordi det ikke inneholder Antidep-objekter, og en tom eksponering er
+fortsatt en eksponering. `api` står først og er dermed standardprofilen i PostgREST.
+
 `ingest` opprettes først når importfundamentet kommer (migrasjon 009).
 
-Tilgang er default deny. `anon` og `authenticated` har kun `usage` på `api`, og hvert
+Tilgang er default deny. `anon` og `authenticated` har `usage` bare på `api`, og hvert
 objekt i `api` må få egen `GRANT` i migrasjonen som oppretter det. `service_role` har
 ingen tilgang til Antidep-schemaene og er ikke applikasjonens universalnøkkel
 (`docs/DATABASE_ARCHITECTURE.md` §49).
+
+Fra migrasjon 007 har klientrollene i tillegg `SELECT` på de tretten kanoniske tabellene
+api-viewene leser. Det følger av at views i `api` er `security_invoker` og altså leser med
+kallerens rettigheter (§42). Granten åpner ikke tabellene: uten `usage` på schemaet kan
+klientrollene ikke navngi dem — forsøket gir «permission denied for schema» — og RLS
+slipper uansett bare gjennom rader som er nådd fra en publisert påstand. Se
+«API-lesemodellen» under.
 
 Konvensjoner som gjelder for alle senere migrasjoner, håndhevet av
 `tests/030_conventions_test.sql`:
@@ -173,17 +186,86 @@ godkjenningsrett.
 `workflow.review_decisions`. Publiseringsgaten i migrasjon 006 må lese den avledede
 tilstanden og nekte å publisere en revisjon som hviler på et tilbaketrukket evidensfunn.
 
-**Ingen RLS-policies ennå.** En policy har bare virkning for en rolle som allerede har et
-tabellprivilegium, og ingen klientrolle har `usage` på `knowledge`, `workflow` eller
-`provenance`. Policyene hører sammen med den første kontrollerte skriveveien og grantene som
-gjør dem virksomme (`docs/MVP_IMPLEMENTATION_PLAN.md` §48), altså migrasjon 006 og senere.
-Klientflaten skal uansett lese publiserte projeksjoner i `api` (migrasjon 007).
+**Ingen skrivepolicies.** Migrasjon 007 skrev de første RLS-policyene, men bare for `SELECT`
+og bare på leseveien til publiserte påstander. Skriveveien er fortsatt en kontrollert
+`SECURITY DEFINER`-funksjon, ikke tabelltilgang (`docs/DATABASE_ARCHITECTURE.md` §43), og
+`030_conventions_test.sql` håndhever at ingen policy i de kanoniske schemaene åpner for annet
+enn lesing. `workflow` og `provenance` har fortsatt verken grants eller policies.
 
 **Seedomfang.** Migrasjon 005 seeder bare de to KI-aktørene som faktisk produserte radene i
 migrasjon 003 og 004. Ingen verifikasjon og ingen reviewbeslutning er seedet: begge deler er
 utførte handlinger, og en seedet godkjenning ville vært nøyaktig den fiktive godkjenningen
 `docs/ANTIDEP_CONSTITUTION.md` §12 forbyr. `provenance.agent_runs` opprettes først når en
 faktisk automatisk pipeline skriver kjøringer.
+
+## API-lesemodellen
+
+Migrasjon 007 åpner den første leseveien fra klientflaten inn i kunnskapsbasen
+(`docs/MVP_IMPLEMENTATION_PLAN.md` §24):
+
+| View                           | Innhold                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------- |
+| `api.published_drugs`          | virkestoff Antidep har minst én publisert påstand om, med ATC-kode        |
+| `api.published_claims`         | én rad per publisert påstand, med strukturert betydning og sikkerhetsgrad |
+| `api.published_claim_evidence` | evidensgrunnlaget bak hver påstand, med funn, kilde, DOI og PMID          |
+
+**Tre lås står mellom en klientrolle og en upublisert påstand.** Klientrollene mangler `usage`
+på de kanoniske schemaene og kan ikke navngi tabellene. RLS slipper bare gjennom rader nådd fra
+en publisert, ikke tilbaketrukket påstand. Og bare `SELECT` er gitt, bare til `anon` og
+`authenticated`. Hvert lag testes for seg i `tests/290_api_read_model_access_test.sql`, med
+faktisk klientrolle, slik §24 og `docs/DATABASE_ARCHITECTURE.md` §44 punkt 4 krever.
+
+**Viewene bærer publiseringspredikatet i tillegg til RLS.** Det er bevisst dobbeltarbeid: hvert
+lag skal være korrekt alene, slik at verken en tapt policy eller en feilskrevet join er nok til
+å vise upublisert eller tilbaketrukket innhold. Nettopp derfor testes de hver for seg — leses
+et view som eier, er RLS av, og viewets eget filter er det eneste som svarer.
+
+**En tilbaketrukket ekstraksjon merkes, den skjules ikke.** Publiseringsgaten nekter å
+publisere en revisjon som hviler på en tilbaketrukket ekstraksjon, men beslutningen er
+append-only og kan komme _etter_ publiseringen — da flytter den verken publiseringspekeren
+eller evidenslenkene. `api.published_claim_evidence.extraction_withdrawn` avleder den
+gjeldende tilstanden på nøyaktig samme måte som gaten gjør, og
+`api.published_claims.withdrawn_evidence_count` gir samme signal på påstandsnivå. Funnet
+skjules ikke: da ville påstanden sett bedre underbygget ut enn den er.
+
+Dette er den ene grunnen `workflow.review_decisions` er åpnet for klientrollene, og
+policyen slipper bare gjennom `review_type = 'extraction_withdrawal'`.
+Publiseringsgodkjenninger — med reviewers identitet og begrunnelse — forblir utenfor
+klientflaten, og `workflow.user_roles` er fortsatt helt stengt. Begge utfallene av en
+tilbaketrekking er lesbare: skjulte vi `extraction_upheld`, ville en ekstraksjon som først
+ble trukket tilbake og siden opprettholdt sett tilbaketrukket ut for en klientrolle mens
+eieren så den som gyldig.
+
+**Projeksjonen er tom inntil noe faktisk er publisert.** Det er korrekt oppførsel, ikke en
+mangel: publisering krever en menneskelig faglig godkjenning som ikke kan seedes
+(`docs/ANTIDEP_CONSTITUTION.md` §12, `docs/MVP_IMPLEMENTATION_PLAN.md` §74.4). Testene
+publiserer derfor sitt eget innhold inne i en transaksjon som rulles tilbake.
+
+**Kontrakten er tekst, ikke enum.** Viewene caster enum-kolonner til `text`. Verdiene er de
+samme, men den offentlige kontrakten bindes ikke til PostgreSQL-typen, og klientrollene trenger
+ikke `usage` på typene. Om enumene på sikt byttes mot oppslagstabeller
+(`docs/MVP_IMPLEMENTATION_PLAN.md` §74.5 punkt 1), er det da ikke en brytende API-endring.
+
+**Identiteten er uuid, med ATC som ekstern nøkkel.** Katalogobjekter eksponeres med sin
+databasegenererte `uuid` (`docs/DATABASE_ARCHITECTURE.md` §8). For virkestoff følger ATC-kodene
+med som språkuavhengig ekstern nøkkel, som sortert array. `NULL` der betyr at ingen ATC-kode er
+registrert i Antidep, ikke at virkestoffet mangler en.
+
+**Identifikatorer aggregeres, de joines ikke — og de reduseres ikke til én.**
+`catalog.drug_identifiers` og `knowledge.source_identifiers` er unike på
+`(identifier_system, identifier_value)`, ikke på `(forelder, identifier_system)`: ett virkestoff
+kan ha flere ATC-koder, og en kilde kan ha flere DOI-er, blant annet ved parallellpublisering.
+Joinet inn ville de multiplisert raden — ett evidensfunn ville blitt til to og sett ut som to
+uavhengige funn. Å velge én ville i stedet gjort en vilkårlig kanonisering til offentlig
+kontrakt, siden ingen av identifikatorene er definert som primær. `atc_codes`, `source_dois` og
+`source_pmids` er derfor sorterte arrays.
+
+**Kildeversjonen følger med.** `source_locator` peker inn i en bestemt hentet versjon, ikke i
+kilden generelt. For en levende kilde — retningslinje, preparatomtale, nettside — kan samme URL
+senere gi annet innhold, og da er lokatoren alene ikke nok til å reprodusere hva som faktisk ble
+verifisert. `api.published_claim_evidence` eksponerer derfor `source_version_id`, hentetidspunkt,
+hentested, kildens egen versjonsbetegnelse og innholdsavtrykket. Lagringsreferansen til selve
+innholdet er bevisst ikke med.
 
 ## Hvor seed-data hører hjemme
 

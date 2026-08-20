@@ -14,7 +14,13 @@ port = 54321
 # `workflow`, `provenance`, `audit`) skal aldri stå her, jf. docs/DATABASE_ARCHITECTURE.md §5/§47.
 # Eksponering av schema er bare det ene laget: hvert view og hver funksjon i `api` trenger i tillegg
 # eksplisitt GRANT i migrasjonen som oppretter objektet.
-schemas = ["public", "graphql_public", "api"]
+#
+# `public` ble tatt ut da migrasjon 007 tok `api` i bruk (MVP_IMPLEMENTATION_PLAN.md §74.5 punkt 3).
+# Schemaet inneholder ingen Antidep-objekter — 020_data_api_boundary_test.sql håndhever det — så
+# eksponeringen var tom, og en tom eksponering er fortsatt en eksponering (§5: opt-in). `api` står
+# først og er dermed standardprofilen i PostgREST for forespørsler uten `Accept-Profile`.
+# `graphql_public` beholdes fordi pg_graphql-endepunktet ligger der.
+schemas = ["api", "graphql_public"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size

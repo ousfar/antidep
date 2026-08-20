@@ -20,6 +20,9 @@ select plan(18);
 -- ---------------------------------------------------------------------------
 -- Lag 1: grants
 -- ---------------------------------------------------------------------------
+-- Migrasjon 007 ga SELECT på alle fire, som api.published_claims og
+-- api.published_claim_evidence leser. Skriverettene er fortsatt fraværende:
+-- påstandslaget skrives bare gjennom den kontrollerte publiseringsoperasjonen.
 select is_empty(
   $$
     select t.table_name, r.role_name, p.privilege
@@ -31,12 +34,13 @@ select is_empty(
     cross join (values ('select'), ('insert'), ('update'), ('delete'), ('truncate'),
                        ('references'), ('trigger')) as p(privilege)
     where has_table_privilege(r.role_name, t.table_name, p.privilege)
+      and not (p.privilege = 'select' and r.role_name in ('anon', 'authenticated'))
   $$,
-  'ingen klientrolle har noe tabellprivilegium på påstandstabellene'
+  'klientrollene har bare SELECT på påstandstabellene, aldri noen skriverett'
 );
 
 -- ---------------------------------------------------------------------------
--- Lag 2: RLS er aktivert, uten policies i dette steget
+-- Lag 2: RLS er aktivert, og policyene er lesepolicyer
 -- ---------------------------------------------------------------------------
 select is_empty(
   $$
@@ -51,19 +55,37 @@ select is_empty(
   $$,
   'RLS er aktivert på alle påstandstabellene'
 );
-select is_empty(
+-- Klientlesing går gjennom api-projeksjonene fra migrasjon 007, og disse fire
+-- lesepolicyene er radgrensen under dem. polcmd 'r' betyr SELECT; en policy for
+-- INSERT, UPDATE eller ALL ville vært en skrivevei forbi publiseringsgaten.
+select set_eq(
   $$
-    select p.polname, c.relname
+    select c.relname || ':' || p.polname || ':' || p.polcmd::text
     from pg_policy p
     join pg_class c on c.oid = p.polrelid
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'knowledge'
+      and c.relname in ('claims', 'claim_revisions', 'claim_evidence_links',
+                        'evidence_assessments')
   $$,
-  'ingen RLS-policy er skrevet på påstandslaget; klientlesing går gjennom api-projeksjonene i migrasjon 007'
+  $$
+    values ('claims:claims_published_read:r'),
+           ('claim_revisions:claim_revisions_published_read:r'),
+           ('claim_evidence_links:claim_evidence_links_published_read:r'),
+           ('evidence_assessments:evidence_assessments_published_read:r')
+  $$,
+  'påstandslaget har nøyaktig sine fire lesepolicyer, og ingen skrivepolicy'
 );
 
 -- ---------------------------------------------------------------------------
 -- Faktiske forsøk med Data API-rollene (42501 = insufficient_privilege)
+--
+-- Merk hva som nå stopper dem. Etter migrasjon 007 *har* anon og authenticated
+-- SELECT på flere av tabellene under, men de mangler fortsatt usage på schemaet
+-- og kan derfor ikke navngi dem: feilen er «permission denied for schema», ikke
+-- «for table». Grantene virker bare gjennom viewene i api, som ble navneoppslått
+-- da de ble opprettet. Skulle usage bli gitt ved et uhell, er RLS neste sperre,
+-- og den kontrolleres i 290_api_read_model_access_test.sql.
 -- ---------------------------------------------------------------------------
 set local role anon;
 select throws_ok(
