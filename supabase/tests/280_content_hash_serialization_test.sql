@@ -19,7 +19,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(14);
+select plan(15);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
@@ -295,23 +295,44 @@ select is_empty(
 -- En kommentar som skal peke framover på noe som ennå ikke finnes, skriver
 -- navnet uten parentes; vakten leser bare referanser på kallform.
 -- ---------------------------------------------------------------------------
+-- pg_description identifiserer et objekt med paret (classoid, objoid), ikke med
+-- objoid alene: OID-ene er unike innenfor hver systemkatalog, ikke på tvers av
+-- dem. Et oppslag som bare joiner på objoid kan derfor treffe en urelatert rad i
+-- en annen katalog. Migrasjon 007 gjorde dette relevant — policykommentarene der
+-- er de første kommentarene i Antidep-schemaene som verken beskriver en
+-- relasjon, en funksjon eller en type — så hver gren binder nå sin egen
+-- classoid, og policyer er tatt inn i vakten framfor å falle utenfor den.
+create view pg_temp.commented_object as
+select n.nspname as schema_name, c.relname as object_name, d.description
+from pg_description d
+join pg_class c on c.oid = d.objoid and d.classoid = 'pg_class'::regclass
+join pg_namespace n on n.oid = c.relnamespace
+union all
+select n.nspname, p.proname, d.description
+from pg_description d
+join pg_proc p on p.oid = d.objoid and d.classoid = 'pg_proc'::regclass
+join pg_namespace n on n.oid = p.pronamespace
+union all
+select n.nspname, t.typname, d.description
+from pg_description d
+join pg_type t on t.oid = d.objoid and d.classoid = 'pg_type'::regclass
+join pg_namespace n on n.oid = t.typnamespace
+union all
+select n.nspname, c.relname || '.' || pol.polname, d.description
+from pg_description d
+join pg_policy pol on pol.oid = d.objoid and d.classoid = 'pg_policy'::regclass
+join pg_class c on c.oid = pol.polrelid
+join pg_namespace n on n.oid = c.relnamespace;
+
 create view pg_temp.violation_comment_names_missing_function as
-select x.beskrevet_objekt, x.funksjonsreferanse
-from (
-  select distinct
-    n.nspname || '.' || coalesce(c.relname, p.proname, t.typname) as beskrevet_objekt,
-    m[1] as funksjonsreferanse
-  from pg_description d
-  left join pg_class c on c.oid = d.objoid
-  left join pg_proc p on p.oid = d.objoid
-  left join pg_type t on t.oid = d.objoid
-  left join pg_namespace n
-    on n.oid = coalesce(c.relnamespace, p.pronamespace, t.typnamespace)
-  cross join lateral
-    regexp_matches(d.description, '([a-z_]+\.[a-z_]+\([a-z_, .]*\))', 'g') m
-  where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit', 'api')
-) x
-where to_regprocedure(x.funksjonsreferanse) is null;
+select distinct
+  x.schema_name || '.' || x.object_name as beskrevet_objekt,
+  m[1] as funksjonsreferanse
+from pg_temp.commented_object x
+cross join lateral
+  regexp_matches(x.description, '([a-z_]+\.[a-z_]+\([a-z_, .]*\))', 'g') m
+where x.schema_name in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit', 'api')
+  and to_regprocedure(m[1]) is null;
 
 select is_empty(
   $$select * from pg_temp.violation_comment_names_missing_function$$,
@@ -343,6 +364,22 @@ select bag_eq(
     where beskrevet_objekt = 'knowledge.bad_probe_comment'$$,
   $$values ('knowledge.finnes_ikke_her()')$$,
   'kommentarvakten fanger en kommentar som navngir en funksjon som ikke finnes'
+);
+
+-- Den nye grenen selvtestes på samme måte: en policykommentar skal holdes til
+-- samme standard som en tabellkommentar. Uten denne kontrollen ville
+-- policygrenen kunnet være stille ødelagt.
+alter table knowledge.bad_probe_comment enable row level security;
+create policy bad_probe_comment_read on knowledge.bad_probe_comment
+  for select to authenticated using (true);
+comment on policy bad_probe_comment_read on knowledge.bad_probe_comment is
+  'Bevisst brudd: viser til knowledge.heller_ikke_her() som ikke er definert.';
+
+select bag_eq(
+  $$select funksjonsreferanse from pg_temp.violation_comment_names_missing_function
+    where beskrevet_objekt = 'knowledge.bad_probe_comment.bad_probe_comment_read'$$,
+  $$values ('knowledge.heller_ikke_her()')$$,
+  'kommentarvakten dekker også policykommentarer'
 );
 
 select * from finish();

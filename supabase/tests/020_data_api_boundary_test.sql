@@ -65,6 +65,15 @@ select is_empty(
   'en ny tabell i knowledge eller api gir ingen tabellprivilegier til klientrollene'
 );
 
+-- Fram til migrasjon 007 hadde ingen tabell i de kanoniske schemaene noen
+-- ACL-oppføring for klientrollene i det hele tatt. api-lesemodellen krever
+-- SELECT på tabellene under viewene, fordi et security_invoker-view leser med
+-- kallerens rettigheter (DATABASE_ARCHITECTURE.md §42). Grensen her er derfor
+-- ikke lenger «ingenting», men «bare lesing, bare til de to Data API-rollene».
+--
+-- Hvilke tabeller som faktisk er åpnet, er en egen og uttømmende kontrakt i
+-- 290_api_read_model_access_test.sql. Denne assertionen er den generelle
+-- regelen som gjelder uansett hvilke tabeller lesemodellen vokser til.
 select is_empty(
   $$
     select c.relname,
@@ -74,9 +83,14 @@ select is_empty(
     join pg_namespace n on n.oid = c.relnamespace
     cross join lateral aclexplode(c.relacl) a
     where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
-      and (a.grantee = 0 or a.grantee::regrole::text in ('anon', 'authenticated', 'service_role'))
+      and (
+        a.grantee = 0
+        or a.grantee::regrole::text = 'service_role'
+        or (a.grantee::regrole::text in ('anon', 'authenticated')
+            and a.privilege_type <> 'SELECT')
+      )
   $$,
-  'ingen tabell i de kanoniske schemaene har ACL-oppføringer for klientrollene'
+  'ingen tabell i de kanoniske schemaene gir klientrollene mer enn SELECT, og verken PUBLIC eller service_role har noe'
 );
 
 -- ---------------------------------------------------------------------------

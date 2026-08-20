@@ -226,16 +226,17 @@ select results_eq(
   'migrasjon 003 har ikke lagt til nye virkestoffer, begreper eller populasjoner'
 );
 
--- Ingenting i dette steget kan publisere ekstraksjonene: de er forslag fram til
--- verifikasjons- og reviewgatene (ANTIDEP_CONSTITUTION.md §12).
+-- Ingenting kan publisere ekstraksjonene: de er forslag fram til verifikasjons-
+-- og reviewgatene (ANTIDEP_CONSTITUTION.md §12).
+--
+-- Fram til migrasjon 007 var begrunnelsen at api-schemaet var tomt. Nå finnes
+-- projeksjonen, og påstanden er den sterkere: den er der, den er lesbar, og den
+-- viser ingenting — fordi ingen påstand er publisert. Assertionen kjører som
+-- eier og forbi RLS, så et tomt svar her er viewets egen join mot
+-- publiseringspekeren, ikke radfilteret.
 select is_empty(
-  $$
-    select c.relname
-    from pg_class c
-    join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'api' and c.relkind in ('r', 'p', 'v', 'm')
-  $$,
-  'det finnes ingen api-projeksjon som kan eksponere ekstraksjonene ennå'
+  $$select 1 from api.published_claim_evidence$$,
+  'api-projeksjonen over evidens viser ingen ekstraksjoner, fordi ingen påstand er publisert'
 );
 
 select * from finish();

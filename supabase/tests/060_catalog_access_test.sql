@@ -14,6 +14,9 @@ select plan(14);
 -- ---------------------------------------------------------------------------
 -- Lag 1: grants
 -- ---------------------------------------------------------------------------
+-- Migrasjon 007 ga SELECT på de fire katalogtabellene api-lesemodellen slår opp
+-- navn i. catalog.drug_names står bevisst utenfor: aliaser og handelsnavn er
+-- ikke del av den publiserte projeksjonen ennå. Alt annet er fortsatt stengt.
 select is_empty(
   $$
     select t.table_name, r.role_name, p.privilege
@@ -24,8 +27,14 @@ select is_empty(
     cross join (values ('select'), ('insert'), ('update'), ('delete'), ('truncate'),
                        ('references'), ('trigger')) as p(privilege)
     where has_table_privilege(r.role_name, t.table_name, p.privilege)
+      and not (
+        p.privilege = 'select'
+        and r.role_name in ('anon', 'authenticated')
+        and t.table_name in ('catalog.drugs', 'catalog.drug_identifiers',
+                             'catalog.clinical_concepts', 'catalog.populations')
+      )
   $$,
-  'ingen klientrolle har noe tabellprivilegium på katalogtabellene'
+  'klientrollene har bare SELECT, og bare på de katalogtabellene api-lesemodellen leser'
 );
 
 -- Klientrollene har heller ikke usage på selve schemaet, så et framtidig
@@ -40,7 +49,7 @@ select ok(
 );
 
 -- ---------------------------------------------------------------------------
--- Lag 2: RLS er aktivert på alle katalogtabeller, uten policies i dette steget
+-- Lag 2: RLS er aktivert på alle katalogtabeller, og policyene er lesepolicyer
 -- ---------------------------------------------------------------------------
 select is_empty(
   $$
@@ -53,19 +62,35 @@ select is_empty(
   $$,
   'RLS er aktivert på alle katalogtabeller'
 );
-select is_empty(
+-- Uttømmende inventar, ikke bare et fravær av brudd: en ny policy i catalog må
+-- føres opp her, og polcmd 'r' betyr SELECT. En skrivepolicy ville vært en
+-- skrivevei forbi publiseringsgaten (DATABASE_ARCHITECTURE.md §43).
+select set_eq(
   $$
-    select p.polname, c.relname
+    select c.relname || ':' || p.polname || ':' || p.polcmd::text
     from pg_policy p
     join pg_class c on c.oid = p.polrelid
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'catalog'
   $$,
-  'ingen RLS-policy er skrevet ennå; en policy virker først sammen med et tabellprivilegium, og ingen klientrolle har noe her'
+  $$
+    values ('drugs:drugs_published_read:r'),
+           ('drug_identifiers:drug_identifiers_published_read:r'),
+           ('clinical_concepts:clinical_concepts_published_read:r'),
+           ('populations:populations_published_read:r')
+  $$,
+  'catalog har nøyaktig de fire lesepolicyene api-lesemodellen trenger, og ingen skrivepolicy'
 );
 
 -- ---------------------------------------------------------------------------
 -- Faktiske forsøk med Data API-rollene (42501 = insufficient_privilege)
+--
+-- Merk hva som nå stopper dem. Etter migrasjon 007 *har* anon og authenticated
+-- SELECT på flere av tabellene under, men de mangler fortsatt usage på schemaet
+-- og kan derfor ikke navngi dem: feilen er «permission denied for schema», ikke
+-- «for table». Grantene virker bare gjennom viewene i api, som ble navneoppslått
+-- da de ble opprettet. Skulle usage bli gitt ved et uhell, er RLS neste sperre,
+-- og den kontrolleres i 290_api_read_model_access_test.sql.
 -- ---------------------------------------------------------------------------
 set local role anon;
 select throws_ok(

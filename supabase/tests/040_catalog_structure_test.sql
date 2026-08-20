@@ -91,16 +91,19 @@ select hasnt_table(
   'provenance.agent_runs er ikke opprettet ennå'
 );
 
--- audit.events hører til migrasjon 008 og api-projeksjonene til 007.
+-- audit.events hører til migrasjon 008 og er fortsatt ikke opprettet.
+-- api fikk sine tre lesemodell-views i migrasjon 007; inventaret der er en egen
+-- kontrakt i 290_api_read_model_access_test.sql og hører ikke hjemme i en test
+-- av katalogstrukturen.
 select is_empty(
   $$
     select n.nspname || '.' || c.relname
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname in ('audit', 'api')
+    where n.nspname = 'audit'
       and c.relkind in ('r', 'p', 'v', 'm')
   $$,
-  'audit og api har ingen objekter ennå'
+  'audit har ingen objekter ennå'
 );
 
 -- ---------------------------------------------------------------------------
