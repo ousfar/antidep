@@ -1297,7 +1297,7 @@ PR F  db: add review and provenance                           (#14)  merget   mi
 PR G  db: add publication events and gate                     (#15)  merget   migrasjon 006
       docs: record implementation status after migration 006  (#16)  merget   ingen migrasjon
       db: make evidence item content hash unambiguous         (#17)  merget   migrasjon 006a
-      db: add api published read model                        (#PR)  åpen     migrasjon 007
+      db: add api published read model                        (#18)  åpen     migrasjon 007
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
