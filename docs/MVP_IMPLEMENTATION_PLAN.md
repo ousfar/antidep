@@ -1345,7 +1345,8 @@ opprettet inne i en transaksjon — samme mønster som 006 — framfor mot seede
 Disse er billigst å avgjøre før api-projeksjonene begynner å eksponere verdier utad,
 fordi de da blir en offentlig kontrakt:
 
-1. **Enum kontra oppslagstabell.** Det finnes nå 30 enum-typer. Et bytte blir dyrere
+1. **Enum kontra oppslagstabell.** Det finnes nå 37 enum-typer, fordelt på
+   migrasjonene 001-006 med henholdsvis 1, 6, 11, 7, 10 og 2. Et bytte blir dyrere
    etter at verdiene er eksponert.
 2. **Stabil, språkuavhengig nøkkel for katalogobjekter.** Skal api-en eksponere uuid-er
    eller stabile nøkler? `provenance.actors.actor_key` (formatet `type:navn`) er et
@@ -1380,9 +1381,11 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Felles hjelpefunksjoner (`catalog.set_row_timestamps()`, `catalog.set_created_at()`, `knowledge.reject_append_only_mutation()`) brukes fra flere schemaer | Lav; plasseringen er misvisende | Et `util`-schema endrer `DATABASE_ARCHITECTURE.md` §6 og hver schemauttømmende vaktpost i testpakken. Egen beslutning |
 
 Mindre tekstgjeld, samlet til én oppryddings-PR: kolonnekommentaren på
-`catalog.drugs.updated_at` viser til `catalog.set_updated_at()`, som ikke finnes, og
+`catalog.drugs.updated_at` viser til `catalog.set_updated_at()`, som ikke finnes,
 testbeskrivelsene i `060_catalog_access_test.sql` og `110_knowledge_access_test.sql`
-sier fortsatt at medlemskapsmodellen kommer i migrasjon 005.
+sier fortsatt at medlemskapsmodellen kommer i migrasjon 005, og kommentarene i
+migrasjon 005 og 006 oppgir antallet enum-typer til henholdsvis 28 og 30. Det
+riktige tallet er 37; undertellingen oppsto i 005 og ble videreført i 006.
 
 ---
 
@@ -1407,6 +1410,10 @@ sier fortsatt at medlemskapsmodellen kommer i migrasjon 005.
 ---
 
 ## 75. Neste steg
+
+> **Merk:** Avsnittet under er skrevet ved planens godkjenning og beskriver oppstarten.
+> Det er beholdt som historikk (§71). Planleggingsfasen er avsluttet, og PR A til PR G
+> er merget (§74.2). **Gjeldende neste steg står i §74.4 og §74.5.**
 
 Når denne planen er godkjent, avsluttes planleggingsfasen som standard arbeidsmodus.
 
