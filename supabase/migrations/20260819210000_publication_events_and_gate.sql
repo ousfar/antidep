@@ -635,7 +635,7 @@ create trigger review_decisions_set_evidence_set_digest
 --   ClaimEvidenceLinks er kontrollert        håndheves (G8, G9)
 --   EvidenceAssessment finnes                håndheves (G10)
 --   ingen blokkerende verifikasjonsfunn åpne håndheves (G5, G6, G7, G9)
---   nødvendig menneskelig review er godkjent håndheves (G11, G12, G14)
+--   nødvendig menneskelig review er godkjent håndheves (G11, G12)
 --   review ikke er utløpt                    delvis håndhevet (G13), delvis utsatt
 --
 -- G13 er samtidighetssikker og bygger ikke på tidsstempler; se avsnitt 5.
@@ -671,7 +671,31 @@ create trigger review_decisions_set_evidence_set_digest
 --   deterministic_fact       alle punkter unntatt evidensvurderingen, som
 --                            migrasjon 004 ikke tillater for typen
 --   evidence_synthesis       alle punkter
---   clinical_recommendation  alle punkter, pluss G14
+--   clinical_recommendation  alle punkter
+--
+-- DATABASE_ARCHITECTURE.md §38 krever at terskelen for en clinical_recommendation
+-- er «minst like streng» som for en evidence_synthesis. Den er nøyaktig like
+-- streng, og det er et bevisst valg framfor en teknisk forskjell som ikke er
+-- definert som policy noe sted.
+--
+-- KNOWLEDGE_MODEL.md §21 skiller mellom «ja» og «ja, eksplisitt» for menneskelig
+-- godkjenning. «Eksplisitt» forstås her som at en navngitt kvalifisert redaktør
+-- uttrykkelig godkjenner den konkrete revisjonen for publisering — ikke som et
+-- krav om en egen temaavgrenset reviewer-tildeling. Modellen gir allerede det
+-- første: en godkjenning peker på en eksakt revisjon, kommer fra et navngitt
+-- menneske med gyldig reviewer-rolle, og kan ikke gis av den som skrev
+-- revisjonen (migrasjon 005).
+--
+-- Scoped reviewer-roller respekteres fortsatt, men det kravet ligger der det
+-- hører hjemme: workflow.enforce_reviewer_qualification() krever at en
+-- tildeling som *er* avgrenset til et klinisk tema dekker påstandens tema. En
+-- tildeling uten scope betyr generell reviewer-kompetanse, ikke utilstrekkelig
+-- godkjenning. Reglene er dermed de samme for alle tre kunnskapstypene, og
+-- kontrollen skjer når beslutningen registreres framfor å gjentas her.
+--
+-- Skulle særskilt spesialist- eller temakompetanse for kliniske anbefalinger bli
+-- ønsket senere, skal det først defineres eksplisitt som policy i de styrende
+-- dokumentene og deretter håndheves — ikke utledes av gaten.
 --
 -- Menneskelig godkjenning kreves også for deterministic_fact i dette steget.
 -- KNOWLEDGE_MODEL.md §21 åpner for at et enkeltdatapunkt fra en autoritativ
@@ -701,18 +725,14 @@ as $$
 declare
   v_claim_id uuid;
   v_knowledge_type knowledge.knowledge_type;
-  v_topic_concept_id uuid;
   v_retired_at timestamptz;
   v_offenders text;
-  v_approved_at timestamptz;
-  v_reviewer_actor_id uuid;
-  v_reviewer_user_id uuid;
   v_latest_decision workflow.review_outcome;
   v_approved_digest text;
 begin
   -- G1: revisjonen finnes.
-  select r.claim_id, r.knowledge_type, c.topic_concept_id, c.retired_at
-    into v_claim_id, v_knowledge_type, v_topic_concept_id, v_retired_at
+  select r.claim_id, r.knowledge_type, c.retired_at
+    into v_claim_id, v_knowledge_type, v_retired_at
   from knowledge.claim_revisions r
   join knowledge.claims c on c.id = r.claim_id
   where r.id = p_claim_revision_id;
@@ -903,8 +923,8 @@ begin
   end if;
 
   -- G11: menneskelig faglig godkjenning finnes.
-  select rd.decision, rd.decided_at, rd.reviewer_actor_id, rd.approved_evidence_set_digest
-    into v_latest_decision, v_approved_at, v_reviewer_actor_id, v_approved_digest
+  select rd.decision, rd.approved_evidence_set_digest
+    into v_latest_decision, v_approved_digest
   from workflow.review_decisions rd
   where rd.claim_revision_id = p_claim_revision_id
     and rd.review_type = 'publication_approval'
@@ -957,44 +977,6 @@ begin
       hint = 'Godkjenningen gjelder et annet evidenssett enn det som er registrert nå, og dekker derfor ikke grunnlaget påstanden ville blitt publisert på. Opprett en ny revisjon med det fullstendige evidenssettet og be om ny godkjenning, eller registrer en ny godkjenning som dekker det utvidede grunnlaget (KNOWLEDGE_MODEL.md §19.2).';
   end if;
 
-  -- G14: kliniske anbefalinger krever eksplisitt navngitt klinisk godkjenning.
-  -- ANTIDEP_CONSTITUTION.md §12 og KNOWLEDGE_MODEL.md §21 skiller mellom «ja» og
-  -- «ja, eksplisitt»: en evidenssyntese krever menneskelig godkjenning, en
-  -- klinisk anbefaling krever i tillegg at godkjenningen er eksplisitt for det
-  -- kliniske området. DATABASE_ARCHITECTURE.md §38 krever at terskelen for en
-  -- clinical_recommendation er minst like streng som for en evidence_synthesis.
-  --
-  -- Konkret lesning: reviewer må ha hatt en reviewer-tildeling som er avgrenset
-  -- til nettopp denne påstandens kliniske tema. En generell reviewer-rolle uten
-  -- scope er nok for en evidenssyntese (migrasjon 005 sin
-  -- kvalifikasjonskontroll), men ikke for en anbefaling — der skal noen ha tatt
-  -- eksplisitt stilling til at denne redaktøren er kvalifisert for dette
-  -- området. Dette er en tolkning av §12, og den er notert som et åpent
-  -- arkitekturspørsmål framfor å bli presentert som gitt.
-  if v_knowledge_type = 'clinical_recommendation' then
-    select a.auth_user_id into v_reviewer_user_id
-    from provenance.actors a
-    where a.id = v_reviewer_actor_id;
-
-    if not exists (
-      select 1
-      from workflow.user_roles ur
-      where ur.user_id = v_reviewer_user_id
-        and ur.role_code = 'reviewer'
-        and ur.scope_id = v_topic_concept_id
-        and ur.created_at <= v_approved_at
-        and ur.valid_from <= v_approved_at
-        and (ur.valid_to is null or ur.valid_to > v_approved_at)
-    ) then
-      raise exception using
-        errcode = 'restrict_violation',
-        message = format(
-          'Klinisk anbefaling %L er ikke godkjent av en redaktør med eksplisitt reviewer-rolle for det kliniske temaet.',
-          p_claim_revision_id
-        ),
-        hint = 'En klinisk anbefaling krever eksplisitt godkjenning fra en navngitt kvalifisert redaktør (ANTIDEP_CONSTITUTION.md §12, KNOWLEDGE_MODEL.md §21). En generell reviewer-tildeling uten scope er ikke tilstrekkelig; tildelingen må være avgrenset til påstandens kliniske tema og ha vært gyldig på godkjenningstidspunktet.';
-    end if;
-  end if;
 end;
 $$;
 

@@ -16,6 +16,12 @@
 -- foran den. Hver blokkering har derfor både en negativ og en positiv assertion,
 -- slik at ingen av dem kan passere fordi gaten avviser alt.
 --
+-- Revieweren i fixturen har en generell reviewer-rolle uten scope. Det er den
+-- normale tildelingen, og den er tilstrekkelig for alle tre kunnskapstypene. At
+-- en tildeling som *er* avgrenset til et klinisk tema må dekke påstandens tema,
+-- håndheves når beslutningen registreres og er testet i
+-- 190_workflow_constraints_test.sql.
+--
 -- Fixturen bruker daterte hendelsestidspunkter bakover i tid, fordi de kallerstyrte
 -- tidspunktene er bundet mot databaseeide created_at og now() er konstant gjennom
 -- transaksjonen. To tidsstempeltriggere slås derfor av mens fixturen bygges, i et
@@ -33,26 +39,20 @@ create temporary table fixture (name text primary key, id uuid not null) on comm
 -- Aktører, brukerkontoer og roller
 -- ---------------------------------------------------------------------------
 insert into auth.users (id, email) values
-  ('bbbbbbbb-0000-0000-0000-000000000001', 'reviewer-global-250@test.invalid'),
-  ('bbbbbbbb-0000-0000-0000-000000000002', 'reviewer-scoped-250@test.invalid'),
+  ('bbbbbbbb-0000-0000-0000-000000000001', 'reviewer-250@test.invalid'),
   ('bbbbbbbb-0000-0000-0000-000000000003', 'verifier-250@test.invalid');
 
 insert into provenance.actors (actor_type, actor_key, display_name, description, auth_user_id)
 values
-  ('human', 'human:reviewer-global-250', 'Reviewer uten scope',
+  ('human', 'human:reviewer-250', 'Reviewer',
    'Kvalifisert redaktør med generell reviewer-rolle.',
    'bbbbbbbb-0000-0000-0000-000000000001'),
-  ('human', 'human:reviewer-scoped-250', 'Reviewer med scope',
-   'Kvalifisert redaktør med reviewer-rolle avgrenset til vektendring.',
-   'bbbbbbbb-0000-0000-0000-000000000002'),
   ('human', 'human:verifier-250', 'Verifikator',
    'Utfører ekstraksjons- og claim-verifikasjoner i testene.',
    'bbbbbbbb-0000-0000-0000-000000000003');
 
 insert into fixture (name, id)
-select 'reviewer_global', id from provenance.actors where actor_key = 'human:reviewer-global-250';
-insert into fixture (name, id)
-select 'reviewer_scoped', id from provenance.actors where actor_key = 'human:reviewer-scoped-250';
+select 'reviewer_global', id from provenance.actors where actor_key = 'human:reviewer-250';
 insert into fixture (name, id)
 select 'verifier', id from provenance.actors where actor_key = 'human:verifier-250';
 insert into fixture (name, id)
@@ -79,10 +79,6 @@ insert into workflow.user_roles
 values
   ('bbbbbbbb-0000-0000-0000-000000000001', 'reviewer', null, now() - interval '1 year',
    (select id from fixture where name = 'verifier'), 'Generell reviewer-rolle.',
-   now() - interval '1 year'),
-  ('bbbbbbbb-0000-0000-0000-000000000002', 'reviewer',
-   (select id from fixture where name = 'topic'), now() - interval '1 year',
-   (select id from fixture where name = 'verifier'), 'Reviewer-rolle for vektendring.',
    now() - interval '1 year');
 alter table workflow.user_roles enable trigger user_roles_set_row_timestamps;
 
@@ -673,12 +669,19 @@ select throws_like(
 );
 
 -- ---------------------------------------------------------------------------
--- Klinisk anbefaling: terskelen skal være minst like streng
+-- Klinisk anbefaling: terskelen er nøyaktig like streng
 --
--- ANTIDEP_CONSTITUTION.md §12 og KNOWLEDGE_MODEL.md §21 skiller mellom «ja» og
--- «ja, eksplisitt». Gaten leser det som at godkjenningen må komme fra en
--- redaktør med reviewer-rolle avgrenset til påstandens kliniske tema. En generell
--- reviewer-rolle er nok for en evidenssyntese, men ikke her.
+-- DATABASE_ARCHITECTURE.md §38 krever «minst like streng», og den er like streng:
+-- en klinisk anbefaling må oppfylle alle de samme punktene som en evidenssyntese.
+-- KNOWLEDGE_MODEL.md §21 sitt «ja, eksplisitt» forstås som at en navngitt
+-- kvalifisert redaktør uttrykkelig godkjenner den konkrete revisjonen — noe
+-- modellen allerede krever — og ikke som et krav om en egen temaavgrenset
+-- reviewer-tildeling.
+--
+-- Scoped reviewer-roller respekteres fortsatt, men det håndheves der det hører
+-- hjemme: workflow.enforce_reviewer_qualification() avviser en scoped reviewer
+-- som godkjenner utenfor sitt tema. Det er testet i
+-- 190_workflow_constraints_test.sql, ikke her.
 -- ---------------------------------------------------------------------------
 with inserted as (
   insert into knowledge.claims
@@ -746,26 +749,77 @@ select r.id, r.created_by_actor_id, 'publication_approval', 'approved',
 from knowledge.claim_revisions r, fixture rg
 where r.id = (select id from fixture where name = 'rec_rev') and rg.name = 'reviewer_global';
 
-select throws_like(
+select lives_ok(
   $$select knowledge.assert_claim_revision_publishable(
       (select id from fixture where name = 'rec_rev'))$$,
-  '%eksplisitt reviewer-rolle for det kliniske temaet%',
-  'en klinisk anbefaling godkjent av en redaktør uten scope for temaet kan ikke publiseres (ANTIDEP_CONSTITUTION.md §12)'
+  'en klinisk anbefaling godkjent av en redaktør med generell reviewer-rolle passerer gaten'
 );
+
+-- En andre anbefaling som mangler nøyaktig én ting: evidensvurderingen.
+with inserted as (
+  insert into knowledge.claims
+    (knowledge_type, topic_concept_id, subject_drug_id, created_by_actor_id)
+  select 'clinical_recommendation', t.id, d.id, a.id
+  from fixture t, fixture d, fixture a
+  where t.name = 'topic' and d.name = 'drug' and a.name = 'synthesis_actor'
+  returning id
+)
+insert into fixture (name, id) select 'rec_claim_uten_vurdering', id from inserted;
+
+with inserted as (
+  insert into knowledge.claim_revisions (
+    claim_id, revision_number, knowledge_type, subject_drug_id,
+    statement, scope, comparator_kind, uncertainty_summary, created_by_actor_id
+  )
+  select c.id, 1, c.knowledge_type, c.subject_drug_id,
+         'Klinisk testanbefaling uten evidensvurdering.',
+         'Gjelder bare testene i denne filen.', 'none',
+         'Testusikkerhet.', c.created_by_actor_id
+  from knowledge.claims c
+  where c.id = (select id from fixture where name = 'rec_claim_uten_vurdering')
+  returning id
+)
+insert into fixture (name, id) select 'rec_rev_uten_vurdering', id from inserted;
+
+alter table knowledge.claim_evidence_links disable trigger claim_evidence_links_set_created_at;
+insert into knowledge.claim_evidence_links
+  (claim_revision_id, evidence_item_id, relationship_type, directness,
+   relevance_note, created_by_actor_id, created_at)
+select r.id, e.id, 'supports', 'direct', 'Grunnlaget anbefalingen hviler på.',
+       (select id from fixture where name = 'synthesis_actor'), now() - interval '30 days'
+from fixture r, fixture e
+where r.name = 'rec_rev_uten_vurdering' and e.name = 'evidence_b';
+alter table knowledge.claim_evidence_links enable trigger claim_evidence_links_set_created_at;
+
+insert into workflow.claim_verifications
+  (claim_revision_id, verified_revision_creator_actor_id, verifier_actor_id, outcome,
+   source_access, source_support, population_match, comparator_match, timeframe_match,
+   direction_and_magnitude, qualifiers_complete, contradictory_evidence_represented,
+   rationale, verified_at)
+select r.id, r.created_by_actor_id, v.id, 'verified', 'original_source',
+       'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok',
+       'Anbefalingen kontrollert mot grunnlaget.', now() - interval '20 days'
+from knowledge.claim_revisions r, fixture v
+where r.id = (select id from fixture where name = 'rec_rev_uten_vurdering') and v.name = 'verifier';
 
 insert into workflow.review_decisions
   (claim_revision_id, claim_revision_creator_actor_id, review_type, decision,
    rationale, reviewer_actor_id, reviewer_actor_type, decided_at)
 select r.id, r.created_by_actor_id, 'publication_approval', 'approved',
-       'Godkjent av redaktør med reviewer-rolle for vektendring.',
-       rs.id, 'human', now() - interval '9 days'
-from knowledge.claim_revisions r, fixture rs
-where r.id = (select id from fixture where name = 'rec_rev') and rs.name = 'reviewer_scoped';
+       'Godkjent av redaktør med generell reviewer-rolle.',
+       rg.id, 'human', now() - interval '10 days'
+from knowledge.claim_revisions r, fixture rg
+where r.id = (select id from fixture where name = 'rec_rev_uten_vurdering')
+  and rg.name = 'reviewer_global';
 
-select lives_ok(
+-- ... og en anbefaling er ikke unntatt noen av de øvrige kravene. Uten denne
+-- assertionen kunne «like streng» vært en påstand uten dekning: en gate som
+-- slapp gjennom anbefalinger uten evidensvurdering ville passert testen over.
+select throws_like(
   $$select knowledge.assert_claim_revision_publishable(
-      (select id from fixture where name = 'rec_rev'))$$,
-  'en klinisk anbefaling godkjent av en redaktør med scope for temaet passerer gaten'
+      (select id from fixture where name = 'rec_rev_uten_vurdering'))$$,
+  '%mangler evidensvurdering%',
+  'en klinisk anbefaling må oppfylle de samme kravene som en evidenssyntese'
 );
 
 -- En tilbaketrukket påstand kan ikke publiseres. Testes til slutt, fordi den
