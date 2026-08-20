@@ -11,7 +11,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(43);
+select plan(46);
 
 -- ---------------------------------------------------------------------------
 -- Tabellen og §39 sitt minimumsfeltsett
@@ -220,6 +220,26 @@ select has_function(
   'publiseringsgaten finnes som en egen funksjon'
 );
 select has_function(
+  'knowledge', 'claim_evidence_set_digest', array['uuid'],
+  'avtrykket av evidenssettet finnes som en egen funksjon'
+);
+-- Avtrykket må skille et tomt sett fra en manglende verdi, ellers ville en
+-- revisjon uten lenker og en revisjon ingen har beregnet avtrykk for sett like ut.
+select isnt(
+  (select knowledge.claim_evidence_set_digest('00000000-0000-0000-0000-0000000000ff')),
+  null,
+  'et tomt evidenssett har sitt eget avtrykk og kollapser ikke til NULL'
+);
+-- ... og avtrykket må faktisk endre seg når settet gjør det. Uten denne
+-- assertionen kunne funksjonen returnert en konstant uten at noen test sa fra.
+select isnt(
+  (select knowledge.claim_evidence_set_digest(r.id)
+   from knowledge.claim_revisions r
+   order by r.id limit 1),
+  (select knowledge.claim_evidence_set_digest('00000000-0000-0000-0000-0000000000ff')),
+  'en revisjon med evidenslenker får et annet avtrykk enn et tomt sett'
+);
+select has_function(
   'knowledge', 'assert_publisher_authorized', array['uuid', 'uuid'],
   'kontrollen av publiseringsretten finnes som en egen funksjon'
 );
@@ -274,7 +294,8 @@ select is_empty(
                  ('knowledge.publish_claim_revision(uuid, uuid, text)'),
                  ('knowledge.withdraw_claim_publication(uuid, uuid, text)'),
                  ('knowledge.rollback_claim_publication(uuid, uuid, uuid, text)'),
-                 ('knowledge.reject_evidence_link_after_publication()'))
+                 ('knowledge.reject_evidence_link_after_publication()'),
+                 ('knowledge.claim_evidence_set_digest(uuid)'))
            as f(function_name)
     where not exists (
       select 1
@@ -297,7 +318,8 @@ select is_empty(
                  ('knowledge.publish_claim_revision(uuid, uuid, text)'),
                  ('knowledge.withdraw_claim_publication(uuid, uuid, text)'),
                  ('knowledge.rollback_claim_publication(uuid, uuid, uuid, text)'),
-                 ('knowledge.reject_evidence_link_after_publication()'))
+                 ('knowledge.reject_evidence_link_after_publication()'),
+                 ('knowledge.claim_evidence_set_digest(uuid)'))
            as f(function_name)
     where coalesce(obj_description(f.function_name::regprocedure, 'pg_proc'), '') = ''
   $$,

@@ -25,7 +25,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(23);
+select plan(29);
 
 create temporary table fixture (name text primary key, id uuid not null) on commit drop;
 
@@ -490,7 +490,7 @@ where r.name = 'fact_rev' and e.name = 'evidence_a';
 select throws_like(
   $$select knowledge.assert_claim_revision_publishable(
       (select id from fixture where name = 'fact_rev'))$$,
-  '%registrert etter godkjenningen%',
+  '%er endret etter godkjenningen%',
   'en revisjon som har fått nytt evidensgrunnlag etter godkjenningen kan ikke publiseres uten nytt review (MVP_IMPLEMENTATION_PLAN.md §42)'
 );
 
@@ -507,6 +507,169 @@ select lives_ok(
   $$select knowledge.assert_claim_revision_publishable(
       (select id from fixture where name = 'fact_rev'))$$,
   'en ny godkjenning som dekker det utvidede grunnlaget gjør revisjonen publiserbar igjen'
+);
+
+-- ---------------------------------------------------------------------------
+-- Regresjonstest: samtidighet kan ikke skjule en endring i evidensgrunnlaget
+--
+-- Rapportert på PR #15. Den opprinnelige G13 sammenlignet lenkens created_at med
+-- godkjenningens decided_at. Den regelen er ikke samtidighetssikker: now() er
+-- transaksjonens starttidspunkt, ikke committidspunktet, så en transaksjon som
+-- registrerer en lenke kan starte før godkjenningen, commite etter den, og
+-- likevel bære en created_at som ligger foran decided_at. Reviewer kunne umulig
+-- ha sett lenken, men tidsregelen ville sagt at godkjenningen dekker den.
+--
+-- Testen gjenskaper nøyaktig den tilstanden kappløpet etterlater — en lenke som
+-- kom til etter godkjenningen, men som bærer en tidligere created_at — og
+-- kontrollerer at gaten nekter likevel. Assertionen under viser først at den
+-- gamle regelen ikke ville funnet noe å reagere på, slik at testen ikke kan
+-- passere av feil grunn.
+--
+-- Tilstanden konstrueres uten to sesjoner, fordi den nye regelen ikke avhenger av
+-- rekkefølge: avtrykket av evidenssettet avviker uansett hvordan radene ble til.
+-- Det er nettopp derfor rettelsen er en avtrykkssammenligning og ikke en
+-- strammere tidsregel.
+-- ---------------------------------------------------------------------------
+with inserted as (
+  insert into knowledge.claims
+    (knowledge_type, topic_concept_id, subject_drug_id, created_by_actor_id)
+  select 'deterministic_fact', t.id, d.id, a.id
+  from fixture t, fixture d, fixture a
+  where t.name = 'topic' and d.name = 'drug' and a.name = 'synthesis_actor'
+  returning id
+)
+insert into fixture (name, id) select 'race_claim', id from inserted;
+
+with inserted as (
+  insert into knowledge.claim_revisions (
+    claim_id, revision_number, knowledge_type, subject_drug_id,
+    statement, scope, comparator_kind, created_by_actor_id
+  )
+  select c.id, 1, c.knowledge_type, c.subject_drug_id,
+         'Deterministisk testfaktum for samtidighetsregresjonen.',
+         'Gjelder bare testene i denne filen.', 'none', c.created_by_actor_id
+  from knowledge.claims c
+  where c.id = (select id from fixture where name = 'race_claim')
+  returning id
+)
+insert into fixture (name, id) select 'race_rev', id from inserted;
+
+-- Lenke A: den reviewer faktisk så.
+alter table knowledge.claim_evidence_links disable trigger claim_evidence_links_set_created_at;
+insert into knowledge.claim_evidence_links
+  (claim_revision_id, evidence_item_id, relationship_type, directness,
+   relevance_note, created_by_actor_id, created_at)
+select r.id, e.id, 'supports', 'direct', 'Grunnlaget reviewer så.',
+       (select id from fixture where name = 'synthesis_actor'), now() - interval '30 days'
+from fixture r, fixture e
+where r.name = 'race_rev' and e.name = 'evidence_b';
+alter table knowledge.claim_evidence_links enable trigger claim_evidence_links_set_created_at;
+
+insert into workflow.claim_verifications
+  (claim_revision_id, verified_revision_creator_actor_id, verifier_actor_id, outcome,
+   source_access, source_support, population_match, comparator_match, timeframe_match,
+   direction_and_magnitude, qualifiers_complete, contradictory_evidence_represented,
+   rationale, verified_at)
+select r.id, r.created_by_actor_id, v.id, 'verified', 'original_source',
+       'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok',
+       'Faktumet kontrollert mot kilden.', now() - interval '20 days'
+from knowledge.claim_revisions r, fixture v
+where r.id = (select id from fixture where name = 'race_rev') and v.name = 'verifier';
+
+insert into workflow.review_decisions
+  (claim_revision_id, claim_revision_creator_actor_id, review_type, decision,
+   rationale, reviewer_actor_id, reviewer_actor_type, decided_at)
+select r.id, r.created_by_actor_id, 'publication_approval', 'approved',
+       'Godkjent på grunnlag av lenke A.', rg.id, 'human', now() - interval '10 days'
+from knowledge.claim_revisions r, fixture rg
+where r.id = (select id from fixture where name = 'race_rev') and rg.name = 'reviewer_global';
+
+select lives_ok(
+  $$select knowledge.assert_claim_revision_publishable(
+      (select id from fixture where name = 'race_rev'))$$,
+  'revisjonen er publiserbar på det grunnlaget godkjenningen faktisk gjaldt'
+);
+
+-- Lenke B: kom til etter godkjenningen, men bærer et tidligere tidspunkt —
+-- nøyaktig avtrykket av en transaksjon som startet før og commitet etter.
+alter table knowledge.claim_evidence_links disable trigger claim_evidence_links_set_created_at;
+insert into knowledge.claim_evidence_links
+  (claim_revision_id, evidence_item_id, relationship_type, directness,
+   relevance_note, created_by_actor_id, created_at)
+select r.id, e.id, 'supports', 'direct', 'Grunnlag fra kappløpet.',
+       (select id from fixture where name = 'synthesis_actor'), now() - interval '20 days'
+from fixture r, fixture e
+where r.name = 'race_rev' and e.name = 'evidence_a';
+alter table knowledge.claim_evidence_links enable trigger claim_evidence_links_set_created_at;
+
+-- Kontroll av at testen tester det den påstår: den gamle tidsregelen ville ikke
+-- funnet en eneste lenke å reagere på i denne tilstanden.
+select is(
+  (select count(*)
+   from knowledge.claim_evidence_links l
+   join workflow.review_decisions rd on rd.claim_revision_id = l.claim_revision_id
+   where l.claim_revision_id = (select id from fixture where name = 'race_rev')
+     and rd.review_type = 'publication_approval'
+     and l.created_at > rd.decided_at),
+  0::bigint,
+  'den opprinnelige tidsregelen ville ikke funnet noen lenke registrert etter godkjenningen'
+);
+
+select throws_like(
+  $$select knowledge.assert_claim_revision_publishable(
+      (select id from fixture where name = 'race_rev'))$$,
+  '%er endret etter godkjenningen%',
+  'gaten nekter likevel, fordi den sammenligner avtrykket av evidenssettet og ikke tidspunkter'
+);
+
+-- ... og en ny godkjenning som dekker det utvidede settet åpner den igjen.
+insert into workflow.review_decisions
+  (claim_revision_id, claim_revision_creator_actor_id, review_type, decision,
+   rationale, reviewer_actor_id, reviewer_actor_type, decided_at)
+select r.id, r.created_by_actor_id, 'publication_approval', 'approved',
+       'Det utvidede grunnlaget er gjennomgått og godkjent.',
+       rg.id, 'human', now()
+from knowledge.claim_revisions r, fixture rg
+where r.id = (select id from fixture where name = 'race_rev') and rg.name = 'reviewer_global';
+
+select lives_ok(
+  $$select knowledge.assert_claim_revision_publishable(
+      (select id from fixture where name = 'race_rev'))$$,
+  'en ny godkjenning som dekker det utvidede grunnlaget gjør revisjonen publiserbar igjen'
+);
+
+-- Avtrykket dekker lenkenes identitet, ikke bare antallet. Regelen betyr noe
+-- nettopp i den unntaksvise vedlikeholdsveien DATABASE_ARCHITECTURE.md §36 åpner
+-- for: en feilopprettet rad kan slettes fysisk, og da ville en ren telling holdt
+-- seg uendret mens settet ble et annet. Testen sletter én lenke og registrerer en
+-- ny mot det samme evidensfunnet, slik at antallet er identisk og id-settet ikke
+-- er det. Append-only-vernet slås av i det smalest mulige vinduet, slik en reell
+-- vedlikeholdsoperasjon ville gjort det.
+alter table knowledge.claim_evidence_links disable trigger claim_evidence_links_reject_mutation;
+delete from knowledge.claim_evidence_links
+where claim_revision_id = (select id from fixture where name = 'race_rev')
+  and relevance_note = 'Grunnlag fra kappløpet.';
+alter table knowledge.claim_evidence_links enable trigger claim_evidence_links_reject_mutation;
+
+insert into knowledge.claim_evidence_links
+  (claim_revision_id, evidence_item_id, relationship_type, directness,
+   relevance_note, created_by_actor_id)
+select r.id, e.id, 'supports', 'direct', 'Erstatningslenke med ny identitet.',
+       (select id from fixture where name = 'synthesis_actor')
+from fixture r, fixture e
+where r.name = 'race_rev' and e.name = 'evidence_a';
+
+select is(
+  (select count(*) from knowledge.claim_evidence_links l
+   where l.claim_revision_id = (select id from fixture where name = 'race_rev')),
+  2::bigint,
+  'antallet evidenslenker er uendret etter utskiftingen'
+);
+select throws_like(
+  $$select knowledge.assert_claim_revision_publishable(
+      (select id from fixture where name = 'race_rev'))$$,
+  '%er endret etter godkjenningen%',
+  'avtrykket fanger et utskiftet evidenssett selv når antallet er det samme'
 );
 
 -- ---------------------------------------------------------------------------

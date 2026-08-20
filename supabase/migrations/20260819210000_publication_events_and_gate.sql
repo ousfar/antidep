@@ -147,20 +147,26 @@ comment on type knowledge.publication_action is
 -- Migrasjon 005 dokumenterte gjelden og skrev at den hører hjemme i migrasjonen
 -- som rører tabellene neste gang.
 --
--- Denne migrasjonen er ikke bare den neste som rører dem; den er den første som
--- *leser* dem. Publiseringsgaten under kontrollerer at evidensgrunnlaget ikke er
--- utvidet etter at revisjonen ble faglig godkjent, og den kontrollen
--- sammenligner knowledge.claim_evidence_links.created_at med
--- workflow.review_decisions.decided_at. Med en ren default kunne den som
--- registrerer en lenke oppgi created_at selv og dermed datere lenken til før
--- godkjenningen. Gaten ville da ikke vært en kontroll, men et tall den
--- kontrollerte parten selv velger.
+-- Denne migrasjonen rører dem, og gjelden lukkes her. Regelen er den samme som i
+-- workflow: en default gjelder bare når kolonnen utelates, så uten triggeren er
+-- created_at en verdi kalleren kan oppgi selv. På rader som ellers ikke kan
+-- endres, er registreringstiden det eneste festepunktet mot uavhengig tid, og en
+-- oppgitt verdi ville gjort «når ble dette registrert?» til en påstand fra den
+-- som skriver framfor en observasjon (ANTIDEP_CONSTITUTION.md §14).
+-- knowledge.evidence_assessments.assessed_at bindes mot den, slik verified_at og
+-- decided_at er bundet i workflow.
 --
--- Regelen legges på alle fire append-only tabellene i knowledge, ikke bare på
--- den gaten leser. En invariant som holder for én tabell og ikke for
--- søsknene er en invitasjon til å lese feil tidspunkt neste gang, og
--- vaktposten i 080_knowledge_structure_test.sql er formulert uttømmende over
--- schemaet slik at den fanger nye tabeller automatisk.
+-- Hva regelen derimot ikke gjør, og ikke skal se ut som om den gjør:
+-- publiseringsgaten bygger ikke sin kontroll av evidensgrunnlaget på en
+-- sammenligning av disse tidspunktene. En slik sammenligning ville ikke vært
+-- samtidighetssikker uansett hvem som eier verdien, fordi now() er
+-- transaksjonens starttidspunkt og ikke committidspunktet. Gaten bruker et
+-- avtrykk av selve settet; se avsnitt 5.
+--
+-- Regelen legges på alle fire append-only tabellene i knowledge. En invariant som
+-- holder for én tabell og ikke for søsknene er en invitasjon til å lese feil
+-- tidspunkt neste gang, og vaktposten i 080_knowledge_structure_test.sql er
+-- formulert uttømmende over schemaet slik at den fanger nye tabeller automatisk.
 -- ----------------------------------------------------------------------------
 create trigger evidence_items_set_created_at
   before insert on knowledge.evidence_items
@@ -474,7 +480,149 @@ create trigger claim_evidence_links_reject_after_publication
   for each row execute function knowledge.reject_evidence_link_after_publication();
 
 -- ----------------------------------------------------------------------------
--- 5. Publiseringsgaten (DATABASE_ARCHITECTURE.md §38, §58)
+-- 5. Godkjenningen bindes til det evidenssettet den faktisk gjaldt
+--    (KNOWLEDGE_MODEL.md §19.2, ANTIDEP_CONSTITUTION.md §12,
+--     DATABASE_ARCHITECTURE.md §38, §61)
+--
+-- Kravet er at en publisering ikke skal kunne hvile på et annet evidensgrunnlag
+-- enn det godkjenningen ble gitt for (MVP_IMPLEMENTATION_PLAN.md §42: «review av
+-- en revisjon som senere er endret uten nytt review»).
+--
+-- Hvorfor dette ikke kan løses med tidsstempler:
+--
+--   Den nærliggende regelen — «ingen evidenslenke registrert etter
+--   godkjenningstidspunktet» — er ikke samtidighetssikker. now() er
+--   transaksjonens starttidspunkt, ikke committidspunktet. En transaksjon som
+--   registrerer en lenke kan derfor starte før godkjenningen, commite etter den,
+--   og likevel bære en created_at som ligger foran decided_at. Reviewer kan
+--   umulig ha sett lenken, men en tidssammenligning ville sagt at
+--   godkjenningen dekker den. clock_timestamp() hjelper ikke: også den måler når
+--   raden ble skrevet, ikke når den ble synlig for andre. Det er commitrekkefølgen
+--   som avgjør hva reviewer kunne se, og den er ikke lesbar fra radene.
+--
+-- Løsningen er derfor ikke en tidsregel, men et avtrykk av selve settet.
+-- Godkjenningen bærer et fingeravtrykk av evidenssettet slik det var da
+-- beslutningen ble registrert, og publiseringsgaten beregner avtrykket på nytt
+-- fra det settet som faktisk finnes ved publisering. Avviker de, nektes
+-- publisering — uansett hvilken rekkefølge transaksjonene startet, commitet eller
+-- ble datert i. Regelen er dermed uavhengig av tid, og det er hele poenget.
+--
+-- Publisering og lenkeregistrering serialiseres i tillegg av radlåsen på
+-- revisjonen (avsnitt 4 og 8), slik at en lenke ikke kan commite i vinduet mellom
+-- at gaten beregner avtrykket og at publiseringen commiter.
+--
+-- Det som ikke lukkes her, og som ikke skal se ut som om det er lukket: en lenke
+-- som commiter mellom at reviewer leste skjermbildet og at beslutningen ble
+-- skrevet, havner i avtrykket. Databasen kan ikke vite hva reviewer faktisk så —
+-- bare hva som var registrert da beslutningen ble lagret. Den siste luken lukkes
+-- når admin-flyten kan oppgi avtrykket den viste reviewer, og kolonnen er
+-- utformet for å kunne ta imot det: den er en verdi om beslutningen, ikke en
+-- avledning av nåtilstanden.
+-- ----------------------------------------------------------------------------
+create function knowledge.claim_evidence_set_digest(p_claim_revision_id uuid)
+  returns text
+  language sql
+  stable
+  set search_path = ''
+as $$
+  -- Samme lengdeprefiksede kanonisering og versjonerte prefiks som
+  -- content_hash i migrasjon 003 og 004: «lengde:verdi», og «~» skiller NULL fra
+  -- tom streng. Sorteringen på id gjør avtrykket uavhengig av innsettingsrekkefølge.
+  --
+  -- Avtrykket dekker lenkenes identitet og ikke innholdet deres. Lenkene er
+  -- append-only og uforanderlige, så et endret sett er alltid et endret sett av
+  -- id-er. En ren telling ville dekket det samme så lenge lenker bare kan komme
+  -- til, men ikke overlevd den unntaksvise vedlikeholdsveien
+  -- DATABASE_ARCHITECTURE.md §36 åpner for, der en feilopprettet rad slettes
+  -- fysisk: da ville sletting pluss innsetting holdt tellingen uendret og endret
+  -- settet.
+  select 'sha256-v1:' || encode(
+    sha256(convert_to(
+      coalesce(
+        (select string_agg('|' || length(l.id::text)::text || ':' || l.id::text,
+                           '' order by l.id::text)
+         from knowledge.claim_evidence_links l
+         where l.claim_revision_id = p_claim_revision_id),
+        '|~:'
+      ),
+      'UTF8'
+    )),
+    'hex'
+  );
+$$;
+
+comment on function knowledge.claim_evidence_set_digest(uuid) is
+  'Fingeravtrykk av evidenssettet til én påstandsrevisjon. Brukes til å binde en godkjenning til det grunnlaget den ble gitt for, slik at publiseringsgaten kan oppdage at settet er endret uten å måtte sammenligne tidsstempler — en sammenligning som ikke er samtidighetssikker, fordi now() er transaksjonens starttidspunkt og ikke committidspunktet. Et tomt sett har sitt eget avtrykk og kan ikke forveksles med en manglende verdi.';
+
+revoke execute on function knowledge.claim_evidence_set_digest(uuid) from public;
+
+-- Kolonnen ligger på beslutningen fordi det er beslutningen som gjelder et
+-- bestemt grunnlag. En avledning fra nåtilstanden ville ikke kunnet svare på hva
+-- reviewer sa ja til.
+alter table workflow.review_decisions
+  add column approved_evidence_set_digest text;
+
+comment on column workflow.review_decisions.approved_evidence_set_digest is
+  'Fingeravtrykk av evidenssettet til revisjonen slik det var registrert da beslutningen ble lagret. Publiseringsgaten sammenligner det med settet ved publisering og nekter dersom grunnlaget er endret (KNOWLEDGE_MODEL.md §19.2). Erstatter en tidssammenligning, som ikke er samtidighetssikker. Bare på publiseringsgodkjenninger; en tilbaketrekking av en ekstraksjon gjelder ikke et lenkesett.';
+
+alter table workflow.review_decisions
+  add constraint review_decisions_evidence_digest_pairing_check
+  check ((approved_evidence_set_digest is not null) = (review_type = 'publication_approval'));
+
+alter table workflow.review_decisions
+  add constraint review_decisions_evidence_digest_format_check
+  check (approved_evidence_set_digest is null
+         or approved_evidence_set_digest ~ '^sha256-v[0-9]+:[0-9a-f]{64}$');
+
+-- Avtrykket eies av databasen, som created_at. Var det kallerstyrt, kunne den som
+-- registrerer godkjenningen oppgi avtrykket av et annet sett enn det som fantes,
+-- og gaten ville sammenlignet mot et tall den kontrollerte parten selv valgte.
+--
+-- SECURITY DEFINER av samme grunn som kvalifikasjonskontrollen ved siden av:
+-- knowledge.claim_evidence_links har RLS og default deny, og avtrykket må kunne
+-- beregnes uavhengig av hvem som skriver beslutningen. Funksjonen har tomt
+-- search_path, schemakvalifiserte navn, er ikke kjørbar for PUBLIC, og skriver
+-- bare til raden som settes inn (DATABASE_ARCHITECTURE.md §50).
+create function workflow.set_review_evidence_set_digest()
+  returns trigger
+  language plpgsql
+  security definer
+  set search_path = ''
+as $$
+begin
+  if new.review_type = 'publication_approval' then
+    -- Radlås på revisjonen, av samme grunn som forseglingstriggerne i migrasjon
+    -- 004 og avsnitt 4: uten den kunne en lenke commite mellom beregningen og
+    -- commit, og avtrykket ville beskrevet et sett som aldri fantes samtidig.
+    perform 1
+    from knowledge.claim_revisions r
+    where r.id = new.claim_revision_id
+    for update;
+
+    new.approved_evidence_set_digest :=
+      knowledge.claim_evidence_set_digest(new.claim_revision_id);
+  else
+    new.approved_evidence_set_digest := null;
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function workflow.set_review_evidence_set_digest() is
+  'Gir databasen eierskap til fingeravtrykket av evidenssettet en publiseringsgodkjenning gjelder, og låser revisjonsraden mens det beregnes slik at settet ikke kan endres i vinduet. SECURITY DEFINER fordi evidenslenkene ligger bak RLS med default deny; funksjonen leser bare og skriver bare til raden som settes inn.';
+
+revoke execute on function workflow.set_review_evidence_set_digest() from public;
+
+-- Navnet er valgt slik at triggeren fyrer etter kvalifikasjonskontrollen og før
+-- catalog.set_created_at(); rekkefølgen er alfabetisk, og ingen av dem avhenger
+-- av de andres resultat.
+create trigger review_decisions_set_evidence_set_digest
+  before insert on workflow.review_decisions
+  for each row execute function workflow.set_review_evidence_set_digest();
+
+-- ----------------------------------------------------------------------------
+-- 6. Publiseringsgaten (DATABASE_ARCHITECTURE.md §38, §58)
 --
 -- §38 lister eksplisitt hva operasjonen skal kontrollere for en
 -- evidence_synthesis. Hvert punkt er tatt stilling til, og ingen er stille
@@ -490,6 +638,8 @@ create trigger claim_evidence_links_reject_after_publication
 --   nødvendig menneskelig review er godkjent håndheves (G11, G12, G14)
 --   review ikke er utløpt                    delvis håndhevet (G13), delvis utsatt
 --
+-- G13 er samtidighetssikker og bygger ikke på tidsstempler; se avsnitt 5.
+--
 -- «Immutable og komplett»: immutabiliteten er strukturell og trenger ingen
 -- kontroll her — knowledge.claim_revisions er append-only, og en revisjon kan
 -- ikke endres etter innsetting. Kompletthet håndheves av NOT NULL og CHECK i
@@ -501,9 +651,11 @@ create trigger claim_evidence_links_reject_after_publication
 --
 -- «Review ikke er utløpt» er delt i to. Den delen som kan kontrolleres nå, er at
 -- godkjenningen fortsatt er den gjeldende beslutningen (G12) og at
--- evidensgrunnlaget ikke er endret etter at den ble gitt (G13) — som er den
--- kritiske negative testen i MVP_IMPLEMENTATION_PLAN.md §42 om «review av en
--- revisjon som senere er endret uten nytt review». Den delen som er utsatt, er
+-- evidensgrunnlaget er det samme som godkjenningen ble gitt for (G13) — som er
+-- den kritiske negative testen i MVP_IMPLEMENTATION_PLAN.md §42 om «review av en
+-- revisjon som senere er endret uten nytt review». G13 sammenligner avtrykk og
+-- ikke tidspunkter, nettopp fordi en tidssammenligning ikke er
+-- samtidighetssikker (avsnitt 5). Den delen som er utsatt, er
 -- tidsbasert utløp: KNOWLEDGE_MODEL.md §20.5 og DATABASE_ARCHITECTURE.md §7.3
 -- forutsetter et review_due_at, og §15 nevner workflow.review_requirements.
 -- Ingen av delene finnes, og en frist kan ikke utledes av dataene som finnes:
@@ -556,6 +708,7 @@ declare
   v_reviewer_actor_id uuid;
   v_reviewer_user_id uuid;
   v_latest_decision workflow.review_outcome;
+  v_approved_digest text;
 begin
   -- G1: revisjonen finnes.
   select r.claim_id, r.knowledge_type, c.topic_concept_id, c.retired_at
@@ -750,8 +903,8 @@ begin
   end if;
 
   -- G11: menneskelig faglig godkjenning finnes.
-  select rd.decision, rd.decided_at, rd.reviewer_actor_id
-    into v_latest_decision, v_approved_at, v_reviewer_actor_id
+  select rd.decision, rd.decided_at, rd.reviewer_actor_id, rd.approved_evidence_set_digest
+    into v_latest_decision, v_approved_at, v_reviewer_actor_id, v_approved_digest
   from workflow.review_decisions rd
   where rd.claim_revision_id = p_claim_revision_id
     and rd.review_type = 'publication_approval'
@@ -779,32 +932,29 @@ begin
       hint = 'En senere beslutning gjelder foran en tidligere. Rett revisjonen slik reviewer ba om, i en ny revisjon, og be om ny godkjenning. Både godkjenningen og omgjøringen bevares (DATABASE_ARCHITECTURE.md §31).';
   end if;
 
-  -- G13: evidensgrunnlaget er ikke utvidet etter godkjenningen.
+  -- G13: evidensgrunnlaget er det samme som godkjenningen ble gitt for.
   -- MVP_IMPLEMENTATION_PLAN.md §42: systemet skal nekte «review av en revisjon
   -- som senere er endret uten nytt review». Selve revisjonsraden kan ikke endres
   -- — den er append-only — men betydningen av en revisjon omfatter
-  -- evidensgrunnlaget den hviler på (KNOWLEDGE_MODEL.md §19.2). En lenke lagt
-  -- til etter at reviewer sa ja, er nettopp en endring reviewer ikke har sett.
+  -- evidensgrunnlaget den hviler på (KNOWLEDGE_MODEL.md §19.2). Et grunnlag som
+  -- er endret etter at reviewer sa ja, er nettopp en endring reviewer ikke har
+  -- sett.
   --
-  -- Sammenligningen er mellom lenkens databaseeide registreringstid og
-  -- beslutningens hendelsestidspunkt. Retningen er bevisst konservativ:
-  -- decided_at kan ligge før beslutningsradens egen created_at, og da regnes
-  -- vinduet fra det tidligste av dem — altså fra da reviewer faktisk vurderte
-  -- revisjonen, ikke fra da beslutningen ble skrevet inn.
-  select string_agg(l.id::text, ', ' order by l.id::text)
-    into v_offenders
-  from knowledge.claim_evidence_links l
-  where l.claim_revision_id = p_claim_revision_id
-    and l.created_at > v_approved_at;
-
-  if v_offenders is not null then
+  -- Kontrollen sammenligner avtrykk, ikke tidspunkter. Begrunnelsen står i
+  -- avsnitt 5: en tidssammenligning er ikke samtidighetssikker, fordi now() er
+  -- transaksjonens starttidspunkt og ikke committidspunktet, og en lenke derfor
+  -- kan bære en created_at foran godkjenningen selv om den ble synlig etter den.
+  -- Avtrykket er uavhengig av rekkefølge: er settet et annet nå enn da
+  -- beslutningen ble lagret, avvises publiseringen.
+  if knowledge.claim_evidence_set_digest(p_claim_revision_id)
+     is distinct from v_approved_digest then
     raise exception using
       errcode = 'restrict_violation',
       message = format(
-        'Evidenslenker registrert etter godkjenningen av revisjon %L: %s.',
-        p_claim_revision_id, v_offenders
+        'Evidensgrunnlaget for revisjon %L er endret etter godkjenningen.',
+        p_claim_revision_id
       ),
-      hint = 'Evidensgrunnlaget er endret etter at revisjonen ble godkjent, og godkjenningen gjelder derfor et annet grunnlag enn det som står registrert nå. Opprett en ny revisjon med det fullstendige evidenssettet og be om ny godkjenning (KNOWLEDGE_MODEL.md §19.2).';
+      hint = 'Godkjenningen gjelder et annet evidenssett enn det som er registrert nå, og dekker derfor ikke grunnlaget påstanden ville blitt publisert på. Opprett en ny revisjon med det fullstendige evidenssettet og be om ny godkjenning, eller registrer en ny godkjenning som dekker det utvidede grunnlaget (KNOWLEDGE_MODEL.md §19.2).';
   end if;
 
   -- G14: kliniske anbefalinger krever eksplisitt navngitt klinisk godkjenning.
@@ -854,7 +1004,7 @@ comment on function knowledge.assert_claim_revision_publishable(uuid) is
 revoke execute on function knowledge.assert_claim_revision_publishable(uuid) from public;
 
 -- ----------------------------------------------------------------------------
--- 6. Hvem får publisere (DATABASE_ARCHITECTURE.md §45-§46, §50,
+-- 7. Hvem får publisere (DATABASE_ARCHITECTURE.md §45-§46, §50,
 --    MVP_IMPLEMENTATION_PLAN.md §16, §48, §49)
 --
 -- publisher er rollen som publiserer; reviewer er rollen som godkjenner. De er
@@ -955,7 +1105,7 @@ comment on function knowledge.assert_publisher_authorized(uuid, uuid) is
 revoke execute on function knowledge.assert_publisher_authorized(uuid, uuid) from public;
 
 -- ----------------------------------------------------------------------------
--- 7. De kontrollerte publiseringsoperasjonene
+-- 8. De kontrollerte publiseringsoperasjonene
 --    (DATABASE_ARCHITECTURE.md §38, §40, §50, §61,
 --     MVP_IMPLEMENTATION_PLAN.md §23, §48)
 --
@@ -1318,7 +1468,7 @@ comment on function knowledge.rollback_claim_publication(uuid, uuid, uuid, text)
 revoke execute on function knowledge.rollback_claim_publication(uuid, uuid, uuid, text) from public;
 
 -- ----------------------------------------------------------------------------
--- 8. RLS og grants (DATABASE_ARCHITECTURE.md §5, §48, §49, §50,
+-- 9. RLS og grants (DATABASE_ARCHITECTURE.md §5, §48, §49, §50,
 --    MVP_IMPLEMENTATION_PLAN.md §47-§49)
 --
 -- RLS aktiveres på den nye tabellen og er default deny.
@@ -1368,7 +1518,7 @@ revoke all privileges on all tables in schema knowledge
   from anon, authenticated, service_role;
 
 -- ============================================================================
--- 9. Ingen seed, og hvorfor
+-- 10. Ingen seed, og hvorfor
 --    (ANTIDEP_CONSTITUTION.md §11, §12, MVP_IMPLEMENTATION_PLAN.md §29, §42)
 --
 -- Migrasjonen registrerer ingen publiseringshendelse og flytter ingen peker.
