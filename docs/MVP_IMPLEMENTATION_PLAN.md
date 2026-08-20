@@ -1223,7 +1223,7 @@ historikk (§71). **Gjeldende status står i §74.**
 [x] Product information architecture
 [x] MVP implementation plan drafted
 
-[~] Web application bootstrap
+[x] Web application bootstrap
 [x] Supabase schema/security foundation
 [~] Golden evidence slice
 [ ] First admin workflow
@@ -1275,9 +1275,11 @@ historikk (§71). **Gjeldende status står i §74.**
 **Milepæl A (§57) er nådd.** Appen kjører, CI kjører, Supabase-devmiljøet fungerer,
 sikkerhetsgrensene er etablert og de første migrasjonene er i repoet.
 
-`Web application bootstrap` står som `[~]` og ikke `[x]` fordi Slice 0 (§28) krever at
-preview deployment fungerer. Det finnes ingen deploy-konfigurasjon i repoet ennå. De
-øvrige punktene i Slice 0 sin definition of done er innfridd.
+**Slice 0 (§28) er ferdig.** Alle fire punktene i definition of done er innfridd, også
+preview deployment: Vercel-prosjektet er koblet til repoet gjennom GitHub-integrasjonen
+og bygger både preview per pull request og produksjon fra `main`. Koblingen er satt opp
+på prosjektsiden hos Vercel, ikke som konfigurasjon i repoet, så fravær av `vercel.json`
+sier ingenting om status.
 
 `First admin workflow` og `First published Claim` står som `[!]` — blokkert og avhengig
 av en beslutning, ikke av kode. Se §74.4.
