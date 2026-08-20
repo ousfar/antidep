@@ -16,7 +16,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(44);
+select plan(48);
 
 -- ---------------------------------------------------------------------------
 -- Tabellene i migrasjon 003
@@ -27,10 +27,20 @@ select has_table('knowledge', 'source_versions', 'knowledge.source_versions finn
 select has_table('knowledge', 'evidence_items', 'knowledge.evidence_items finnes');
 
 -- Påstandslaget ble opprettet av migrasjon 004 og kontrolleres i
--- 130_claim_structure_test.sql. Publiseringshendelsene hører til migrasjon 006
--- og skal ikke ha sneket seg inn ennå.
-select hasnt_table(
-  'knowledge', 'publication_events', 'knowledge.publication_events er ikke opprettet ennå'
+-- 130_claim_structure_test.sql. Publiseringshendelsene kom i migrasjon 006 og
+-- kontrolleres i detalj i 230_publication_structure_test.sql; her assereres bare
+-- at de finnes, slik at de schemauttømmende vaktpostene lenger ned i denne filen
+-- faktisk har noe å dekke.
+select has_table(
+  'knowledge', 'publication_events', 'knowledge.publication_events finnes'
+);
+select col_not_null(
+  'knowledge', 'publication_events', 'claim_id',
+  'en publiseringshendelse gjelder alltid en identifiserbar påstand'
+);
+select col_not_null(
+  'knowledge', 'publication_events', 'reason',
+  'en publiseringshendelse har alltid en begrunnelse (ANTIDEP_CONSTITUTION.md §14)'
 );
 
 -- ---------------------------------------------------------------------------
@@ -268,6 +278,60 @@ select is_empty(
       )
   $$,
   'hver kunnskapstabell med updated_at setter created_at og updated_at ved både INSERT og UPDATE'
+);
+
+-- ... og hver append-only tabell uten updated_at eier likevel created_at.
+-- Samme regel som 180_workflow_structure_test.sql holder for workflow og
+-- provenance, utvidet til knowledge av migrasjon 006. Regelen er ikke kosmetisk:
+-- publiseringsgaten sammenligner knowledge.claim_evidence_links.created_at med
+-- godkjenningstidspunktet for å avgjøre om evidensgrunnlaget er endret etter
+-- review. En ren default gjelder bare når kolonnen utelates, og gaten ville da
+-- sammenlignet mot et tall den kontrollerte parten selv oppgir.
+select is_empty(
+  $$
+    select c.relname
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'knowledge'
+      and c.relkind = 'r'
+      and not exists (
+        select 1
+        from pg_attribute a
+        where a.attrelid = c.oid
+          and a.attname = 'updated_at'
+          and a.attnum > 0
+          and not a.attisdropped
+      )
+      and not exists (
+        select 1
+        from pg_trigger t
+        where t.tgrelid = c.oid
+          and not t.tgisinternal
+          and t.tgfoid = 'catalog.set_created_at()'::regprocedure
+          and (t.tgtype & 2) <> 0
+          and (t.tgtype & 4) <> 0
+      )
+  $$,
+  'hver append-only kunnskapstabell setter created_at selv ved INSERT'
+);
+
+-- Hendelsestidspunktene i knowledge er bundet mot det databaseeide
+-- referansepunktet, slik at en vurdering eller publisering ikke kan dateres til
+-- framtiden. Samme invariant som workflow-tabellene har.
+select is_empty(
+  $$
+    select t.table_name
+    from (values ('knowledge.evidence_assessments', 'assessed_at'),
+                 ('knowledge.publication_events', 'published_at')) as t(table_name, event_column)
+    where not exists (
+      select 1
+      from pg_constraint con
+      where con.conrelid = t.table_name::regclass
+        and con.contype = 'c'
+        and pg_get_constraintdef(con.oid) like '%' || t.event_column || ' <= created_at%'
+    )
+  $$,
+  'hendelsestidspunktet på hver append-only kunnskapstabell er bundet mot created_at'
 );
 
 -- knowledge.evidence_items kan ikke endres og har derfor bevisst ingen

@@ -14,7 +14,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(53);
+select plan(61);
 
 -- ---------------------------------------------------------------------------
 -- Tabellene i migrasjon 005
@@ -29,11 +29,43 @@ select has_table(
 );
 select has_table('workflow', 'review_decisions', 'workflow.review_decisions finnes');
 
--- knowledge.publication_events hører til migrasjon 006 og skal ikke ha sneket
--- seg inn her; publiseringsgaten leser beslutningene denne migrasjonen lager.
-select hasnt_table(
+-- Publiseringsgaten i migrasjon 006 leser beslutningene og verifikasjonene denne
+-- migrasjonen lager. Vaktposten her sto opprinnelig som en hasnt_table på
+-- knowledge.publication_events; nå som tabellen finnes, er den reelle
+-- assertionen at gaten faktisk henter tilstanden sin fra workflow og ikke fra en
+-- kopi et annet sted. Uten dette kunne gaten skrives om til å lese en
+-- statuskolonne uten at noen test sa fra, og overleveringen fra migrasjon 005 om
+-- tilbaketrukket ekstraksjon ville glidd ut.
+select has_table(
   'knowledge', 'publication_events',
-  'knowledge.publication_events er ikke opprettet ennå'
+  'knowledge.publication_events finnes; publiseringsgaten leser beslutningene fra denne migrasjonen'
+);
+select is_empty(
+  $$
+    select t.needle
+    from (values ('workflow.evidence_verifications'),
+                 ('workflow.claim_verifications'),
+                 ('workflow.review_decisions'),
+                 ('extraction_withdrawal'),
+                 ('publication_approval'),
+                 ('approved_evidence_set_digest')) as t(needle)
+    where position(t.needle in
+           (select p.prosrc
+            from pg_proc p
+            where p.oid = 'knowledge.assert_claim_revision_publishable(uuid)'::regprocedure)) = 0
+  $$,
+  'publiseringsgaten leser verifikasjonene, godkjenningen og tilbaketrekkingsbeslutningen fra workflow'
+);
+select is_empty(
+  $$
+    select t.needle
+    from (values ('workflow.user_roles'), ('publisher')) as t(needle)
+    where position(t.needle in
+           (select p.prosrc
+            from pg_proc p
+            where p.oid = 'knowledge.assert_publisher_authorized(uuid, uuid)'::regprocedure)) = 0
+  $$,
+  'publiseringsretten leses fra medlemskapstabellen, ikke fra en JWT-claim (DATABASE_ARCHITECTURE.md §46)'
 );
 
 -- ---------------------------------------------------------------------------
@@ -392,6 +424,68 @@ select hasnt_column(
 select hasnt_column(
   'workflow', 'review_decisions', 'updated_at',
   'en registrert reviewbeslutning har ingen updated_at'
+);
+
+-- ---------------------------------------------------------------------------
+-- Godkjenningen bærer avtrykket av evidenssettet den gjaldt
+--
+-- Lagt til av migrasjon 006 etter et reviewfunn på PR #15: publiseringsgaten kan
+-- ikke avgjøre om evidensgrunnlaget er endret ved å sammenligne tidsstempler,
+-- fordi now() er transaksjonens starttidspunkt og ikke committidspunktet. En
+-- lenke kan derfor bære en created_at foran godkjenningen selv om den ble synlig
+-- etter den. Avtrykket er rekkefølgeuavhengig og er derfor invarianten gaten
+-- hviler på; assertionene her sørger for at den ikke kan forsvinne stille.
+-- ---------------------------------------------------------------------------
+select has_column(
+  'workflow', 'review_decisions', 'approved_evidence_set_digest',
+  'reviewbeslutningen bærer avtrykket av evidenssettet den gjaldt'
+);
+select has_trigger(
+  'workflow', 'review_decisions', 'review_decisions_set_evidence_set_digest',
+  'avtrykket eies av databasen, ikke av den som registrerer godkjenningen'
+);
+-- Avtrykket hører til publiseringsgodkjenninger og ingen andre beslutninger: en
+-- tilbaketrekking av en ekstraksjon gjelder ikke et lenkesett.
+select is_empty(
+  $$
+    select t.constraint_name
+    from (values ('review_decisions_evidence_digest_pairing_check'),
+                 ('review_decisions_evidence_digest_format_check')) as t(constraint_name)
+    where not exists (
+      select 1 from pg_constraint con
+      where con.conrelid = 'workflow.review_decisions'::regclass
+        and con.contype = 'c'
+        and con.conname = t.constraint_name
+    )
+  $$,
+  'avtrykket er bundet til publiseringsgodkjenninger og til det versjonerte hashformatet'
+);
+select ok(
+  (select p.prosecdef
+   from pg_proc p
+   where p.oid = 'workflow.set_review_evidence_set_digest()'::regprocedure),
+  'avtrykksfunksjonen er SECURITY DEFINER, fordi evidenslenkene ligger bak RLS'
+);
+select ok(
+  exists (
+    select 1
+    from pg_proc p, unnest(coalesce(p.proconfig, array[]::text[])) as cfg
+    where p.oid = 'workflow.set_review_evidence_set_digest()'::regprocedure
+      and cfg in ('search_path=""', 'search_path=')
+  ),
+  'avtrykksfunksjonen har tomt search_path (DATABASE_ARCHITECTURE.md §50)'
+);
+-- Radlåsen på revisjonen er det som gjør avtrykket til et bilde av ett bestemt
+-- øyeblikk: uten den kunne en lenke commite mellom beregningen og commit, og
+-- avtrykket ville beskrevet et sett som aldri fantes samtidig. En pgTAP-test kan
+-- ikke observere at en annen transaksjon blokkerer, så låsen assereres som den
+-- egenskapen ved koden den er — samme framgangsmåte som for
+-- publiseringsoperasjonene i 260.
+select ok(
+  (select p.prosrc from pg_proc p
+   where p.oid = 'workflow.set_review_evidence_set_digest()'::regprocedure)
+  ~ 'knowledge\.claim_revisions[^;]*for update',
+  'avtrykket beregnes med radlås på revisjonen (DATABASE_ARCHITECTURE.md §61)'
 );
 
 -- ---------------------------------------------------------------------------
