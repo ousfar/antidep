@@ -85,9 +85,9 @@
 --
 -- Som i migrasjon 002-005 håndheves vokabularene som enum, altså på
 -- datatypenivå (DATABASE_ARCHITECTURE.md §57). Det åpne spørsmålet om enum
--- kontra oppslagstabell (§72) står fortsatt åpent og vokser til 30 typer her;
--- det bør avgjøres før api-projeksjonene i migrasjon 007 begynner å eksponere
--- verdiene.
+-- kontra oppslagstabell (§72) står fortsatt åpent og vokser med to typer her,
+-- til 37 etter denne migrasjonen; det bør avgjøres før api-projeksjonene i
+-- migrasjon 007 begynner å eksponere verdiene.
 -- ----------------------------------------------------------------------------
 
 -- §39 beskriver hendelsen med et polymorft object_type/object_id-par. Som i

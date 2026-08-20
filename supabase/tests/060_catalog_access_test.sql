@@ -61,7 +61,7 @@ select is_empty(
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'catalog'
   $$,
-  'ingen RLS-policy er skrevet ennå; medlemskapsmodellen kommer i migrasjon 005'
+  'ingen RLS-policy er skrevet ennå; en policy virker først sammen med et tabellprivilegium, og ingen klientrolle har noe her'
 );
 
 -- ---------------------------------------------------------------------------

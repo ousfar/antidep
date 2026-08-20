@@ -113,8 +113,9 @@ create extension if not exists btree_gist with schema extensions;
 --
 -- Som i migrasjon 002, 003 og 004 håndheves vokabularene som enum, altså på
 -- datatypenivå (DATABASE_ARCHITECTURE.md §57). Det åpne spørsmålet om enum
--- kontra oppslagstabell (§72) vokser med ti typer her, til 28 totalt, og bør
--- avgjøres før api-projeksjonene i migrasjon 007 begynner å eksponere verdiene.
+-- kontra oppslagstabell (§72) vokser med ti typer her, til 35 etter denne
+-- migrasjonen, og bør avgjøres før api-projeksjonene i migrasjon 007 begynner å
+-- eksponere verdiene.
 --
 -- Null/ukjent-semantikk: ingen av typene under bruker
 -- knowledge.value_availability. Den forklarer hvorfor en verdi Antidep forsøkte

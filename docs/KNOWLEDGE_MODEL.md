@@ -221,10 +221,19 @@ Selve innholdet ligger i versjonerte `ClaimRevision`-objekter. `claim_id` forbli
 | `claim_id` | Stabil identifikator |
 | `knowledge_type` | `deterministic_fact`, `evidence_synthesis` eller `clinical_recommendation` |
 | `topic_id` | Primært `ClinicalConcept` |
-| `status` | Overordnet livssyklusstatus |
 | `current_published_revision_id` | Eksakt publisert revisjon, hvis noen |
 | `created_at` | Opprettet |
 | `created_by` | Menneske eller agent/prosess |
+
+`Claim` har bevisst **ingen** overordnet statuskolonne. Livssyklusen er avledet av
+eksplisitte hendelser og beslutninger — `workflow.review_decisions` og
+`knowledge.publication_events` — slik `DATABASE_ARCHITECTURE.md` §15 krever. Et muterbart
+statusfelt ville vært en parallell sannhet ved siden av dem, og ville dessuten mistet
+mellomtilstandene: at samme revisjon ble kildeverifisert, godkjent, publisert og senere
+erstattet, er fire hendelser og ikke fire overskrivinger av ett felt.
+
+Om en påstand er trukket tilbake som helhet, er en egenskap ved identiteten og ikke ved
+livssyklusen til en revisjon; det uttrykkes med `retired_at` og en begrunnelse.
 
 ### 8.1 `knowledge_type`
 
@@ -288,10 +297,14 @@ Når innhold som påvirker betydningen endres, SKAL en ny revisjon opprettes. Hi
 | `magnitude` | Effektstørrelse eller annen kvantifisering når forsvarlig |
 | `qualifiers` | Nødvendige forbehold |
 | `uncertainty_summary` | Kort eksplisitt usikkerhetstekst |
-| `status` | Revisjonens livssyklusstatus |
 | `created_at` | Opprettet |
 | `created_by` | Menneske eller agent/prosess |
 | `supersedes_revision_id` | Forrige revisjon når relevant |
+
+Som `Claim` har heller ikke `ClaimRevision` en egen statuskolonne, av samme grunn: en
+revisjons livssyklus er avledet av review- og publiseringshendelsene som gjelder den
+(`DATABASE_ARCHITECTURE.md` §15). Hvilken revisjon som er publisert nå, står ett sted —
+`current_published_revision_id` på `Claim`.
 
 ### 9.1 Atomisitet
 
