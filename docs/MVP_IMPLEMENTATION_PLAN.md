@@ -1153,6 +1153,11 @@ PR L+ expand pilot evidence pipeline and content
 
 Hver PR skal vurderes mot de styrende dokumentene, ikke bare mot om koden «virker».
 
+Rekkefølgen over er den opprinnelig planlagte. Den faktiske rekkefølgen har avveket
+fra og med PR F: databasearbeidet er gjennomført med **én migrasjon per PR**, slik at
+hver migrasjon kan reviewes for seg. Etikettene PR F og PR G over svarer derfor ikke
+til det som faktisk ble bygget. Se §74 for den faktiske rekkefølgen.
+
 ## 69. Første implementeringsoppgave
 
 Den aller neste arbeidsoppgaven etter at denne planen er godkjent skal være:
@@ -1206,6 +1211,9 @@ Hvis en MVP-forenkling bryter en ønsket langsiktig egenskap uten å bryte en in
 
 ## 73. Initial status ved versjon 0.1
 
+Listen under er statusen slik den var da planen ble skrevet, og beholdes som
+historikk (§71). **Gjeldende status står i §74.**
+
 ```text
 [x] Product/evidence constitution
 [x] Knowledge model
@@ -1233,6 +1241,154 @@ Hvis en MVP-forenkling bryter en ønsket langsiktig egenskap uten å bryte en in
 
 ---
 
+## 74. Status etter migrasjon 006
+
+**Oppdatert:** 20. august 2026 (etter at PR #15, migrasjon 006, ble merget)
+
+### 74.1 Gjeldende statusmarkering
+
+```text
+[x] Product/evidence constitution
+[x] Knowledge model
+[x] Evidence pipeline specification
+[x] Database architecture
+[x] Content governance
+[x] Product information architecture
+[x] MVP implementation plan drafted
+
+[x] Web application bootstrap
+[x] Supabase schema/security foundation
+[~] Golden evidence slice
+[!] First admin workflow
+[!] First published Claim
+[ ] First clinician UI
+[ ] Comparison golden slice
+[ ] Norwegian product ingest
+[ ] Pilot evidence pipeline
+[ ] Clinical situation views
+[ ] First ClinicalRule
+[ ] Usability validation
+[ ] Security/accessibility hardening
+[ ] Public MVP candidate
+```
+
+**Milepæl A (§57) er nådd.** Appen kjører, CI kjører, Supabase-devmiljøet fungerer,
+sikkerhetsgrensene er etablert og de første migrasjonene er i repoet.
+
+**Slice 0 (§28) er ferdig.** Alle fire punktene i definition of done er innfridd, også
+preview deployment: Vercel-prosjektet er koblet til repoet gjennom GitHub-integrasjonen
+og bygger både preview per pull request og produksjon fra `main`. Koblingen er satt opp
+på prosjektsiden hos Vercel, ikke som konfigurasjon i repoet, så fravær av `vercel.json`
+sier ingenting om status.
+
+`First admin workflow` og `First published Claim` står som `[!]` — blokkert og avhengig
+av en beslutning, ikke av kode. Se §74.4.
+
+### 74.2 Faktisk PR-rekkefølge
+
+```text
+PR A  chore: bootstrap Antidep web app                    (#9)   merget
+PR B  db: add schema and security foundation              (#10)  merget   migrasjon 001
+PR C  db: add drug and clinical concept catalog           (#11)  merget   migrasjon 002
+PR D  db: add sources and evidence items                  (#12)  merget   migrasjon 003
+PR E  db: add claims and evidence assessments             (#13)  merget   migrasjon 004
+PR F  db: add review and provenance                       (#14)  merget   migrasjon 005
+PR G  db: add publication events and gate                 (#15)  merget   migrasjon 006
+```
+
+Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
+i tråd med §51. Den planlagte PR G — `feat: add admin golden-slice workflow` — er
+dermed ikke bygget ennå, og glir til etter migrasjon 007.
+
+Databaselaget teller nå 872 pgTAP-assertions over 27 testfiler.
+
+### 74.3 Hva databasen faktisk inneholder
+
+Kunnskapsmodellen er komplett til og med publisering: katalog, kilder og kildeversjoner,
+evidensfunn, påstander med immutable revisjoner, evidenslenker, evidensvurderinger,
+aktører, rollemodell, ekstraksjons- og claim-verifikasjon, reviewbeslutninger, og
+publiseringshistorikk med en kontrollert publiseringsoperasjon.
+
+Innholdet er derimot bevisst minimalt, og det er ikke det samme som at slicen er ferdig:
+
+- to virkestoff, to kliniske begreper, én populasjon
+- to kilder og to evidensfunn
+- to påstander med én revisjon, én evidenslenke og én evidensvurdering hver
+- to aktører, begge KI-roller
+
+**Ingen verifikasjon, ingen reviewbeslutning og ingen publisering er registrert.** Det
+finnes ingen menneskelig aktør, ingen brukerkonto og ingen rolletildeling. De to
+påstandene er ubekreftede KI-forslag, og `current_published_revision_id` er tom på
+begge.
+
+### 74.4 Milepæl B er ikke nådd, og hvorfor
+
+§58 krever at kjeden Source → EvidenceItem → Claim → review → publish *fungerer*.
+Maskineriet finnes og er testet, men kjeden er ikke kjørt gjennom med reelle data.
+
+Det er ikke en teknisk mangel. Publisering av en evidenssyntese krever menneskelig
+faglig godkjenning fra en navngitt kvalifisert redaktør (ANTIDEP_CONSTITUTION.md §12),
+og migrasjon 005 gjorde det til en strukturell umulighet uten en reell person: en
+reviewbeslutning krever en aktør av typen `human`, knyttet til en brukerkonto, med
+gyldig `reviewer`-rolle for innholdsområdet på beslutningstidspunktet.
+
+**Neste skritt mot Milepæl B er derfor en governance-beslutning, ikke en kodeoppgave:**
+hvem er kvalifisert redaktør, og hvordan registreres vedkommende? Å seede en redaktør
+ville vært å oppfinne den godkjenningen konstitusjonen krever.
+
+Konsekvens for rekkefølgen: migrasjon 007 (§24) kan bygges nå, men api-projeksjonene
+vil vise et tomt publisert sett. Det er korrekt oppførsel, og 007 må testes mot data
+opprettet inne i en transaksjon — samme mønster som 006 — framfor mot seedet innhold.
+
+### 74.5 Beslutninger som bør tas før migrasjon 007
+
+Disse er billigst å avgjøre før api-projeksjonene begynner å eksponere verdier utad,
+fordi de da blir en offentlig kontrakt:
+
+1. **Enum kontra oppslagstabell.** Det finnes nå 37 enum-typer, fordelt på
+   migrasjonene 001-006 med henholdsvis 1, 6, 11, 7, 10 og 2. Et bytte blir dyrere
+   etter at verdiene er eksponert.
+2. **Stabil, språkuavhengig nøkkel for katalogobjekter.** Skal api-en eksponere uuid-er
+   eller stabile nøkler? `provenance.actors.actor_key` (formatet `type:navn`) er et
+   mønster som allerede finnes.
+3. **Om `public` skal fjernes fra `[api].schemas`.** Hører naturlig sammen med at
+   `api`-schemaet faktisk tas i bruk.
+
+### 74.6 Invariant etablert i migrasjon 006
+
+To reviewfunn i PR #15 hadde samme rot: PostgreSQL-tid har flere betydninger, og
+`now()` er transaksjonens *starttidspunkt* — verken committidspunkt eller nåtid.
+Regelen som ble etablert, gjelder framover:
+
+> **Tid som *avgjør* noe måles på setningen (`statement_timestamp()`).
+> Tid som *registrerer* noe måles på transaksjonen (`now()`).**
+
+Spørsmålet «er evidensgrunnlaget endret siden godkjenningen?» besvares dessuten ikke
+med tid i det hele tatt, men med et databaseeid avtrykk av settet, fordi
+commitrekkefølgen ikke er lesbar fra radene. Den som skriver ny autorisasjons- eller
+gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
+
+### 74.7 Registrert arkitekturgjeld (§72)
+
+| Gjeld | Risiko | Trigger for opprydding |
+|---|---|---|
+| `knowledge.set_evidence_item_content_hash()` skjøter med `concat_ws('\|', …)` mens fritekstfelt kan inneholde `\|`, og hashen er `UNIQUE` | En serialiseringskollisjon ville avvist et legitimt distinkt evidensfunn som dublett | Egen liten migrasjon som bytter funksjonen og rehasher under nytt prefiks. Har ligget siden migrasjon 004 og bør ikke bli liggende lenger |
+| Tidsbasert utløp av review er ikke håndhevet i publiseringsgaten | En godkjenning eldes uten at noe fanger det | Migrasjonen som innfører `workflow.review_requirements` / `review_due_at`. Krever først en klinisk policy for hvor lenge en godkjenning er gyldig per kunnskapstype og risiko |
+| Godkjenningens evidensavtrykk beregnes ved innsetting, ikke fra det reviewer faktisk så | En lenke som commiter mellom reviewers lesing og lagring av beslutningen havner i avtrykket | Admin-flyten oppgir avtrykket den viste reviewer. Kolonnen er utformet for det |
+| `knowledge.publication_object_type` har én verdi, og hendelsen har én ekte fremmednøkkel | En andre publiserbar objekttype kan friste til å gjenbruke `claim_id` som generisk `object_id` | Migrasjonen som innfører objekttype nummer to må legge til egen fremmednøkkelkolonne og eget speil |
+| `KNOWLEDGE_MODEL.md` §8 lister fortsatt `status` som minimumsfelt på Claim | Motstrid mot `DATABASE_ARCHITECTURE.md` §15 | Med publiseringshendelsene på plass er den avledede livssyklusen komplett; §8 bør ryddes i favør av §15 |
+| Ingen RLS-policies og ingen grants på kanoniske tabeller | Ingen — skriveveien er en `SECURITY DEFINER`-funksjon som ikke trenger dem | Migrasjonen som eksponerer en RPC-flate i `api`, med egen trusselvurdering |
+| Felles hjelpefunksjoner (`catalog.set_row_timestamps()`, `catalog.set_created_at()`, `knowledge.reject_append_only_mutation()`) brukes fra flere schemaer | Lav; plasseringen er misvisende | Et `util`-schema endrer `DATABASE_ARCHITECTURE.md` §6 og hver schemauttømmende vaktpost i testpakken. Egen beslutning |
+
+Mindre tekstgjeld, samlet til én oppryddings-PR: kolonnekommentaren på
+`catalog.drugs.updated_at` viser til `catalog.set_updated_at()`, som ikke finnes,
+testbeskrivelsene i `060_catalog_access_test.sql` og `110_knowledge_access_test.sql`
+sier fortsatt at medlemskapsmodellen kommer i migrasjon 005, og kommentarene i
+migrasjon 005 og 006 oppgir antallet enum-typer til henholdsvis 28 og 30. Det
+riktige tallet er 37; undertellingen oppsto i 005 og ble videreført i 006.
+
+---
+
 # Del XIX — Ikke-forhandlingsbare implementeringsprinsipper
 
 1. **Bygg vertikalt; ikke bygg hele databasen før første kliniske flyt.**
@@ -1253,7 +1409,11 @@ Hvis en MVP-forenkling bryter en ønsket langsiktig egenskap uten å bryte en in
 
 ---
 
-## 74. Neste steg
+## 75. Neste steg
+
+> **Merk:** Avsnittet under er skrevet ved planens godkjenning og beskriver oppstarten.
+> Det er beholdt som historikk (§71). Planleggingsfasen er avsluttet, og PR A til PR G
+> er merget (§74.2). **Gjeldende neste steg står i §74.4 og §74.5.**
 
 Når denne planen er godkjent, avsluttes planleggingsfasen som standard arbeidsmodus.
 
