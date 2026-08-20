@@ -1017,6 +1017,25 @@ revoke execute on function knowledge.assert_claim_revision_publishable(uuid) fro
 -- ugyldiggjøres av at reviewer senere slutter, mens en publisering er en handling
 -- som utføres nå og krever rett nå. En tilbakekalt publisher-rolle skal virke
 -- umiddelbart (§46).
+--
+-- Derfor statement_timestamp() og ikke now(). now() er transaksjonens
+-- starttidspunkt, og «umiddelbart» ville da betydd «umiddelbart for
+-- transaksjoner som starter etter tilbakekallingen». En transaksjon som startet
+-- mens tildelingen var gyldig, ville sett den tilbakekalte raden — READ COMMITTED
+-- gir hver setning et nytt snapshot — men målt valid_to mot et tidspunkt fra før
+-- tilbakekallingen, og godtatt rettigheten likevel. Det samme gjelder motsatt
+-- vei: en tildeling som blir gyldig mens en lang transaksjon pågår, ville blitt
+-- avvist. statement_timestamp() er begynnelsen på den setningen som utfører
+-- publiseringen, altså den grensen autorisasjonen faktisk gjelder for, og den er
+-- stabil gjennom kallet slik at to evalueringer i samme operasjon ikke kan gi
+-- ulike svar.
+--
+-- Merk at published_at på hendelsen bevisst blir stående som now(). Det er ikke
+-- en autorisasjonsbeslutning, men transaksjonens egen registrering av seg selv,
+-- og verdien er bundet mot det databaseeide created_at av en CHECK — begge er
+-- transaksjonstid, og de skal forbli konsistente med hverandre. Skillet er
+-- altså bevisst: tid som *avgjør* noe måles på setningen, tid som *registrerer*
+-- noe måles på transaksjonen.
 -- ----------------------------------------------------------------------------
 create function knowledge.assert_publisher_authorized(
   p_publisher_actor_id uuid,
@@ -1069,8 +1088,8 @@ begin
     from workflow.user_roles ur
     where ur.user_id = v_auth_user_id
       and ur.role_code = 'publisher'
-      and ur.valid_from <= now()
-      and (ur.valid_to is null or ur.valid_to > now())
+      and ur.valid_from <= statement_timestamp()
+      and (ur.valid_to is null or ur.valid_to > statement_timestamp())
       and (ur.scope_id is null or ur.scope_id = p_topic_concept_id)
   ) then
     raise exception using
@@ -1082,7 +1101,7 @@ end;
 $$;
 
 comment on function knowledge.assert_publisher_authorized(uuid, uuid) is
-  'Kontrollerer at den innloggede brukeren er den menneskelige aktøren publiseringen attribueres til, og at brukeren har gyldig publisher-rolle for innholdsområdet nå. Rollen leses fra workflow.user_roles og aldri fra en JWT-claim (DATABASE_ARCHITECTURE.md §46); auth.uid() brukes bare til identitet. Kan bare avvise, og returnerer ingen data.';
+  'Kontrollerer at den innloggede brukeren er den menneskelige aktøren publiseringen attribueres til, og at brukeren har gyldig publisher-rolle for innholdsområdet på publiseringssetningens tidspunkt (statement_timestamp(), ikke transaksjonens starttidspunkt, slik at en tilbakekalling virker umiddelbart). Rollen leses fra workflow.user_roles og aldri fra en JWT-claim (DATABASE_ARCHITECTURE.md §46); auth.uid() brukes bare til identitet. Kan bare avvise, og returnerer ingen data.';
 
 revoke execute on function knowledge.assert_publisher_authorized(uuid, uuid) from public;
 

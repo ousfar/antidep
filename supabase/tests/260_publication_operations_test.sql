@@ -14,7 +14,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(41);
 
 create temporary table fixture (name text primary key, id uuid not null) on commit drop;
 
@@ -24,14 +24,22 @@ create temporary table fixture (name text primary key, id uuid not null) on comm
 insert into auth.users (id, email) values
   ('cccccccc-0000-0000-0000-000000000001', 'publisher-260@test.invalid'),
   ('cccccccc-0000-0000-0000-000000000002', 'reviewer-260@test.invalid'),
-  ('cccccccc-0000-0000-0000-000000000003', 'retired-260@test.invalid');
+  ('cccccccc-0000-0000-0000-000000000003', 'retired-260@test.invalid'),
+  ('cccccccc-0000-0000-0000-000000000004', 'publisher-tilbakekalt-260@test.invalid'),
+  ('cccccccc-0000-0000-0000-000000000005', 'publisher-nettopp-gyldig-260@test.invalid');
 
 insert into provenance.actors (actor_type, actor_key, display_name, description, auth_user_id)
 values
   ('human', 'human:publisher-260', 'Publisher', 'Har publisher-rollen.',
    'cccccccc-0000-0000-0000-000000000001'),
   ('human', 'human:reviewer-260', 'Reviewer', 'Har reviewer-rollen, men ikke publisher.',
-   'cccccccc-0000-0000-0000-000000000002');
+   'cccccccc-0000-0000-0000-000000000002'),
+  ('human', 'human:publisher-tilbakekalt-260', 'Publisher med tilbakekalt rolle',
+   'Publiseringsretten ble tilbakekalt mens transaksjonen pågikk.',
+   'cccccccc-0000-0000-0000-000000000004'),
+  ('human', 'human:publisher-nettopp-gyldig-260', 'Publisher med nylig gyldig rolle',
+   'Publiseringsretten ble gyldig mens transaksjonen pågikk.',
+   'cccccccc-0000-0000-0000-000000000005');
 
 insert into provenance.actors
   (actor_type, actor_key, display_name, description, auth_user_id, retired_at, retirement_note)
@@ -47,6 +55,12 @@ select 'reviewer', id from provenance.actors where actor_key = 'human:reviewer-2
 insert into fixture (name, id)
 select 'retired', id from provenance.actors where actor_key = 'human:retired-260';
 insert into fixture (name, id)
+select 'publisher_tilbakekalt', id from provenance.actors
+where actor_key = 'human:publisher-tilbakekalt-260';
+insert into fixture (name, id)
+select 'publisher_nettopp_gyldig', id from provenance.actors
+where actor_key = 'human:publisher-nettopp-gyldig-260';
+insert into fixture (name, id)
 select 'synthesis_actor', id from provenance.actors where actor_key = 'agent:claim-synthesis';
 insert into fixture (name, id)
 select 'topic', id from catalog.clinical_concepts where canonical_label = 'vektendring';
@@ -61,6 +75,24 @@ values
    (select id from fixture where name = 'publisher'), 'Reviewrett for testene.'),
   ('cccccccc-0000-0000-0000-000000000003', 'publisher',
    (select id from fixture where name = 'reviewer'), 'Publiseringsrett for den tilbaketrukne aktøren.');
+
+-- To tildelinger med gyldighetsgrense mellom transaksjonens starttidspunkt og
+-- den setningen som senere autoriserer. Se avsnittet om tilbakekalling under.
+insert into workflow.user_roles
+  (user_id, role_code, valid_from, valid_to, granted_by_actor_id, grant_reason,
+   ended_by_actor_id, end_reason)
+values
+  ('cccccccc-0000-0000-0000-000000000004', 'publisher',
+   now() - interval '1 hour', now() + interval '10 milliseconds',
+   (select id from fixture where name = 'reviewer'), 'Publiseringsrett som tilbakekalles.',
+   (select id from fixture where name = 'reviewer'), 'Tilbakekalt mens transaksjonen pågikk.');
+
+insert into workflow.user_roles
+  (user_id, role_code, valid_from, granted_by_actor_id, grant_reason)
+values
+  ('cccccccc-0000-0000-0000-000000000005', 'publisher',
+   now() + interval '10 milliseconds',
+   (select id from fixture where name = 'reviewer'), 'Publiseringsrett som blir gyldig underveis.');
 
 -- ---------------------------------------------------------------------------
 -- En påstand med tre revisjoner. Revisjon 1 og 3 er fullt publiserbare;
@@ -252,6 +284,64 @@ select throws_like(
   '%trukket tilbake og kan ikke publisere%',
   'en tilbaketrukket aktør kan ikke publisere'
 );
+
+-- ---------------------------------------------------------------------------
+-- Tilbakekalling skal virke umiddelbart, ikke fra neste transaksjon
+--
+-- Rapportert på PR #15. Publiseringsretten ble målt med now(), som er
+-- transaksjonens starttidspunkt. En transaksjon kunne derfor starte mens
+-- tildelingen var gyldig, tildelingen kunne tilbakekalles og commites i en annen
+-- transaksjon, og den gamle transaksjonen ville deretter sett den tilbakekalte
+-- raden — READ COMMITTED gir hver setning et nytt snapshot — men målt valid_to
+-- mot et tidspunkt fra før tilbakekallingen og godtatt rettigheten likevel. Det
+-- bryter med DATABASE_ARCHITECTURE.md §46, som krever at en rettighet skal kunne
+-- tilbakekalles umiddelbart.
+--
+-- Testen utnytter at en pgTAP-fil kjører i én transaksjon: now() står stille fra
+-- transaksjonen startet, mens statement_timestamp() flytter seg for hver setning.
+-- Gyldighetsgrensen på tildelingene er lagt nøyaktig i vinduet mellom de to, og
+-- pg_sleep gir et robust slingringsmonn framfor å stole på at fixturen tok tid.
+-- Assertionen rett under kontrollerer at vinduet faktisk er åpent, slik at
+-- testene ikke kan passere fordi tidsskillet kollapset.
+-- ---------------------------------------------------------------------------
+select pg_sleep(0.05);
+
+select is_empty(
+  $$
+    select ur.user_id::text
+    from workflow.user_roles ur
+    where ur.user_id in ('cccccccc-0000-0000-0000-000000000004',
+                         'cccccccc-0000-0000-0000-000000000005')
+      and not (coalesce(ur.valid_to, ur.valid_from) > now()
+               and coalesce(ur.valid_to, ur.valid_from) < statement_timestamp())
+  $$,
+  'begge gyldighetsgrensene ligger mellom transaksjonens starttidspunkt og den autoriserende setningen'
+);
+
+-- En tildeling som ble tilbakekalt etter at transaksjonen startet, gir ikke
+-- publiseringsrett. Med now() ville den blitt godtatt.
+select set_config('request.jwt.claims',
+                  '{"sub":"cccccccc-0000-0000-0000-000000000004"}', true);
+select throws_like(
+  $$select knowledge.assert_publisher_authorized(
+      (select id from fixture where name = 'publisher_tilbakekalt'),
+      (select id from fixture where name = 'topic'))$$,
+  '%ikke gyldig publisher-rolle%',
+  'en tilbakekalt publiseringsrett virker umiddelbart, ikke først fra neste transaksjon (DATABASE_ARCHITECTURE.md §46)'
+);
+
+-- ... og motsatt vei: en tildeling som ble gyldig etter at transaksjonen startet,
+-- gir publiseringsrett. Med now() ville den blitt avvist. Uten denne assertionen
+-- kunne rettelsen vært en regel som bare avviser mer.
+select set_config('request.jwt.claims',
+                  '{"sub":"cccccccc-0000-0000-0000-000000000005"}', true);
+select lives_ok(
+  $$select knowledge.assert_publisher_authorized(
+      (select id from fixture where name = 'publisher_nettopp_gyldig'),
+      (select id from fixture where name = 'topic'))$$,
+  'en tildeling som ble gyldig mens transaksjonen pågikk gir publiseringsrett'
+);
+select set_config('request.jwt.claims', '', true);
 
 -- ---------------------------------------------------------------------------
 -- Radlåsen (DATABASE_ARCHITECTURE.md §61)
