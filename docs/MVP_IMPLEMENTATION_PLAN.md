@@ -1243,7 +1243,8 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ## 74. Status etter migrasjon 006
 
-**Oppdatert:** 20. august 2026 (etter at PR #15, migrasjon 006, ble merget)
+**Oppdatert:** 20. august 2026 (etter korreksjonsmigrasjon 006a; forrige oppdatering
+etter at PR #15, migrasjon 006, ble merget)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1300,7 +1301,15 @@ Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare e
 i tråd med §51. Den planlagte PR G — `feat: add admin golden-slice workflow` — er
 dermed ikke bygget ennå, og glir til etter migrasjon 007.
 
-Databaselaget teller nå 872 pgTAP-assertions over 27 testfiler.
+Tabellen over er en logg over merget arbeid. Korreksjonsmigrasjon 006a kom til etter
+PR #15 og føres inn i tabellen når PR #17 er merget; hva den innfridde, står i §74.8.
+
+**Migrasjonsnumrene i §18-§27 navngir planlagt innhold, ikke filrekkefølge.** Den sjuende
+migrasjonsfilen er ikke migrasjon 007. En migrasjon som retter registrert gjeld står
+utenfor den planlagte rekken og får en bokstav — 006a — slik at «migrasjon 007 —
+API-lesemodell» (§24) fortsatt betyr det samme i plan, migrasjoner og tester.
+
+Databaselaget teller nå 886 pgTAP-assertions over 28 testfiler.
 
 ### 74.3 Hva databasen faktisk inneholder
 
@@ -1372,20 +1381,50 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 
 | Gjeld | Risiko | Trigger for opprydding |
 |---|---|---|
-| `knowledge.set_evidence_item_content_hash()` skjøter med `concat_ws('\|', …)` mens fritekstfelt kan inneholde `\|`, og hashen er `UNIQUE` | En serialiseringskollisjon ville avvist et legitimt distinkt evidensfunn som dublett | Egen liten migrasjon som bytter funksjonen og rehasher under nytt prefiks. Har ligget siden migrasjon 004 og bør ikke bli liggende lenger |
 | Tidsbasert utløp av review er ikke håndhevet i publiseringsgaten | En godkjenning eldes uten at noe fanger det | Migrasjonen som innfører `workflow.review_requirements` / `review_due_at`. Krever først en klinisk policy for hvor lenge en godkjenning er gyldig per kunnskapstype og risiko |
 | Godkjenningens evidensavtrykk beregnes ved innsetting, ikke fra det reviewer faktisk så | En lenke som commiter mellom reviewers lesing og lagring av beslutningen havner i avtrykket | Admin-flyten oppgir avtrykket den viste reviewer. Kolonnen er utformet for det |
 | `knowledge.publication_object_type` har én verdi, og hendelsen har én ekte fremmednøkkel | En andre publiserbar objekttype kan friste til å gjenbruke `claim_id` som generisk `object_id` | Migrasjonen som innfører objekttype nummer to må legge til egen fremmednøkkelkolonne og eget speil |
-| `KNOWLEDGE_MODEL.md` §8 lister fortsatt `status` som minimumsfelt på Claim | Motstrid mot `DATABASE_ARCHITECTURE.md` §15 | Med publiseringshendelsene på plass er den avledede livssyklusen komplett; §8 bør ryddes i favør av §15 |
 | Ingen RLS-policies og ingen grants på kanoniske tabeller | Ingen — skriveveien er en `SECURITY DEFINER`-funksjon som ikke trenger dem | Migrasjonen som eksponerer en RPC-flate i `api`, med egen trusselvurdering |
 | Felles hjelpefunksjoner (`catalog.set_row_timestamps()`, `catalog.set_created_at()`, `knowledge.reject_append_only_mutation()`) brukes fra flere schemaer | Lav; plasseringen er misvisende | Et `util`-schema endrer `DATABASE_ARCHITECTURE.md` §6 og hver schemauttømmende vaktpost i testpakken. Egen beslutning |
 
-Mindre tekstgjeld, samlet til én oppryddings-PR: kolonnekommentaren på
-`catalog.drugs.updated_at` viser til `catalog.set_updated_at()`, som ikke finnes,
-testbeskrivelsene i `060_catalog_access_test.sql` og `110_knowledge_access_test.sql`
-sier fortsatt at medlemskapsmodellen kommer i migrasjon 005, og kommentarene i
-migrasjon 005 og 006 oppgir antallet enum-typer til henholdsvis 28 og 30. Det
-riktige tallet er 37; undertellingen oppsto i 005 og ble videreført i 006.
+### 74.8 Gjeld innfridd i korreksjonsmigrasjon 006a
+
+Migrasjonen `20260820120000_evidence_item_content_hash_v2.sql` og oppryddingen rundt den
+lukket:
+
+- **Serialiseringen av `content_hash` på evidensfunn.** `concat_ws('|', …)` er byttet med
+  den lengdeprefiksede kanoniseringen som allerede var husstandard i migrasjon 004 og 006,
+  under nytt prefiks `sha256-v2`, og de eksisterende radene er rehashet.
+  `280_content_hash_serialization_test.sql` gjenskaper den gamle kanoniseringen og påstår at
+  de to fikstursradene faktisk kolliderte under den, slik at testen viser feilen den retter
+  framfor bare å hevde at den er rettet.
+- **`KNOWLEDGE_MODEL.md` §8 og §9.** Statuskolonnen er fjernet fra minimumsfeltene på både
+  `Claim` og `ClaimRevision`, i favør av den avledede livssyklusen i
+  `DATABASE_ARCHITECTURE.md` §15. Bare §8 var registrert som gjeld, men §9 stod i nøyaktig
+  samme motstrid, og §15 navngir nettopp `claim_revisions.status`.
+- **Tekstgjelden.** Kolonnekommentaren på `catalog.drugs.updated_at` navngir nå
+  `catalog.set_row_timestamps()`, som faktisk finnes; testbeskrivelsene i `060` og `110`
+  sier hvorfor det fortsatt ikke finnes RLS-policies, framfor å vise til migrasjon 005 som
+  om den var ukommet; og enum-antallet i kommentarene til migrasjon 005 og 006 er rettet.
+  Det riktige tallet er 35 etter 005 og 37 etter 006 — den registrerte gjelden oppga 37 for
+  begge. Tallene er nå formulert som antallet *etter den migrasjonen*, som er en historisk
+  kjensgjerning og ikke kan drive fra hverandre igjen.
+
+Tre vaktposter kom til eller ble strammet, alle fordi fraværet av dem var grunnen til at
+gjelden fikk ligge:
+
+- **Hver kanonisk kolonne må påvirke fingeravtrykket.** Kanoniseringen tar hele raden som
+  argument, men feltlisten er eksplisitt, så en kolonne som legges til senere blir ikke
+  hashet av seg selv. Kontrollen er derfor kolonneuttømmende: den nuller ut én kolonne om
+  gangen på en ferdig utfylt rad og krever at hashen endrer seg. Unntakslisten i testen er
+  kontrakten for hva som bevisst står utenfor — blant annet `created_by_actor_id`, som kom
+  til i migrasjon 005 uten å bli tatt inn i definisjonen.
+- **En kommentar i de kanoniske schemaene kan ikke navngi en funksjon som ikke finnes.**
+  Vakten er selv mutasjonstestet i `280`. En kommentar som skal peke framover på noe som
+  ennå ikke finnes, skriver navnet uten parentes.
+- **Vaktposten mot avslåtte triggere** i `200_workflow_immutability_test.sql` dekker nå både
+  `D` og `R`, og også `api`. En trigger satt til replica fyrer ikke i vanlig drift, og et
+  vern som ikke fyrer, er ikke et vern.
 
 ---
 

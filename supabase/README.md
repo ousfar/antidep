@@ -13,6 +13,14 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
   - 003 `knowledge.sources`, kildeversjoner og `knowledge.evidence_items`
   - 004 `knowledge.claims`, revisjoner, evidenslenker og evidensvurderinger
   - 005 `provenance.actors`, medlemskapsmodellen, verifikasjon og review
+  - 006 `knowledge.publication_events` og den kontrollerte publiseringsoperasjonen
+  - 006a korreksjon: entydig serialisering av `content_hash` på evidensfunn
+
+  Nummereringen følger planlagt innhold i `docs/MVP_IMPLEMENTATION_PLAN.md` §18-§27, ikke
+  filrekkefølge. Korreksjonsmigrasjoner står utenfor den rekken og får en bokstav, slik at
+  «migrasjon 007 — API-lesemodell» (§24) fortsatt betyr det samme i plan, migrasjoner og
+  tester.
+
 - `tests/` — pgTAP-tester som kjøres med `npm run db:test`.
 - `seed.sql` — kun lokal demodata. Kontrollert vokabular og pilotdata som produksjonen
   er avhengig av, ligger i migrasjonene (se «Hvor seed-data hører hjemme» under).

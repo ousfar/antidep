@@ -348,7 +348,14 @@ select throws_ok(
 
 -- ---------------------------------------------------------------------------
 -- Migrasjon 005 slo av append-only-triggerne rundt backfillen av
--- created_by_actor_id. Denne vaktposten fanger at en av dem ble stående av.
+-- created_by_actor_id, og korreksjonsmigrasjon 006a gjorde det samme rundt
+-- rehashingen av knowledge.evidence_items. Denne vaktposten fanger at en av dem
+-- ble stående av.
+--
+-- «Avslått» dekker både D og R: en trigger satt til replica fyrer ikke i vanlig
+-- drift, og et vern som ikke fyrer, er ikke et vern. A er derimot strengere enn
+-- O og er ikke et brudd. api er med i listen fordi et view der kan få en
+-- INSTEAD OF-trigger.
 -- ---------------------------------------------------------------------------
 select is_empty(
   $$
@@ -356,9 +363,9 @@ select is_empty(
     from pg_trigger t
     join pg_class c on c.oid = t.tgrelid
     join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
+    where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit', 'api')
       and not t.tgisinternal
-      and t.tgenabled = 'D'
+      and t.tgenabled in ('D', 'R')
   $$,
   'ingen trigger i de kanoniske schemaene står avslått etter migrasjonene'
 );
