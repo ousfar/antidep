@@ -1223,7 +1223,7 @@ historikk (§71). **Gjeldende status står i §74.**
 [x] Product information architecture
 [x] MVP implementation plan drafted
 
-[x] Web application bootstrap
+[~] Web application bootstrap
 [x] Supabase schema/security foundation
 [~] Golden evidence slice
 [ ] First admin workflow
@@ -1256,7 +1256,7 @@ historikk (§71). **Gjeldende status står i §74.**
 [x] Product information architecture
 [x] MVP implementation plan drafted
 
-[~] Web application bootstrap
+[x] Web application bootstrap
 [x] Supabase schema/security foundation
 [~] Golden evidence slice
 [!] First admin workflow
