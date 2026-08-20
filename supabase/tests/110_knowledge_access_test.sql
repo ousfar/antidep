@@ -19,10 +19,10 @@ select plan(15);
 -- ---------------------------------------------------------------------------
 -- Lag 1: grants
 -- ---------------------------------------------------------------------------
--- Migrasjon 007 ga SELECT på kildene, kildeidentifikatorene og evidensfunnene,
--- som api.published_claim_evidence leser. knowledge.source_versions står
--- bevisst utenfor: hvilken hentet versjon av en kilde et funn ble ekstrahert
--- fra, er ikke del av den publiserte projeksjonen ennå.
+-- Migrasjon 007 ga SELECT på alle fire, som api.published_claim_evidence leser.
+-- knowledge.source_versions kom med fordi source_locator peker inn i en bestemt
+-- hentet versjon, ikke i kilden generelt: uten versjonen er drilldownen ikke
+-- reproduserbar for en levende kilde (DATABASE_ARCHITECTURE.md §18).
 select is_empty(
   $$
     select t.table_name, r.role_name, p.privilege
@@ -34,14 +34,9 @@ select is_empty(
     cross join (values ('select'), ('insert'), ('update'), ('delete'), ('truncate'),
                        ('references'), ('trigger')) as p(privilege)
     where has_table_privilege(r.role_name, t.table_name, p.privilege)
-      and not (
-        p.privilege = 'select'
-        and r.role_name in ('anon', 'authenticated')
-        and t.table_name in ('knowledge.sources', 'knowledge.source_identifiers',
-                             'knowledge.evidence_items')
-      )
+      and not (p.privilege = 'select' and r.role_name in ('anon', 'authenticated'))
   $$,
-  'klientrollene har bare SELECT, og bare på de kunnskapstabellene api-lesemodellen leser'
+  'klientrollene har bare SELECT på kilde- og evidenstabellene, aldri noen skriverett'
 );
 
 -- Klientrollene har heller ikke usage på selve schemaet, så et framtidig uhell
@@ -84,9 +79,10 @@ select set_eq(
   $$
     values ('sources:sources_published_read:r'),
            ('source_identifiers:source_identifiers_published_read:r'),
+           ('source_versions:source_versions_published_read:r'),
            ('evidence_items:evidence_items_published_read:r')
   $$,
-  'kilde- og evidenslaget har nøyaktig sine tre lesepolicyer, og source_versions har ingen'
+  'kilde- og evidenslaget har nøyaktig sine fire lesepolicyer, og ingen skrivepolicy'
 );
 
 -- ---------------------------------------------------------------------------

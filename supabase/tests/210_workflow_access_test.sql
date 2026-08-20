@@ -16,7 +16,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(28);
+select plan(29);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen, slik at et tomt resultat
@@ -37,6 +37,16 @@ where u.email = 'tilgang@test.invalid' and a.actor_key = 'system:tilgang';
 -- ---------------------------------------------------------------------------
 -- Lag 1: grants
 -- ---------------------------------------------------------------------------
+-- Migrasjon 007 åpnet nøyaktig én tabell her, og bare for lesing:
+-- workflow.review_decisions, fordi en tilbaketrukket ekstraksjon kan registreres
+-- etter at påstanden ble publisert, og lesemodellen ellers ville vist funnet som
+-- ordinær evidens. Policyen under slipper bare gjennom
+-- review_type = 'extraction_withdrawal'.
+--
+-- workflow.user_roles er fortsatt helt stengt, og det er den viktigste raden i
+-- denne tabellen: den er autorisasjonskilden (DATABASE_ARCHITECTURE.md §46), og
+-- en klientrolle som kunne lese eller skrive der ville kunne kartlegge eller gi
+-- seg selv faglige rettigheter.
 select is_empty(
   $$
     select t.table_name, r.role_name, p.privilege
@@ -48,8 +58,13 @@ select is_empty(
     cross join (values ('select'), ('insert'), ('update'), ('delete'), ('truncate'),
                        ('references'), ('trigger')) as p(privilege)
     where has_table_privilege(r.role_name, t.table_name, p.privilege)
+      and not (
+        p.privilege = 'select'
+        and r.role_name in ('anon', 'authenticated')
+        and t.table_name = 'workflow.review_decisions'
+      )
   $$,
-  'ingen klientrolle har noe tabellprivilegium på review- eller proveniensetabellene'
+  'bare workflow.review_decisions er åpnet, bare for lesing, og bare for de to Data API-rollene'
 );
 select is_empty(
   $$
@@ -92,15 +107,33 @@ select is_empty(
   $$,
   'RLS er aktivert på alle tabellene i workflow og provenance'
 );
-select is_empty(
+-- Uttømmende inventar. Skriveveien er fortsatt en SECURITY DEFINER-funksjon som
+-- verken trenger grant eller policy, så den ene policyen her er en ren
+-- lesepolicy for api-lesemodellen. polcmd 'r' betyr SELECT.
+select set_eq(
   $$
-    select p.polname, c.relname
+    select n.nspname || '.' || c.relname || ':' || p.polname || ':' || p.polcmd::text
     from pg_policy p
     join pg_class c on c.oid = p.polrelid
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname in ('workflow', 'provenance')
   $$,
-  'ingen RLS-policy er skrevet i workflow eller provenance; den kontrollerte skriveveien i migrasjon 006 er en SECURITY DEFINER-funksjon og trenger verken tabellgrant eller policy for å virke'
+  $$
+    values ('workflow.review_decisions:review_decisions_extraction_withdrawal_read:r')
+  $$,
+  'workflow har nøyaktig én lesepolicy, provenance ingen, og ingen av dem åpner for skriving'
+);
+
+-- Policyen er smal med hensikt: en publiseringsgodkjenning skal ikke være
+-- lesbar for en klientrolle, bare tilbaketrekkingen av en ekstraksjon.
+select is_empty(
+  $$
+    select p.polname
+    from pg_policy p
+    where p.polrelid = 'workflow.review_decisions'::regclass
+      and pg_get_expr(p.polqual, p.polrelid) not like '%extraction_withdrawal%'
+  $$,
+  'lesepolicyen på reviewbeslutningene er avgrenset til extraction_withdrawal'
 );
 
 -- ---------------------------------------------------------------------------

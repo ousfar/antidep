@@ -1312,7 +1312,7 @@ migrasjonsfilen er migrasjon 007, fordi den sjuende — korreksjonsmigrasjonen 0
 utenfor den planlagte rekken og fikk en bokstav. Konvensjonen finnes nettopp for at
 «migrasjon 007 — API-lesemodell» (§24) skal bety det samme i plan, migrasjoner og tester.
 
-Databaselaget teller nå 944 pgTAP-assertions over 29 testfiler.
+Databaselaget teller nå 960 pgTAP-assertions over 29 testfiler.
 
 ### 74.3 Hva databasen faktisk inneholder
 
@@ -1322,7 +1322,7 @@ aktører, rollemodell, ekstraksjons- og claim-verifikasjon, reviewbeslutninger, 
 publiseringshistorikk med en kontrollert publiseringsoperasjon.
 
 Fra migrasjon 007 finnes også leseveien ut: tre views i `api`, de første RLS-policyene, og
-`SELECT` til klientrollene på de elleve tabellene viewene leser. Kjeden er dermed lukket i
+`SELECT` til klientrollene på de tretten tabellene viewene leser. Kjeden er dermed lukket i
 begge ender — det som mangler mellom dem, er en publisering.
 
 Innholdet er derimot bevisst minimalt, og det er ikke det samme som at slicen er ferdig:
@@ -1406,6 +1406,7 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Tidsbasert utløp av review er ikke håndhevet i publiseringsgaten | En godkjenning eldes uten at noe fanger det | Migrasjonen som innfører `workflow.review_requirements` / `review_due_at`. Krever først en klinisk policy for hvor lenge en godkjenning er gyldig per kunnskapstype og risiko |
 | Godkjenningens evidensavtrykk beregnes ved innsetting, ikke fra det reviewer faktisk så | En lenke som commiter mellom reviewers lesing og lagring av beslutningen havner i avtrykket | Admin-flyten oppgir avtrykket den viste reviewer. Kolonnen er utformet for det |
 | `knowledge.publication_object_type` har én verdi, og hendelsen har én ekte fremmednøkkel | En andre publiserbar objekttype kan friste til å gjenbruke `claim_id` som generisk `object_id` | Migrasjonen som innfører objekttype nummer to må legge til egen fremmednøkkelkolonne og eget speil |
+| En tilbaketrukket ekstraksjon utløser ingen automatisk avpublisering eller ny review | En publisert påstand kan bli stående mens deler av grunnlaget er underkjent. Lesemodellen merker det nå (§74.9), men livssyklusen er ikke lukket | Admin-flyten (§29). Der hører beslutningen om hva som skal skje med berørte publiseringer hjemme — automatisk avpublisering er en klinisk policy, ikke en implementasjonsdetalj |
 | Publiseringstidspunkt og reviewtidspunkt er ikke eksponert i `api` | En kliniker ser «sist faglig vurdert» bare for de typene som har en evidensvurdering; et deterministisk faktum får ingen dato | Viewet som betjener kliniker-UI-et. Krever først en governance-beslutning om hvor mye av reviewhistorikken som skal være offentlig — `knowledge.publication_events` og `workflow.review_decisions` er begge stengt for klientrollene i dag |
 | `api.published_claims` eksponerer populasjonens etikett, ikke dens strukturerte grenser | Aldersgrenser, indikasjon, graviditetskontekst og komorbiditet ligger bare i etiketteksten | Det første viewet som faktisk trenger å filtrere på populasjon. `catalog.populations` er allerede lesbar for klientrollene, så det er en projeksjonsendring, ikke en tilgangsendring |
 | Felles hjelpefunksjoner (`catalog.set_row_timestamps()`, `catalog.set_created_at()`, `knowledge.reject_append_only_mutation()`) brukes fra flere schemaer | Lav; plasseringen er misvisende | Et `util`-schema endrer `DATABASE_ARCHITECTURE.md` §6 og hver schemauttømmende vaktpost i testpakken. Egen beslutning |
@@ -1453,8 +1454,8 @@ gjelden fikk ligge:
 
 `20260820140000_api_published_read_model.sql` åpner den første leseveien fra klientflaten
 inn i kunnskapsbasen (§24): `api.published_drugs`, `api.published_claims` og
-`api.published_claim_evidence`, de elleve `SELECT`-grantene viewene trenger, og de elleve
-første RLS-policyene i Antidep.
+`api.published_claim_evidence`, de tretten `SELECT`-grantene viewene trenger, og de første
+RLS-policyene i Antidep.
 
 **Grensen flyttet seg, og måtte skrives om framfor å strykes.** Fram til nå hadde ingen
 klientrolle noe privilegium i de kanoniske schemaene i det hele tatt, og fire testfiler
@@ -1477,7 +1478,7 @@ sammen: da viewet ble endret til å følge høyeste revisjonsnummer framfor
 publiseringspekeren, overlevde feilen alle assertions lest som `anon` — RLS skjulte
 utkastrevisjonen, så også den feilaktige joinen landet på riktig rad. Bare en lesing som
 eier, altså forbi RLS, fanget den. Den assertionen ble lagt til som følge av mutasjonen.
-Nitten mutasjoner ble kjørt i alt; alle ble fanget etter dette.
+Tjuefire mutasjoner ble kjørt i alt; alle ble fanget etter dette.
 
 **Policyene danner en asyklisk kjede.** `knowledge.claims` er selvstendig, og hver øvrige
 policy spør bare om raden er nådd fra en rad som allerede er synlig — et `EXISTS` mot en
@@ -1500,6 +1501,19 @@ forekommer hvis og bare hvis `knowledge_type` er `deterministic_fact` — publis
 G10 krever vurdering for de to andre typene. Ingen av dem betyr lav risiko eller ingen
 effekt (`ANTIDEP_CONSTITUTION.md` §6, §17), og skillet står i kolonnekommentaren.
 
+**En tilbaketrukket ekstraksjon merkes framfor å skjules.** Publiseringsgaten G6 behandler en
+tilbaketrukket ekstraksjon som en hard blokk ved publisering, men beslutningen er append-only og
+kan registreres etterpå — og da flytter den verken publiseringspekeren eller evidenslenkene.
+Lesemodellen avleder derfor den gjeldende tilstanden med nøyaktig samme regel som gaten bruker,
+og eksponerer den som `extraction_withdrawn` på evidensraden og `withdrawn_evidence_count` på
+påstanden. Funnet skjules ikke: da ville påstanden sett bedre underbygget ut enn den er.
+
+Dette er den ene grunnen `workflow.review_decisions` er åpnet, og policyen slipper bare gjennom
+`review_type = 'extraction_withdrawal'`. Begge utfallene må være lesbare, ikke bare
+`extraction_withdrawn`: skjulte vi `extraction_upheld`, ville avledningen «siste beslutning
+gjelder» svart forskjellig avhengig av hvem som spør. `workflow.user_roles` — autorisasjonskilden
+— er fortsatt helt stengt.
+
 **Identifikatorer aggregeres, de joines ikke.** `catalog.drug_identifiers` og
 `knowledge.source_identifiers` er unike på `(identifier_system, identifier_value)`, ikke på
 `(forelder, identifier_system)`. Ett virkestoff kan derfor ha flere ATC-koder, og ingenting
@@ -1508,6 +1522,11 @@ virkestoff blitt til to rader og ett evidensfunn til to — det siste ville fåt
 se ut som to uavhengige, altså nøyaktig den oppblåsingen av evidensmengden
 `claim_evidence_links_revision_item_key` finnes for å hindre. ATC-kodene aggregeres derfor til
 en array, og DOI og PMID hentes med skalare underspørringer som velger deterministisk.
+
+Tre av punktene over kom fra reviewen på PR #18 og var reelle: at en tilbaketrukket ekstraksjon
+forble synlig som ordinær evidens, at `source_doi`/`source_pmid` som skalarer var tapsbringende
+— den ekte seedede DOI-en var faktisk den en «velg den laveste»-regel ville forkastet — og at
+kildeversjonen manglet i drilldownen.
 
 En vaktpost ble strammet underveis: kommentarvakten i `280` joinet `pg_description` mot tre
 systemkataloger på `objoid` alene. OID-er er unike innenfor hver katalog, ikke på tvers, så

@@ -24,7 +24,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(52);
+select plan(67);
 
 create temporary table fixture (name text primary key, id uuid not null) on commit drop;
 
@@ -101,14 +101,15 @@ select set_eq(
            ('knowledge.claims'), ('knowledge.claim_revisions'),
            ('knowledge.claim_evidence_links'), ('knowledge.evidence_assessments'),
            ('knowledge.evidence_items'), ('knowledge.sources'),
-           ('knowledge.source_identifiers')
+           ('knowledge.source_identifiers'), ('knowledge.source_versions'),
+           ('workflow.review_decisions')
   $$,
-  'nøyaktig de elleve tabellene api-lesemodellen leser er åpnet for klientrollene'
+  'nøyaktig de tretten tabellene api-lesemodellen leser er åpnet for klientrollene'
 );
 
--- Ingenting i workflow eller provenance er åpnet. Reviewbeslutninger,
--- rollemedlemskap og aktøridentiteter er ikke publisert innhold, og
--- publiseringshistorikken heller ikke (jf. 270).
+-- Bare én tabell i workflow er åpnet, og bare fordi en tilbaketrukket ekstraksjon
+-- kan registreres etter publisering. Rollemedlemskap, verifikasjoner,
+-- aktøridentiteter og publiseringshistorikken er ikke publisert innhold.
 select is_empty(
   $$
     select n.nspname || '.' || c.relname
@@ -117,8 +118,21 @@ select is_empty(
     cross join lateral aclexplode(c.relacl) a
     where n.nspname in ('workflow', 'provenance', 'audit')
       and a.grantee::regrole::text in ('anon', 'authenticated')
+      and n.nspname || '.' || c.relname <> 'workflow.review_decisions'
   $$,
-  'verken workflow, provenance eller audit er åpnet for klientrollene'
+  'ingenting i workflow utenom review_decisions er åpnet, og verken provenance eller audit'
+);
+
+-- Autorisasjonskilden er den raden som betyr mest at forblir stengt
+-- (DATABASE_ARCHITECTURE.md §46).
+select is_empty(
+  $$
+    select r.role_name, p.privilege
+    from (values ('anon'), ('authenticated'), ('service_role'), ('public')) as r(role_name)
+    cross join (values ('select'), ('insert'), ('update'), ('delete')) as p(privilege)
+    where has_table_privilege(r.role_name, 'workflow.user_roles', p.privilege)
+  $$,
+  'rollemedlemskapstabellen er fortsatt helt stengt for alle klientroller'
 );
 
 -- ===========================================================================
@@ -427,6 +441,30 @@ select is_empty(
   'select 1 from api.published_claim_evidence where source_locator is null',
   'hver evidensrad oppgir hvor i kilden funnet står'
 );
+-- source_locator peker inn i en bestemt hentet versjon, ikke i kilden generelt.
+-- For en levende kilde kan samme URL senere gi annet innhold, og da er
+-- lokatoren alene ikke nok til å reprodusere hva som ble verifisert
+-- (DATABASE_ARCHITECTURE.md §18, ANTIDEP_CONSTITUTION.md §16).
+select is_empty(
+  $$
+    select 1 from api.published_claim_evidence
+    where source_version_id is null
+       or source_version_retrieved_at is null
+       or source_version_retrieved_from is null
+  $$,
+  'hver evidensrad oppgir kildeversjonen funnet ble ekstrahert fra, med hentetidspunkt og hentested'
+);
+-- Lagringsreferansen til selve innholdet er bevisst ikke eksponert.
+select is_empty(
+  $$
+    select a.attname
+    from pg_attribute a
+    where a.attrelid = 'api.published_claim_evidence'::regclass
+      and a.attnum > 0 and not a.attisdropped
+      and a.attname like '%storage%'
+  $$,
+  'kildeversjonens lagringsreferanse er ikke del av den offentlige kontrakten'
+);
 
 -- Virkestoffkatalogen: bare det Antidep har publisert påstander om. Mirtazapin
 -- er lesbart som komparator og som intervensjon i et evidensfunn, men har ingen
@@ -494,10 +532,14 @@ select is(
   (select count(*) from api.published_claim_evidence), 2::bigint,
   'to DOI-er på samme kilde dupliserer ikke evidensfunnet'
 );
+-- Kilden har allerede en ekte DOI fra migrasjon 003, så settet er tre. Nettopp
+-- den ekte er den en «velg den leksikografisk laveste»-regel ville forkastet:
+-- 10.1000-verdiene sorterer foran 10.4088. En vilkårlig kanonisering er ikke
+-- bare tapsbringende i teorien.
 select is(
-  (select source_doi from api.published_claim_evidence where relationship_type = 'supports'),
-  '10.1000/andre-doi-290',
-  'DOI-en velges deterministisk når kilden har flere'
+  (select source_dois from api.published_claim_evidence where relationship_type = 'supports'),
+  array['10.1000/andre-doi-290', '10.1000/tredje-doi-290', '10.4088/jcp.v61n1109'],
+  'alle DOI-ene følger med, sortert, framfor at én velges vilkårlig som kanonisk'
 );
 reset role;
 
@@ -562,7 +604,107 @@ reset role;
 revoke usage on schema knowledge, catalog from anon;
 
 -- ===========================================================================
--- Del 7 — Tilstandsoverganger: projeksjonen følger publiseringstilstanden
+-- Del 7 — En ekstraksjon som trekkes tilbake etter publisering
+--
+-- Publiseringsgaten (G6) nekter å publisere en revisjon som hviler på en
+-- tilbaketrukket ekstraksjon. Men beslutningen er append-only og kan komme
+-- etterpå, og da flytter den verken publiseringspekeren eller evidenslenkene.
+-- Uten at lesemodellen avleder den gjeldende tilstanden, ville klienten fortsatt
+-- vist et funn Antidep eksplisitt har underkjent, som ordinær evidens.
+--
+-- Funnet skal ikke skjules: da ville påstanden sett bedre underbygget ut enn den
+-- er. Det skal merkes.
+-- ===========================================================================
+
+set local role anon;
+select is(
+  (select count(*) from api.published_claim_evidence where extraction_withdrawn), 0::bigint,
+  'ingen ekstraksjon er trukket tilbake før beslutningen registreres'
+);
+select is(
+  (select withdrawn_evidence_count from api.published_claims), 0::bigint,
+  'påstanden viser null underkjente evidensfunn før beslutningen'
+);
+reset role;
+
+insert into workflow.review_decisions
+  (evidence_item_id, evidence_item_creator_actor_id, review_type, decision,
+   rationale, reviewer_actor_id, reviewer_actor_type, decided_at)
+select e.id, e.created_by_actor_id, 'extraction_withdrawal', 'extraction_withdrawn',
+       'Ekstraksjonen gjengir ikke kilden riktig.',
+       rg.id, 'human', now() - interval '1 hour'
+from knowledge.evidence_items e, fixture rg
+where e.id = (select id from fixture where name = 'evidence_sertralin')
+  and rg.name = 'reviewer';
+
+set local role anon;
+select is(
+  (select count(*) from api.published_claim_evidence), 2::bigint,
+  'det tilbaketrukne funnet skjules ikke: påstanden skal ikke se bedre underbygget ut enn den er'
+);
+select is(
+  (select count(*) from api.published_claim_evidence where extraction_withdrawn), 1::bigint,
+  'nøyaktig ett funn er merket som tilbaketrukket'
+);
+select is(
+  (select relationship_type from api.published_claim_evidence where extraction_withdrawn),
+  'supports',
+  'merket sitter på funnet beslutningen faktisk gjaldt'
+);
+select is(
+  (select extraction_withdrawal_rationale from api.published_claim_evidence
+   where extraction_withdrawn),
+  'Ekstraksjonen gjengir ikke kilden riktig.',
+  'begrunnelsen for tilbaketrekkingen er lesbar, slik source_status_note er det for en kilde'
+);
+select isnt(
+  (select extraction_withdrawn_at from api.published_claim_evidence where extraction_withdrawn),
+  null,
+  'tidspunktet for tilbaketrekkingen følger med'
+);
+select is(
+  (select withdrawn_evidence_count from api.published_claims), 1::bigint,
+  'påstandssammendraget viser at grunnlaget er underkjent, uten at klienten må hente drilldownen'
+);
+reset role;
+
+-- Ingen divergens mellom rollene. Policyen slipper gjennom begge utfallene av en
+-- extraction_withdrawal nettopp for at avledningen «siste beslutning gjelder»
+-- skal gi samme svar for en klientrolle som for eieren.
+select is(
+  (select count(*) from api.published_claim_evidence where extraction_withdrawn), 1::bigint,
+  'eieren ser samme tilbaketrekking som klientrollen, forbi RLS'
+);
+
+-- En senere beslutning som opprettholder ekstraksjonen gjelder foran den
+-- tidligere tilbaketrekkingen, på samme måte som i publiseringsgaten.
+insert into workflow.review_decisions
+  (evidence_item_id, evidence_item_creator_actor_id, review_type, decision,
+   rationale, reviewer_actor_id, reviewer_actor_type, decided_at)
+select e.id, e.created_by_actor_id, 'extraction_withdrawal', 'extraction_upheld',
+       'Ny gjennomgang mot kilden: ekstraksjonen var likevel korrekt.',
+       rg.id, 'human', now()
+from knowledge.evidence_items e, fixture rg
+where e.id = (select id from fixture where name = 'evidence_sertralin')
+  and rg.name = 'reviewer';
+
+set local role anon;
+select is(
+  (select count(*) from api.published_claim_evidence where extraction_withdrawn), 0::bigint,
+  'en senere beslutning som opprettholder ekstraksjonen opphever merket'
+);
+select is(
+  (select withdrawn_evidence_count from api.published_claims), 0::bigint,
+  'og påstandssammendraget følger med tilbake'
+);
+select is_empty(
+  'select 1 from api.published_claim_evidence where extraction_withdrawal_rationale is not null',
+  'begrunnelsen for en beslutning som opprettholdt ekstraksjonen er ikke publisert innhold'
+);
+reset role;
+
+-- ===========================================================================
+-- Del 8 — Tilstandsoverganger: projeksjonen følger publiseringstilstanden
 -- ===========================================================================
 
 -- Tilbaketrekking av påstanden. retired_at nullstiller ikke

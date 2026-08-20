@@ -71,7 +71,7 @@ objekt i `api` må få egen `GRANT` i migrasjonen som oppretter det. `service_ro
 ingen tilgang til Antidep-schemaene og er ikke applikasjonens universalnøkkel
 (`docs/DATABASE_ARCHITECTURE.md` §49).
 
-Fra migrasjon 007 har klientrollene i tillegg `SELECT` på de elleve kanoniske tabellene
+Fra migrasjon 007 har klientrollene i tillegg `SELECT` på de tretten kanoniske tabellene
 api-viewene leser. Det følger av at views i `api` er `security_invoker` og altså leser med
 kallerens rettigheter (§42). Granten åpner ikke tabellene: uten `usage` på schemaet kan
 klientrollene ikke navngi dem — forsøket gir «permission denied for schema» — og RLS
@@ -220,6 +220,22 @@ lag skal være korrekt alene, slik at verken en tapt policy eller en feilskrevet
 å vise upublisert eller tilbaketrukket innhold. Nettopp derfor testes de hver for seg — leses
 et view som eier, er RLS av, og viewets eget filter er det eneste som svarer.
 
+**En tilbaketrukket ekstraksjon merkes, den skjules ikke.** Publiseringsgaten nekter å
+publisere en revisjon som hviler på en tilbaketrukket ekstraksjon, men beslutningen er
+append-only og kan komme _etter_ publiseringen — da flytter den verken publiseringspekeren
+eller evidenslenkene. `api.published_claim_evidence.extraction_withdrawn` avleder den
+gjeldende tilstanden på nøyaktig samme måte som gaten gjør, og
+`api.published_claims.withdrawn_evidence_count` gir samme signal på påstandsnivå. Funnet
+skjules ikke: da ville påstanden sett bedre underbygget ut enn den er.
+
+Dette er den ene grunnen `workflow.review_decisions` er åpnet for klientrollene, og
+policyen slipper bare gjennom `review_type = 'extraction_withdrawal'`.
+Publiseringsgodkjenninger — med reviewers identitet og begrunnelse — forblir utenfor
+klientflaten, og `workflow.user_roles` er fortsatt helt stengt. Begge utfallene av en
+tilbaketrekking er lesbare: skjulte vi `extraction_upheld`, ville en ekstraksjon som først
+ble trukket tilbake og siden opprettholdt sett tilbaketrukket ut for en klientrolle mens
+eieren så den som gyldig.
+
 **Projeksjonen er tom inntil noe faktisk er publisert.** Det er korrekt oppførsel, ikke en
 mangel: publisering krever en menneskelig faglig godkjenning som ikke kan seedes
 (`docs/ANTIDEP_CONSTITUTION.md` §12, `docs/MVP_IMPLEMENTATION_PLAN.md` §74.4). Testene
@@ -235,12 +251,21 @@ databasegenererte `uuid` (`docs/DATABASE_ARCHITECTURE.md` §8). For virkestoff f
 med som språkuavhengig ekstern nøkkel, som sortert array. `NULL` der betyr at ingen ATC-kode er
 registrert i Antidep, ikke at virkestoffet mangler en.
 
-**Identifikatorer aggregeres, de joines ikke.** `catalog.drug_identifiers` og
-`knowledge.source_identifiers` er unike på `(identifier_system, identifier_value)`, ikke på
-`(forelder, identifier_system)`: ett virkestoff kan ha flere ATC-koder, og ingenting hindrer to
-DOI-er på samme kilde. Joinet inn ville de multiplisert raden — ett evidensfunn ville blitt til
-to og sett ut som to uavhengige funn. ATC-kodene aggregeres derfor til en array, og DOI og PMID
-hentes med skalare underspørringer.
+**Identifikatorer aggregeres, de joines ikke — og de reduseres ikke til én.**
+`catalog.drug_identifiers` og `knowledge.source_identifiers` er unike på
+`(identifier_system, identifier_value)`, ikke på `(forelder, identifier_system)`: ett virkestoff
+kan ha flere ATC-koder, og en kilde kan ha flere DOI-er, blant annet ved parallellpublisering.
+Joinet inn ville de multiplisert raden — ett evidensfunn ville blitt til to og sett ut som to
+uavhengige funn. Å velge én ville i stedet gjort en vilkårlig kanonisering til offentlig
+kontrakt, siden ingen av identifikatorene er definert som primær. `atc_codes`, `source_dois` og
+`source_pmids` er derfor sorterte arrays.
+
+**Kildeversjonen følger med.** `source_locator` peker inn i en bestemt hentet versjon, ikke i
+kilden generelt. For en levende kilde — retningslinje, preparatomtale, nettside — kan samme URL
+senere gi annet innhold, og da er lokatoren alene ikke nok til å reprodusere hva som faktisk ble
+verifisert. `api.published_claim_evidence` eksponerer derfor `source_version_id`, hentetidspunkt,
+hentested, kildens egen versjonsbetegnelse og innholdsavtrykket. Lagringsreferansen til selve
+innholdet er bevisst ikke med.
 
 ## Hvor seed-data hører hjemme
 

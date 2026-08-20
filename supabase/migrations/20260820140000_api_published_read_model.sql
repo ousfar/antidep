@@ -191,6 +191,58 @@ create policy source_identifiers_published_read on knowledge.source_identifiers
 comment on policy source_identifiers_published_read on knowledge.source_identifiers is
   'DOI og PMID for en synlig kilde. Uten dem er en henvisning ikke etterprøvbar utenfor Antidep.';
 
+-- Kildeversjonen evidensfunnet faktisk ble ekstrahert fra. source_locator peker
+-- inn i denne versjonen, ikke i kilden generelt, og for en levende kilde —
+-- retningslinje, preparatomtale, nettside — kan samme URL peke på annet innhold
+-- senere. Uten versjonen er drilldownen ikke reproduserbar
+-- (DATABASE_ARCHITECTURE.md §18, ANTIDEP_CONSTITUTION.md §16).
+create policy source_versions_published_read on knowledge.source_versions
+  for select to anon, authenticated
+  using (
+    exists (
+      select 1
+      from knowledge.evidence_items e
+      where e.source_version_id = source_versions.id
+    )
+  );
+
+comment on policy source_versions_published_read on knowledge.source_versions is
+  'Den hentede kildeversjonen et synlig evidensfunn ble ekstrahert fra. Bare versjoner som faktisk bærer et synlig funn er lesbare; kildeversjoner uten publisert bruk er det ikke.';
+
+-- Tilbaketrekking av en ekstraksjon, og bare den.
+--
+-- Publiseringsgaten (G6) behandler en tilbaketrukket ekstraksjon som en hard
+-- blokk ved publisering, men beslutningen er append-only og kan komme *etter*
+-- at påstanden ble publisert. Da flytter den verken publiseringspekeren eller
+-- evidenslenkene, og uten denne policyen ville lesemodellen fortsatt vist
+-- funnet som ordinær evidens. Det er samme grunn til at source_status er
+-- eksponert: en kilde kan trekkes tilbake etter publisering.
+--
+-- Policyen er smal med hensikt. Bare review_type = 'extraction_withdrawal'
+-- slipper gjennom; publiseringsgodkjenninger, med reviewers identitet og
+-- begrunnelse, forblir utenfor klientflaten. Hvor mye av reviewhistorikken som
+-- skal være offentlig er en governance-beslutning, ikke en implementasjonsdetalj
+-- (MVP_IMPLEMENTATION_PLAN.md §74.7).
+--
+-- Begge utfallene må være lesbare, ikke bare extraction_withdrawn. Skjulte vi
+-- extraction_upheld, ville en ekstraksjon som først ble trukket tilbake og
+-- deretter opprettholdt sett tilbaketrukket ut for en klientrolle, mens eieren
+-- så den som gyldig — lesemodellen ville da svart forskjellig avhengig av hvem
+-- som spør. Viewet, ikke policyen, bestemmer hva som projiseres.
+create policy review_decisions_extraction_withdrawal_read on workflow.review_decisions
+  for select to anon, authenticated
+  using (
+    review_type = 'extraction_withdrawal'
+    and exists (
+      select 1
+      from knowledge.evidence_items e
+      where e.id = review_decisions.evidence_item_id
+    )
+  );
+
+comment on policy review_decisions_extraction_withdrawal_read on workflow.review_decisions is
+  'Beslutninger om tilbaketrekking av en ekstraksjon på et synlig evidensfunn, begge utfall. Den eneste raden i workflow en klientrolle kan nå. Publiseringsgodkjenninger er ikke lesbare: at en påstand er publisert framgår av projeksjonen, mens hvem som godkjente den og hvorfor ikke er publisert innhold.';
+
 -- Katalogoppslagene. Et virkestoff er lesbart når det er nevnt av en synlig
 -- revisjon eller et synlig evidensfunn — som subjekt, komparator eller
 -- intervensjon. Komparatoren må være med: en påstand om sertralin sammenlignet
@@ -290,8 +342,15 @@ grant select on
   knowledge.evidence_assessments,
   knowledge.evidence_items,
   knowledge.sources,
-  knowledge.source_identifiers
+  knowledge.source_identifiers,
+  knowledge.source_versions
 to anon, authenticated;
+
+-- Den ene tabellen i workflow lesemodellen trenger. Granten er tabellvid, men
+-- policyen over slipper bare gjennom beslutninger om tilbaketrekking av en
+-- ekstraksjon. workflow.user_roles — autorisasjonskilden — og de øvrige
+-- workflow-tabellene har fortsatt verken grant eller policy.
+grant select on workflow.review_decisions to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 -- 3. api.published_drugs
@@ -399,6 +458,24 @@ select
   ea.evidence_gap             as evidence_gap,
   ea.assessed_at              as last_assessed_at,
 
+  (
+    -- Antall lenkede evidensfunn hvis gjeldende ekstraksjonsbeslutning er
+    -- tilbaketrekking. Samme avledning som publiseringsgaten G6 bruker. Uten
+    -- dette ville en klient som bare viser påstandssammendraget ikke hatt noe
+    -- signal om at grunnlaget er underkjent etter publisering.
+    select count(*)
+    from knowledge.claim_evidence_links l
+    where l.claim_revision_id = r.id
+      and (
+        select rd.decision
+        from workflow.review_decisions rd
+        where rd.evidence_item_id = l.evidence_item_id
+          and rd.review_type = 'extraction_withdrawal'
+        order by rd.decided_at desc, rd.created_at desc, rd.id desc
+        limit 1
+      ) = 'extraction_withdrawn'
+  )                           as withdrawn_evidence_count,
+
   r.content_hash              as content_hash,
   r.created_at                as revision_created_at
 from knowledge.claims c
@@ -454,6 +531,8 @@ comment on column api.published_claims.evidence_gap is
   'Hva som mangler i kunnskapsgrunnlaget. Alltid utfylt når certainty_level er no_assessable_evidence, slik at tilstanden aldri står tom.';
 comment on column api.published_claims.last_assessed_at is
   'Tidspunkt for siste faglige evidensvurdering av denne revisjonen (ANTIDEP_CONSTITUTION.md §7). NULL for deterministiske fakta, som ikke har en evidensvurdering. Publiseringstidspunktet og tidspunktet for den menneskelige reviewbeslutningen er bevisst ikke eksponert i dette steget: de ligger i knowledge.publication_events og workflow.review_decisions, som ingen klientrolle har tilgang til, og hvor mye av reviewhistorikken som skal være offentlig er en governance-beslutning.';
+comment on column api.published_claims.withdrawn_evidence_count is
+  'Antall av påstandens evidenslenker der ekstraksjonen er trukket tilbake etter publisering. Normalt 0: publiseringsgaten (G6) nekter å publisere en revisjon som hviler på en tilbaketrukket ekstraksjon, men beslutningen er append-only og kan komme etterpå, uten å flytte publiseringspekeren. Et tall over 0 betyr at Antidep har underkjent deler av grunnlaget under en påstand som fortsatt står publisert, og en klient skal ikke presentere påstanden som uberørt. Detaljene ligger i api.published_claim_evidence.';
 comment on column api.published_claims.content_hash is
   'Databaseeid avtrykk av revisjonens kliniske innhold. Stabil så lenge revisjonen er publisert, og egnet som cachenøkkel (DATABASE_ARCHITECTURE.md §56). Ikke en sikkerhetsmekanisme og ikke en erstatning for claim_revision_id.';
 comment on column api.published_claims.revision_created_at is
@@ -523,6 +602,24 @@ select
   e.limitations_text                  as limitations_text,
   e.source_locator                    as source_locator,
 
+  -- Gjeldende ekstraksjonstilstand. Avledet på nøyaktig samme måte som
+  -- publiseringsgaten G6 avleder den — siste beslutning av typen
+  -- extraction_withdrawal — slik at lesemodellen og gaten ikke kan svare
+  -- forskjellig på «er dette funnet trukket tilbake?».
+  coalesce(ew.decision = 'extraction_withdrawn', false)
+                                      as extraction_withdrawn,
+  case when ew.decision = 'extraction_withdrawn' then ew.decided_at end
+                                      as extraction_withdrawn_at,
+  case when ew.decision = 'extraction_withdrawn' then ew.rationale end
+                                      as extraction_withdrawal_rationale,
+
+  -- Kildeversjonen funnet ble ekstrahert fra, når den er registrert.
+  e.source_version_id                 as source_version_id,
+  sv.retrieved_at                     as source_version_retrieved_at,
+  sv.retrieved_from                   as source_version_retrieved_from,
+  sv.external_version                 as source_version_external_version,
+  sv.content_hash                     as source_version_content_hash,
+
   s.id                                as source_id,
   s.source_type::text                 as source_type,
   s.title                             as source_title,
@@ -532,25 +629,24 @@ select
   s.publication_date_precision::text  as source_publication_date_precision,
   s.source_status::text               as source_status,
   s.status_note                       as source_status_note,
-  -- Skalare underspørringer, ikke joins. knowledge.source_identifiers er unik på
-  -- (identifier_system, identifier_value), ikke på (source_id, identifier_system),
-  -- så to DOI-er på samme kilde er mulig. Med join ville ett evidensfunn da blitt
-  -- til to rader og sett ut som to uavhengige funn — nettopp den oppblåsingen av
-  -- evidensmengden claim_evidence_links_revision_item_key finnes for å hindre.
+  -- Aggregater, ikke joins og ikke skalarer. knowledge.source_identifiers er unik
+  -- på (identifier_system, identifier_value), ikke på (source_id,
+  -- identifier_system), så en kilde kan ha flere DOI-er — parallellpublisering
+  -- gir det. Med join ville ett evidensfunn blitt til to rader og sett ut som to
+  -- uavhengige funn; med «velg den laveste» ville de øvrige gyldige
+  -- identifikatorene forsvunnet, og en vilkårlig kanonisering blitt en offentlig
+  -- kontrakt. Ingen av identifikatorene er definert som primær, så alle følger
+  -- med, sortert.
   (
-    select i.identifier_value
+    select array_agg(i.identifier_value order by i.identifier_value)
     from knowledge.source_identifiers i
     where i.source_id = s.id and i.identifier_system = 'doi'
-    order by i.identifier_value
-    limit 1
-  )                                   as source_doi,
+  )                                   as source_dois,
   (
-    select i.identifier_value
+    select array_agg(i.identifier_value order by i.identifier_value)
     from knowledge.source_identifiers i
     where i.source_id = s.id and i.identifier_system = 'pmid'
-    order by i.identifier_value
-    limit 1
-  )                                   as source_pmid
+  )                                   as source_pmids
 from knowledge.claims c
 join knowledge.claim_revisions r
   on r.id = c.current_published_revision_id
@@ -568,6 +664,16 @@ left join catalog.populations ep
   on ep.id = e.population_id
 left join catalog.drugs ecd
   on ecd.id = e.comparator_drug_id
+left join knowledge.source_versions sv
+  on sv.id = e.source_version_id
+left join lateral (
+  select rd.decision, rd.decided_at, rd.rationale
+  from workflow.review_decisions rd
+  where rd.evidence_item_id = e.id
+    and rd.review_type = 'extraction_withdrawal'
+  order by rd.decided_at desc, rd.created_at desc, rd.id desc
+  limit 1
+) ew on true
 where c.retired_at is null;
 
 comment on view api.published_claim_evidence is
@@ -598,9 +704,25 @@ comment on column api.published_claim_evidence.source_status is
   'Kildens status, som tekst. En kilde kan bli trukket tilbake eller erstattet etter at påstanden ble publisert; publiseringsgaten kontrollerer status ved publisering, ikke etterpå. Statusen er derfor eksponert, og en klient skal vise en tilbaketrukket kilde som tilbaketrukket framfor å skjule den (ANTIDEP_CONSTITUTION.md §14).';
 comment on column api.published_claim_evidence.source_status_note is
   'Begrunnelsen for en kildestatus som ikke er active. Alltid utfylt når statusen krever det.';
-comment on column api.published_claim_evidence.source_doi is
-  'DOI for kilden, når registrert. NULL betyr at ingen DOI er registrert i Antidep, ikke at kilden mangler en. Én kilde forventes å ha én DOI; skulle flere være registrert, velges den laveste deterministisk framfor at raden dupliseres.';
-comment on column api.published_claim_evidence.source_pmid is
-  'PMID for kilden, når registrert. Samme NULL- og flertallssemantikk som source_doi.';
+comment on column api.published_claim_evidence.source_dois is
+  'DOI-er for kilden, som sortert array. Array framfor skalar fordi kildemodellen tillater flere — parallellpublisering gir det — og ingen av dem er definert som primær. Å velge én ville gjort en vilkårlig kanonisering til offentlig kontrakt. NULL betyr at ingen DOI er registrert i Antidep, ikke at kilden mangler en.';
+comment on column api.published_claim_evidence.source_pmids is
+  'PMID-er for kilden, som sortert array. Samme NULL- og flertallssemantikk som source_dois.';
+comment on column api.published_claim_evidence.extraction_withdrawn is
+  'Om Antidep har trukket tilbake denne ekstraksjonen. Aldri NULL: false betyr at ingen tilbaketrekking er registrert, eller at en tidligere tilbaketrekking er opphevet. true betyr at funnet er underkjent og ikke lenger står som gyldig evidens, selv om påstanden over det fortsatt er publisert — beslutningen er append-only og kan komme etter publiseringen. En klient skal ikke presentere et slikt funn som normalt gjeldende (ANTIDEP_CONSTITUTION.md §14).';
+comment on column api.published_claim_evidence.extraction_withdrawn_at is
+  'Når ekstraksjonen ble trukket tilbake. NULL når extraction_withdrawn er false.';
+comment on column api.published_claim_evidence.extraction_withdrawal_rationale is
+  'Begrunnelsen for tilbaketrekkingen. NULL når extraction_withdrawn er false: begrunnelsen for en beslutning som opprettholdt ekstraksjonen er redaksjonell saksbehandling, ikke publisert innhold.';
+comment on column api.published_claim_evidence.source_version_id is
+  'Den hentede kildeversjonen funnet ble ekstrahert fra. NULL betyr at ingen versjon er registrert for funnet — ikke at kilden er uendret siden ekstraksjonen.';
+comment on column api.published_claim_evidence.source_version_retrieved_at is
+  'Når kildeversjonen ble hentet. For en levende kilde er dette tidspunktet det source_locator faktisk peker inn i; kilden kan ha endret seg siden.';
+comment on column api.published_claim_evidence.source_version_retrieved_from is
+  'Hvor kildeversjonen ble hentet fra.';
+comment on column api.published_claim_evidence.source_version_external_version is
+  'Kildens egen versjonsbetegnelse, når den finnes, for eksempel utgavenummer på en retningslinje.';
+comment on column api.published_claim_evidence.source_version_content_hash is
+  'Avtrykk av det hentede innholdet, slik at det kan avgjøres om en senere henting er samme tekst. Lagringsreferansen til selve innholdet er bevisst ikke eksponert.';
 
 grant select on api.published_claim_evidence to anon, authenticated;
