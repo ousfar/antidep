@@ -1301,8 +1301,8 @@ Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare e
 i tråd med §51. Den planlagte PR G — `feat: add admin golden-slice workflow` — er
 dermed ikke bygget ennå, og glir til etter migrasjon 007.
 
-Tabellen over er en logg over merget arbeid. Etter PR #15 er korreksjonsmigrasjon 006a
-lagt til, se §74.8.
+Tabellen over er en logg over merget arbeid. Korreksjonsmigrasjon 006a kom til etter
+PR #15 og føres inn i tabellen når PR #17 er merget; hva den innfridde, står i §74.8.
 
 **Migrasjonsnumrene i §18-§27 navngir planlagt innhold, ikke filrekkefølge.** Den sjuende
 migrasjonsfilen er ikke migrasjon 007. En migrasjon som retter registrert gjeld står
