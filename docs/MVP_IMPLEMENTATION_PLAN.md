@@ -1298,6 +1298,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       docs: record implementation status after migration 006  (#16)  merget   ingen migrasjon
       db: make evidence item content hash unambiguous         (#17)  merget   migrasjon 006a
       db: add api published read model                        (#18)  merget   migrasjon 007
+      ci: verify the numeric claims in the plan               (#19)  merget   ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
