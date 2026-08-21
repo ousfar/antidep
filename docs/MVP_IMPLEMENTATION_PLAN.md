@@ -1241,10 +1241,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ---
 
-## 74. Status etter migrasjon 008
+## 74. Status etter migrasjon 007a
 
-**Oppdatert:** 21. august 2026 (etter migrasjon 008, auditloggen; forrige oppdatering
-etter migrasjon 007, api-lesemodellen)
+**Oppdatert:** 21. august 2026 (etter migrasjon 007a, publiserings- og reviewtidspunkt i
+api-lesemodellen; forrige oppdatering etter migrasjon 008, auditloggen)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1300,6 +1300,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       db: add api published read model                        (#18)  merget   migrasjon 007
       ci: verify the numeric claims in the plan               (#19)  merget   ingen migrasjon
       db: add audit events                                    (#20)  merget   migrasjon 008
+      db: expose publication and review timestamps in api            migrasjon 007a
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1316,8 +1317,12 @@ ferdig, ikke i en senere. Hva 006a innfridde, står i §74.8; hva 007 innfridde,
 migrasjonsfilen er migrasjon 008, fordi den sjuende — korreksjonsmigrasjonen 006a — står
 utenfor den planlagte rekken og fikk en bokstav. Konvensjonen finnes nettopp for at
 «migrasjon 007 — API-lesemodell» (§24) skal bety det samme i plan, migrasjoner og tester.
+Den tiende filen er migrasjon 007a av samme grunn: den utvider api-lesemodellen fra §24 og
+står utenfor den planlagte rekken, og nummeret 009 er reservert for DrugProduct- og
+importfundamentet (§26). Filrekkefølgen er dermed 001, 002, 003, 004, 005, 006, 006a, 007,
+008, 007a — sortert på tidsstempel, ikke på migrasjonsnummer.
 
-Databaselaget teller nå 1055 pgTAP-assertions over 32 testfiler.
+Databaselaget teller nå 1090 pgTAP-assertions over 33 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1336,6 +1341,11 @@ publiseringshistorikk med en kontrollert publiseringsoperasjon.
 Fra migrasjon 007 finnes også leseveien ut: tre views i `api`, de første RLS-policyene, og
 `SELECT` til klientrollene på de tretten tabellene viewene leser. Kjeden er dermed lukket i
 begge ender — det som mangler mellom dem, er en publisering.
+
+Fra migrasjon 007a bærer `api.published_claims` i tillegg `published_at` og
+`last_reviewed_at`, slik at hver publisert påstand har både en publiseringsdato og en dato
+for den menneskelige godkjenningen den hviler på — også et deterministisk faktum, som ikke
+har noen evidensvurdering. Se §74.11.
 
 Fra migrasjon 008 finnes auditloggen: `audit.events`, med de to produsentene som dekker de
 skriveveiene som faktisk finnes i dag — publisering og rolleforvaltning. Loggen er tom i
@@ -1383,10 +1393,11 @@ kilde til klientflate står ferdig og testet rundt det tomrommet.
 Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
 
 1. **Enum kontra oppslagstabell — utsatt, og gjort billigere å utsette.** Det finnes
-   38 enum-typer, fordelt på de ni migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
-   007 og 008 med henholdsvis 1, 6, 11, 7, 10, 2, 0, 0 og 1. Tallet er kontrollert mot
+   38 enum-typer, fordelt på de ti migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
+   007, 008 og 007a — i filrekkefølge, ikke i nummerrekkefølge — med henholdsvis
+   1, 6, 11, 7, 10, 2, 0, 0, 1 og 0. Tallet er kontrollert mot
    kilden (`grep -cE '^create type ' supabase/migrations/*.sql`) og mot databasen.
-   Alle ni ledd er nå oppgitt eksplisitt framfor å la de siste hvile på restpåstanden i
+   Alle ti ledd er nå oppgitt eksplisitt framfor å la de siste hvile på restpåstanden i
    `scripts/verify-counts.sh`; det er den formen vakten kontrollerer strengest.
    Viewene caster enum-kolonner til `text`, så den offentlige kontrakten er en streng
    fra et dokumentert vokabular, ikke PostgreSQL-typen. Et senere bytte til
@@ -1426,7 +1437,9 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Godkjenningens evidensavtrykk beregnes ved innsetting, ikke fra det reviewer faktisk så | En lenke som commiter mellom reviewers lesing og lagring av beslutningen havner i avtrykket | Admin-flyten oppgir avtrykket den viste reviewer. Kolonnen er utformet for det |
 | `knowledge.publication_object_type` har én verdi, og hendelsen har én ekte fremmednøkkel | En andre publiserbar objekttype kan friste til å gjenbruke `claim_id` som generisk `object_id` | Migrasjonen som innfører objekttype nummer to må legge til egen fremmednøkkelkolonne og eget speil |
 | En tilbaketrukket ekstraksjon utløser ingen automatisk avpublisering eller ny review | En publisert påstand kan bli stående mens deler av grunnlaget er underkjent. Lesemodellen merker det nå (§74.9), men livssyklusen er ikke lukket | Admin-flyten (§29). Der hører beslutningen om hva som skal skje med berørte publiseringer hjemme — automatisk avpublisering er en klinisk policy, ikke en implementasjonsdetalj |
-| Publiseringstidspunkt og reviewtidspunkt er ikke eksponert i `api` | En kliniker ser «sist faglig vurdert» bare for de typene som har en evidensvurdering; et deterministisk faktum får ingen dato | Viewet som betjener kliniker-UI-et. Krever først en governance-beslutning om hvor mye av reviewhistorikken som skal være offentlig. `knowledge.publication_events` er helt stengt for klientrollene; `workflow.review_decisions` er åpnet smalt av migrasjon 007, men bare for `review_type = 'extraction_withdrawal'`, så publiseringsgodkjenningene er fortsatt utenfor klientflaten |
+| En fornyet godkjenning etter publisering oppdaterer ikke «sist faglig vurdert» | `last_reviewed_at` er frosset på publiseringshendelsen. Blir en publisert revisjon godkjent på nytt i en reviewsyklus, står den gamle datoen. I dag er det ikke en reell risiko, fordi det ikke finnes noen reviewsyklus | Migrasjonen som innfører `workflow.review_requirements` / `review_due_at`. Den må ta stilling til om en fornyet godkjenning skal flytte datoen, og er samme migrasjon som gjeldsposten om tidsbasert utløp over |
+| En reviewbeslutning som ikke er `approved`, registrert etter publisering, er usynlig i lesemodellen | Ber reviewer om endringer på en revisjon som allerede står publisert, flyttes verken publiseringspekeren eller `last_reviewed_at`, og klienten får ingen signal. Parallellen er `withdrawn_evidence_count`, som ble innført for det tilsvarende tilfellet på evidenssiden | Admin-flyten (§29), sammen med beslutningen om hva som skal skje med berørte publiseringer. Å eksponere beslutningstypen er en governance-endring: §74.11 avgrenset kontrakten til tidsstempler |
+| Ingen regel håndhever at en publisert påstand har en publiseringshendelse | `knowledge.claims.current_published_revision_id` kan i prinsippet flyttes uten at en hendelse skrives, og da blir `published_at` NULL i `api.published_claims`. Invarianten er dokumentert i migrasjon 006, men bare håndhevet ved at publiseringsoperasjonen er den eneste sanksjonerte skriveveien | Admin-RPC-laget, eller den første migrasjonen som trenger å stole på hendelsen som kilde framfor på pekeren. En deklarativ regel må håndtere at pekeren og hendelsen settes i samme transaksjon |
 | `api.published_claims` eksponerer populasjonens etikett, ikke dens strukturerte grenser | Aldersgrenser, indikasjon, graviditetskontekst og komorbiditet ligger bare i etiketteksten | Det første viewet som faktisk trenger å filtrere på populasjon. `catalog.populations` er allerede lesbar for klientrollene, så det er en projeksjonsendring, ikke en tilgangsendring |
 | Felles hjelpefunksjoner (`catalog.set_row_timestamps()`, `catalog.set_created_at()`, `knowledge.reject_append_only_mutation()`) brukes fra flere schemaer | Lav; plasseringen er misvisende. Migrasjon 008 gjorde den mer misvisende: `audit.events` bruker begge de to siste, så `catalog` og `knowledge` eier nå hjelpefunksjoner for et schema som ikke har noe med noen av dem å gjøre | Et `util`-schema endrer `DATABASE_ARCHITECTURE.md` §6 og hver schemauttømmende vaktpost i testpakken. Egen beslutning |
 | Fysisk sletting av en rolletildeling er selv uauditert | En rolletildeling kan fjernes fysisk uten at det står hvem som fjernet den. Auditradene for tildelingen og avslutningen består — det er nettopp derfor `object_id` ikke har fremmednøkkel — men slettingen selv etterlater ingen rad. En trigger kan ikke navngi den som sletter, fordi `DELETE` ikke bærer en aktør, og `audit.events.actor_id` er med hensikt `NOT NULL` | Admin-flyten (§48). Der går slettingen gjennom en kontrollert funksjon som kjenner aktøren, og `DATABASE_ARCHITECTURE.md` §36 sitt krav om «særskilt audit» ved fysisk sletting kan innfris |
@@ -1571,6 +1584,8 @@ publiserings- og reviewtidspunkt i `api` har nettopp det viewet som trigger, og 
 først en avgjørelse om hvor mye av reviewhistorikken som skal være offentlig. Audit har
 ingen slik forutsetning.
 
+Den avgjørelsen er nå tatt, og gjeldsposten innfridd i migrasjon 007a. Se §74.11.
+
 **Auditloggen er et supplement, ikke et andre hjem for faglig historikk.**
 `DATABASE_ARCHITECTURE.md` §35 er eksplisitt på det. Den kliniske historikken ligger
 fortsatt i revisjonsmodellen og i `knowledge.publication_events`. Det loggen tilfører er
@@ -1683,6 +1698,73 @@ fjerner påstanden. Alle fem ble fanget.
 13. **Mobil, tilgjengelighet og evidensdrilldown testes før offentlig MVP.**
 14. **Små, reviewbare PR-er er normal utviklingsenhet.**
 15. **Styringsdokumentene er kontrakten; implementasjonen skal ikke gradvis definere et annet produkt.**
+
+### 74.11 Hva migrasjon 007a innførte
+
+`20260821143000_api_publication_timestamps.sql` innfrir gjeldsposten «Publiseringstidspunkt
+og reviewtidspunkt er ikke eksponert i `api`» fra §74.7. Den oppretter ingen tabeller og
+ingen data, og publiserer ingenting.
+
+**Governance-beslutningen først, koden etterpå.** Gjeldsposten hadde «viewet som betjener
+kliniker-UI-et» som trigger og en beslutning som forutsetning: hvor mye av reviewhistorikken
+skal være offentlig? Avgjørelsen er den smaleste av de mulige — **kun tidsstempler**. Ingen
+aktøridentitet, ingen beslutningstype, ingen begrunnelse. Den følger
+`PRODUCT_INFORMATION_ARCHITECTURE.md` §58: klinikeren ser «sist faglig vurdert», ikke hvem
+som vurderte eller hva som ble sagt underveis. At en påstand er publisert, er publisert
+innhold; hvem som godkjente den, og hvorfor, er det ikke.
+
+**Gjeldsposten den lukker.** Før 007a fikk en kliniker «sist faglig vurdert» bare gjennom
+`last_assessed_at`, som kommer fra evidensvurderingen. Et `deterministic_fact` har per
+konstruksjon ingen evidensvurdering (migrasjon 004 tillater den ikke) og sto derfor helt
+uten dato. `last_reviewed_at` finnes for alle tre kunnskapstypene, fordi menneskelig
+godkjenning kreves for alle tre (publiseringsgaten G11/G12).
+
+**Utformingen er beslutningens viktigste konsekvens.** Den opplagte implementasjonen — en
+RLS-policy som slipper gjennom publiseringsgodkjenningene, og et view som bare projiserer
+`decided_at` — ville vært feil. Klientrollene har allerede et *tabellvidt* `SELECT`-grant på
+`workflow.review_decisions` fra migrasjon 007, gitt for tilbaketrekkingssporet. En policy som
+åpner raden, åpner den for hele granten, og reviewers identitet og begrunnelse ville ligget
+ett view unna. **RLS er en radgrense, ikke en kolonnegrense.**
+
+Godkjenningstidspunktet fryses derfor på publiseringshendelsen i stedet, av en
+BEFORE INSERT-trigger som speiler gaten G11/G12: den gjeldende beslutningen er den siste, og
+bare `approved` teller. Det er samme grep som `approved_evidence_set_digest` i migrasjon 006
+— en avledet verdi databasen eier, låst til det den beskrev i øyeblikket. `review_decisions`
+er ikke rørt, og godkjenningene er fortsatt utenfor klientflaten.
+
+**Fire invarianter herfra:**
+
+1. **Kolonnegrant er en reell fjerde lås.** Et `security_invoker`-view kan ikke projisere en
+   kolonne kalleren mangler grant på, uansett hva viewet inneholder. Et policyuttrykk kan
+   derimot fritt referere kolonner kalleren ikke har — privilegiene gjelder spørringen, ikke
+   policyen — så radgrensen svekkes ikke av at granten er smal. `knowledge.publication_events`
+   er åpnet på seks av fjorten kolonner; `reason` og `published_by_actor_id` er ikke blant dem.
+
+2. **Et kolonnegrant er usynlig for `has_table_privilege()` og
+   `information_schema.role_table_grants`.** En vaktpost som bare spør om tabellprivilegiet
+   svarer «ingen tilgang» også når kolonner er åpnet. Assertionen i
+   `270_publication_access_test.sql` som påsto at publiseringshistorikken var utilgjengelig,
+   ble derfor *stille sann* i det 007a ga granten, uten å feile. Den kontrollerer nå
+   `role_column_grants` i tillegg, uttømmende. Dette er samme feilmodus som §74.10 beskrev
+   for `is_empty` over en join: en assertion kan bestå uten å nå det den påstår å måle.
+
+3. **`published_at` og `last_reviewed_at` er to forskjellige ting, og begge er forskjellige
+   fra `revision_created_at` og `last_assessed_at`.** Fire tidsbegreper, holdt adskilt som
+   `DATABASE_ARCHITECTURE.md` §7.3 krever. NULL i noen av dem betyr ukjent, aldri «nylig
+   vurdert» og aldri «ikke vurdert».
+
+4. **Verdien er frosset, og det er et valg med utløpsdato.** En senere reviewbeslutning på
+   samme revisjon flytter den ikke. I dag er det riktig, fordi det ikke finnes noen
+   reviewsyklus å flytte den med. Migrasjonen som innfører `review_due_at` må ta stilling til
+   om en fornyet godkjenning skal oppdatere datoen; posten står i §74.7.
+
+**Sporet som nå er åpent.** Med gjeldsposten innfridd har det første kliniker-UI-et (§30,
+PR I) ingen gjenstående forutsetning i databasen. Viewene svarer fortsatt `[]` til noe er
+publisert, så UI-et må bygges mot en tom projeksjon og behandle den som en førsteklasses
+tilstand: «ingen data», «ingen vurderbar evidens» og «lav risiko» skal se forskjellige ut
+(`ANTIDEP_CONSTITUTION.md` §6, §17).
+
+---
 
 ---
 

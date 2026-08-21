@@ -6,6 +6,12 @@
 -- publiseringspekeren eller lese publiseringshistorikken direkte. Klientflaten
 -- leser publiserte projeksjoner i api (migrasjon 007).
 --
+-- Migrasjon 007a åpnet én smal lesevei: seks kolonner på de radene som beskriver
+-- den gjeldende publiseringen, slik at api.published_claims kan vise
+-- publiserings- og godkjenningsdato. Den er nøyaktig avgrenset her. Selve
+-- oppførselen — hva viewet svarer, og hva som ikke er lesbart — står i
+-- 330_api_publication_timestamps_test.sql.
+--
 -- Publiseringsfunksjonene er SECURITY DEFINER, og det gjør EXECUTE-privilegiet
 -- til den avgjørende sperren. Kunne en vanlig bruker kalt dem, ville de kjørt med
 -- definerens rettigheter og lest både rollemodellen og reviewbeslutningene forbi
@@ -18,7 +24,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(21);
+select plan(24);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen, slik at et tomt resultat
@@ -55,7 +61,56 @@ select is_empty(
                        ('references'), ('trigger')) as p(privilege)
     where has_table_privilege(r.role_name, 'knowledge.publication_events', p.privilege)
   $$,
-  'ingen klientrolle har noe tabellprivilegium på publiseringshistorikken'
+  'ingen klientrolle har noe tabellvidt privilegium på publiseringshistorikken'
+);
+
+-- has_table_privilege() ser ikke kolonnegrant. Assertionen over svarer «ingen
+-- tilgang» også når enkeltkolonner er åpnet, og ble stille sann i det migrasjon
+-- 007a ga klientrollene SELECT på seks kolonner. Den uttømmende kontrollen må
+-- derfor gå på role_column_grants. Eierens implisitte privilegier står der som
+-- egen grantee og filtreres bort.
+select set_eq(
+  $$
+    select g.grantee || ':' || g.column_name || ':' || g.privilege_type
+    from information_schema.role_column_grants g
+    where g.table_schema = 'knowledge'
+      and g.table_name = 'publication_events'
+      and g.grantee in ('anon', 'authenticated', 'service_role', 'PUBLIC')
+  $$,
+  $$
+    values ('anon:id:SELECT'),
+           ('anon:claim_id:SELECT'),
+           ('anon:revision_id:SELECT'),
+           ('anon:published_at:SELECT'),
+           ('anon:created_at:SELECT'),
+           ('anon:approval_decided_at:SELECT'),
+           ('authenticated:id:SELECT'),
+           ('authenticated:claim_id:SELECT'),
+           ('authenticated:revision_id:SELECT'),
+           ('authenticated:published_at:SELECT'),
+           ('authenticated:created_at:SELECT'),
+           ('authenticated:approval_decided_at:SELECT')
+  $$,
+  'klientrollene har SELECT på nøyaktig de seks kolonnene api-lesemodellen trenger, ingen skriveprivilegier, og service_role ingenting'
+);
+
+-- Navngitt negativ kontroll ved siden av set_eq-en over: de kolonnene som bærer
+-- hvem som publiserte, hvorfor, og hele forgjengerkjeden skal være utenfor
+-- klientflaten (PRODUCT_INFORMATION_ARCHITECTURE.md §58). set_eq ville fanget
+-- dette, men ikke sagt hvilken kolonne som lakk.
+select is_empty(
+  $$
+    select r.role_name, c.column_name
+    from (values ('anon'), ('authenticated'), ('service_role'), ('public'))
+           as r(role_name)
+    cross join (values ('reason'), ('published_by_actor_id'), ('published_by_actor_type'),
+                       ('action'), ('previous_event_id'), ('previous_revision_id'),
+                       ('previous_revision_number'), ('revision_number'), ('object_type'))
+           as c(column_name)
+    where has_column_privilege(r.role_name, 'knowledge.publication_events',
+                               c.column_name, 'select')
+  $$,
+  'publiseringsbegrunnelsen, publisererens identitet og forgjengerkjeden er ikke lesbare for noen klientrolle'
 );
 
 -- Uttømmende over schemaet: en ny funksjon i knowledge skal ikke kunne bli
@@ -84,13 +139,26 @@ select ok(
    where c.oid = 'knowledge.publication_events'::regclass),
   'RLS er aktivert på publiseringshistorikken'
 );
-select is_empty(
+-- Fram til migrasjon 007a stod tabellen uten policy. Den har nå nøyaktig én,
+-- og assertionen er uttømmende framfor å bare bekrefte at den finnes: en ny
+-- policy skal ikke kunne legges til uten at den føres opp her.
+select set_eq(
   $$
     select p.polname
     from pg_policy p
     where p.polrelid = 'knowledge.publication_events'::regclass
   $$,
-  'ingen RLS-policy er skrevet på publiseringshistorikken; den kontrollerte skriveveien er en funksjon, ikke tabelltilgang'
+  $$ values ('publication_events_current_publication_read') $$,
+  'publiseringshistorikken har nøyaktig én RLS-policy: leseveien migrasjon 007a åpnet for den gjeldende publiseringen'
+);
+
+select is(
+  (select p.polcmd::text
+   from pg_policy p
+   where p.polrelid = 'knowledge.publication_events'::regclass
+     and p.polname = 'publication_events_current_publication_read'),
+  'r',
+  'policyen gjelder bare SELECT; den kontrollerte skriveveien er fortsatt en funksjon, ikke tabelltilgang'
 );
 
 -- ---------------------------------------------------------------------------

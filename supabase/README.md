@@ -18,11 +18,15 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
   - 007 api-lesemodellen: `api.published_drugs`, `api.published_claims`,
     `api.published_claim_evidence`, med RLS-policyene og grantene under dem
   - 008 `audit.events` og de to auditskriverne over publisering og rolleforvaltning
+  - 007a `published_at` og `last_reviewed_at` i `api.published_claims`, med
+    godkjenningstidspunktet frosset på publiseringshendelsen
 
   Nummereringen følger planlagt innhold i `docs/MVP_IMPLEMENTATION_PLAN.md` §18-§27, ikke
-  filrekkefølge. Korreksjonsmigrasjoner står utenfor den rekken og får en bokstav, slik at
+  filrekkefølge. Migrasjoner utenfor den planlagte rekken får en bokstav, slik at
   «migrasjon 007 — API-lesemodell» (§24) fortsatt betyr det samme i plan, migrasjoner og
-  tester.
+  tester. Filrekkefølgen er derfor 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a:
+  007a er skrevet etter 008, men utvider api-lesemodellen, og nummeret 009 er reservert for
+  importfundamentet (§26).
 
 - `tests/` — pgTAP-tester som kjøres med `npm run db:test`.
 - `seed.sql` — kun lokal demodata. Kontrollert vokabular og pilotdata som produksjonen
@@ -71,6 +75,14 @@ Tilgang er default deny. `anon` og `authenticated` har `usage` bare på `api`, o
 objekt i `api` må få egen `GRANT` i migrasjonen som oppretter det. `service_role` har
 ingen tilgang til Antidep-schemaene og er ikke applikasjonens universalnøkkel
 (`docs/DATABASE_ARCHITECTURE.md` §49).
+
+Fra migrasjon 007a har klientrollene i tillegg `SELECT` på seks av kolonnene i
+`knowledge.publication_events` — nok til å lese publiserings- og godkjenningstidspunktet
+for den gjeldende publiseringen, og ikke mer. Publiseringsbegrunnelsen og hvem som
+publiserte er ikke blant dem. Et kolonnegrant er en reell begrensning: et
+`security_invoker`-view kan ikke projisere en kolonne kalleren mangler grant på. Merk at
+det ikke er synlig i `has_table_privilege()` eller `information_schema.role_table_grants` —
+en vaktpost må se på `role_column_grants` for å oppdage det.
 
 Fra migrasjon 007 har klientrollene i tillegg `SELECT` på de tretten kanoniske tabellene
 api-viewene leser. Det følger av at views i `api` er `security_invoker` og altså leser med
