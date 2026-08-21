@@ -471,3 +471,88 @@ create trigger user_roles_record_end_audit_event
   for each row
   when (old.valid_to is distinct from new.valid_to)
   execute function audit.record_user_role_event();
+
+-- ----------------------------------------------------------------------------
+-- 4. Identiteten på en rolletildeling fryses
+--    (DATABASE_ARCHITECTURE.md §7, §35, §60)
+--
+-- Auditloggen peker på objektet sitt med object_id, uten fremmednøkkel og med
+-- vilje (se innledningen). Prisen for den friheten er at loggen hviler på at
+-- primærnøkkelen den peker på er stabil. For alle andre auditerte objekter er
+-- den det allerede: knowledge.publication_events er append-only, og en påstand
+-- som har fått en auditrad har nødvendigvis en publiseringshendelse som
+-- refererer den med ON UPDATE RESTRICT, så knowledge.claims.id er låst i det
+-- øyeblikket det finnes noe å låse.
+--
+-- workflow.user_roles er unntaket, og det er ikke tilfeldig: tabellen har ingen
+-- inngående fremmednøkler i det hele tatt, så ingenting holder primærnøkkelen på
+-- plass utenfra. workflow.freeze_role_grant() fra migrasjon 005 fryser hvem,
+-- hvilken rolle, hvilket scope og hvilket starttidspunkt tildelingen gjelder,
+-- men ikke raden selv.
+--
+-- Konsekvensen var reell og målt: en UPDATE som bare endret id passerte
+-- frysetriggeren, og fyrte ikke auditrigeren heller, siden valid_to var uendret.
+-- Rettigheten levde videre på en ny uuid uten en eneste auditrad, mens
+-- role_granted ble hengende igjen på en uuid som ikke lenger fantes. Det er
+-- nøyaktig den sporbarheten §35 finnes for.
+--
+-- Å auditere endringen ville ikke løst noe: de gamle auditradene ville fortsatt
+-- pekt på en rad som ikke finnes. Identiteten må være uforanderlig, ikke bare
+-- observerbar. Funksjonen erstattes derfor her, i migrasjonen som gjør
+-- avhengigheten load-bearing, framfor i en egen korreksjonsmigrasjon — samme
+-- framgangsmåte som da migrasjon 006 utvidet workflow.review_decisions.
+--
+-- En omnummerering er ikke en operasjon Antidep har bruk for. Skal en rettighet
+-- endres, avsluttes den gamle tildelingen og en ny opprettes; det er allerede
+-- regelen resten av triggeren håndhever.
+-- ----------------------------------------------------------------------------
+create or replace function workflow.freeze_role_grant()
+  returns trigger
+  language plpgsql
+  set search_path = ''
+as $$
+begin
+  -- Raden selv står først: uten den er resten av frysingen omgåelig ved å flytte
+  -- rettigheten til en ny identitet framfor å endre den på plass.
+  if new.id is distinct from old.id then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format('Rolletildeling %L kan ikke skifte identitet.', old.id),
+      hint = 'Auditloggen peker på tildelingen med object_id og uten fremmednøkkel (DATABASE_ARCHITECTURE.md §35, §36). En omnummerering ville etterlatt auditsporet på en rad som ikke finnes. Avslutt tildelingen og opprett en ny.';
+  end if;
+
+  if new.user_id is distinct from old.user_id
+    or new.role_code is distinct from old.role_code
+    or new.scope_id is distinct from old.scope_id
+    or new.valid_from is distinct from old.valid_from
+    or new.granted_by_actor_id is distinct from old.granted_by_actor_id
+    or new.grant_reason is distinct from old.grant_reason
+    or new.created_at is distinct from old.created_at
+  then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format(
+        'Rolletildeling %L er uforanderlig; bare avslutningen kan registreres.', old.id
+      ),
+      hint = 'Avslutt den eksisterende tildelingen ved å sette valid_to, ended_by_actor_id og end_reason, og opprett en ny tildeling for den endrede rettigheten.';
+  end if;
+
+  if old.valid_to is not null
+    and (new.valid_to is distinct from old.valid_to
+         or new.ended_by_actor_id is distinct from old.ended_by_actor_id
+         or new.end_reason is distinct from old.end_reason)
+  then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format(
+        'Rolletildeling %L er allerede avsluttet og kan ikke gjenåpnes eller omskrives.', old.id
+      ),
+      hint = 'Opprett en ny rolletildeling dersom rettigheten skal gjeninnføres. At rollen var gyldig i den opprinnelige perioden skal bevares.';
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function workflow.freeze_role_grant() is
+  'Immutable-row guard: låser identiteten til rolletildelingen, og i tillegg hvem, hvilken rolle, hvilket scope og hvilket starttidspunkt den gjelder. Tillater at avslutningen skrives nøyaktig én gang. Gjeninnføring av en tilbakekalt rolle er en ny tildeling. Identiteten ble tatt inn i vernet i migrasjon 008: audit.events peker på tildelingen uten fremmednøkkel, så en omnummerering ville etterlatt auditsporet på en rad som ikke finnes.';

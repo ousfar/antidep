@@ -1317,7 +1317,7 @@ migrasjonsfilen er migrasjon 008, fordi den sjuende — korreksjonsmigrasjonen 0
 utenfor den planlagte rekken og fikk en bokstav. Konvensjonen finnes nettopp for at
 «migrasjon 007 — API-lesemodell» (§24) skal bety det samme i plan, migrasjoner og tester.
 
-Databaselaget teller nå 1054 pgTAP-assertions over 32 testfiler.
+Databaselaget teller nå 1055 pgTAP-assertions over 32 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1628,7 +1628,20 @@ nødvendig.
 `audit` var tomt; den påstår nå at schemaet inneholder nøyaktig én relasjon. Et objekt som
 sniker seg inn i `audit` uten en migrasjon som forklarer det, fanges fortsatt.
 
-**Mutasjonstesting, og hva den avdekket.** Trettitre mutasjoner ble kjørt mot de nye
+**Identiteten på en rolletildeling er tatt inn i frysevernet.** Auditloggen peker på
+objektet sitt uten fremmednøkkel, og prisen for den friheten er at primærnøkkelen den peker
+på må være stabil. For de andre auditerte objektene er den det allerede — `knowledge.claims`
+er låst av `ON UPDATE RESTRICT` fra publiseringshendelsen i det øyeblikket det finnes en
+auditrad å låse. `workflow.user_roles` har derimot ingen inngående fremmednøkler i det hele
+tatt, og `workflow.freeze_role_grant()` fra migrasjon 005 frøs alt *om* tildelingen, men ikke
+raden selv. En `UPDATE` som bare endret `id` passerte derfor både frysetriggeren og
+auditrigeren, og etterlot rettigheten på en ny uuid uten en eneste auditrad mens
+`role_granted` ble hengende på en uuid som ikke lenger fantes. Funnet kom fra en ekstern
+review av PR #20, ble reprodusert mot databasen før det ble rettet, og er rettet i rota:
+identiteten står nå først i vernet. Å auditere omnummereringen ville ikke løst noe — de gamle
+auditradene ville fortsatt pekt på en rad som ikke finnes.
+
+**Mutasjonstesting, og hva den avdekket.** Trettifire mutasjoner ble kjørt mot de nye
 testene og mot tallvakten. Alle blir fanget nå, men tre gjorde det ikke i første omgang, og
 alle tre av samme grunn: assertionen var *stille sann* framfor sann.
 

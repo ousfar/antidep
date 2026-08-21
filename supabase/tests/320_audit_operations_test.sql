@@ -495,6 +495,14 @@ select ok(
 );
 
 -- ---------------------------------------------------------------------------
+-- Merk: at auditraden peker på objektet uten fremmednøkkel forutsetter at
+-- primærnøkkelen den peker på er stabil. For workflow.user_roles er det ikke
+-- gitt av inngående fremmednøkler — tabellen har ingen — men av at migrasjon 008
+-- tok identiteten inn i workflow.freeze_role_grant(). Den kontrollen ligger i
+-- 200_workflow_immutability_test.sql, sammen med resten av frysegarantiene.
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
 -- Auditraden overlever objektet sitt
 --
 -- Dette er hele begrunnelsen for at object_id ikke har fremmednøkkel
