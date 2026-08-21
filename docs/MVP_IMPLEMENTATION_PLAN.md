@@ -1314,6 +1314,13 @@ utenfor den planlagte rekken og fikk en bokstav. Konvensjonen finnes nettopp for
 
 Databaselaget teller nå 960 pgTAP-assertions over 29 testfiler.
 
+Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
+`scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
+vært feil fordi det ble arvet fra en gjeldspost eller en hand-off og ført videre i god tro,
+ikke fordi noen regnet feil. Slår kontrollen ut, er dokumentet feil — kilden vinner. En
+setning som omformuleres slik at vakten ikke finner påstanden lenger, teller også som brudd;
+ellers ville vakten blitt stille uten at noen merket det.
+
 ### 74.3 Hva databasen faktisk inneholder
 
 Kunnskapsmodellen er komplett til og med publisering: katalog, kilder og kildeversjoner,
@@ -1407,7 +1414,7 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Godkjenningens evidensavtrykk beregnes ved innsetting, ikke fra det reviewer faktisk så | En lenke som commiter mellom reviewers lesing og lagring av beslutningen havner i avtrykket | Admin-flyten oppgir avtrykket den viste reviewer. Kolonnen er utformet for det |
 | `knowledge.publication_object_type` har én verdi, og hendelsen har én ekte fremmednøkkel | En andre publiserbar objekttype kan friste til å gjenbruke `claim_id` som generisk `object_id` | Migrasjonen som innfører objekttype nummer to må legge til egen fremmednøkkelkolonne og eget speil |
 | En tilbaketrukket ekstraksjon utløser ingen automatisk avpublisering eller ny review | En publisert påstand kan bli stående mens deler av grunnlaget er underkjent. Lesemodellen merker det nå (§74.9), men livssyklusen er ikke lukket | Admin-flyten (§29). Der hører beslutningen om hva som skal skje med berørte publiseringer hjemme — automatisk avpublisering er en klinisk policy, ikke en implementasjonsdetalj |
-| Publiseringstidspunkt og reviewtidspunkt er ikke eksponert i `api` | En kliniker ser «sist faglig vurdert» bare for de typene som har en evidensvurdering; et deterministisk faktum får ingen dato | Viewet som betjener kliniker-UI-et. Krever først en governance-beslutning om hvor mye av reviewhistorikken som skal være offentlig — `knowledge.publication_events` og `workflow.review_decisions` er begge stengt for klientrollene i dag |
+| Publiseringstidspunkt og reviewtidspunkt er ikke eksponert i `api` | En kliniker ser «sist faglig vurdert» bare for de typene som har en evidensvurdering; et deterministisk faktum får ingen dato | Viewet som betjener kliniker-UI-et. Krever først en governance-beslutning om hvor mye av reviewhistorikken som skal være offentlig. `knowledge.publication_events` er helt stengt for klientrollene; `workflow.review_decisions` er åpnet smalt av migrasjon 007, men bare for `review_type = 'extraction_withdrawal'`, så publiseringsgodkjenningene er fortsatt utenfor klientflaten |
 | `api.published_claims` eksponerer populasjonens etikett, ikke dens strukturerte grenser | Aldersgrenser, indikasjon, graviditetskontekst og komorbiditet ligger bare i etiketteksten | Det første viewet som faktisk trenger å filtrere på populasjon. `catalog.populations` er allerede lesbar for klientrollene, så det er en projeksjonsendring, ikke en tilgangsendring |
 | Felles hjelpefunksjoner (`catalog.set_row_timestamps()`, `catalog.set_created_at()`, `knowledge.reject_append_only_mutation()`) brukes fra flere schemaer | Lav; plasseringen er misvisende | Et `util`-schema endrer `DATABASE_ARCHITECTURE.md` §6 og hver schemauttømmende vaktpost i testpakken. Egen beslutning |
 

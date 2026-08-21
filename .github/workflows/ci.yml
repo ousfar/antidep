@@ -21,6 +21,8 @@ jobs:
         run: npm run lint
       - name: Formatkontroll
         run: npm run format:check
+      - name: Tallpåstander i styringsdokumentene
+        run: ./scripts/verify-counts.sh
       - name: Typecheck
         run: npm run typecheck
       - name: Tester
