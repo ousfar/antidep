@@ -91,19 +91,25 @@ select hasnt_table(
   'provenance.agent_runs er ikke opprettet ennå'
 );
 
--- audit.events hører til migrasjon 008 og er fortsatt ikke opprettet.
+-- audit fikk auditloggen i migrasjon 008, og ikke noe mer. Vaktposten er derfor
+-- snevret framfor fjernet: den påstod at schemaet var tomt, og påstår nå at det
+-- inneholder nøyaktig én relasjon. Et view eller en tabell som sniker seg inn i
+-- audit uten en migrasjon som forklarer den, fanges fortsatt. Innholdet i
+-- audit.events er en egen kontrakt i 300_audit_structure_test.sql.
+--
 -- api fikk sine tre lesemodell-views i migrasjon 007; inventaret der er en egen
 -- kontrakt i 290_api_read_model_access_test.sql og hører ikke hjemme i en test
 -- av katalogstrukturen.
-select is_empty(
+select set_eq(
   $$
-    select n.nspname || '.' || c.relname
+    select c.relname::text
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'audit'
       and c.relkind in ('r', 'p', 'v', 'm')
   $$,
-  'audit har ingen objekter ennå'
+  array['events'],
+  'audit inneholder nøyaktig auditloggen fra migrasjon 008'
 );
 
 -- ---------------------------------------------------------------------------

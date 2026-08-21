@@ -21,7 +21,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(29);
+select plan(30);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
@@ -281,6 +281,19 @@ select throws_ok(
 -- ---------------------------------------------------------------------------
 -- workflow.user_roles: tildelingen er frosset, avslutningen skrives én gang
 -- ---------------------------------------------------------------------------
+-- Raden selv står først i vernet fra og med migrasjon 008. Tabellen har ingen
+-- inngående fremmednøkler, så ingenting utenfra holder primærnøkkelen på plass,
+-- og audit.events peker på tildelingen med object_id og uten fremmednøkkel
+-- (DATABASE_ARCHITECTURE.md §35, §36). En omnummerering passerte tidligere både
+-- denne triggeren og auditrigeren — valid_to var uendret — og etterlot
+-- rettigheten på en ny uuid uten en eneste auditrad, mens role_granted ble
+-- hengende på en uuid som ikke lenger fantes.
+select throws_ok(
+  $$update workflow.user_roles set id = '00000000-0000-0000-0000-0000000000fe'
+    where grant_reason = 'Testtildeling for immutabilitetstestene.'$$,
+  '23001', null,
+  'en rolletildeling kan ikke skifte identitet og dermed forlate auditsporet sitt'
+);
 select throws_ok(
   $$update workflow.user_roles set role_code = 'publisher'
     where grant_reason = 'Testtildeling for immutabilitetstestene.'$$,

@@ -17,6 +17,7 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
   - 006a korreksjon: entydig serialisering av `content_hash` på evidensfunn
   - 007 api-lesemodellen: `api.published_drugs`, `api.published_claims`,
     `api.published_claim_evidence`, med RLS-policyene og grantene under dem
+  - 008 `audit.events` og de to auditskriverne over publisering og rolleforvaltning
 
   Nummereringen følger planlagt innhold i `docs/MVP_IMPLEMENTATION_PLAN.md` §18-§27, ikke
   filrekkefølge. Korreksjonsmigrasjoner står utenfor den rekken og får en bokstav, slik at
@@ -266,6 +267,43 @@ senere gi annet innhold, og da er lokatoren alene ikke nok til å reprodusere hv
 verifisert. `api.published_claim_evidence` eksponerer derfor `source_version_id`, hentetidspunkt,
 hentested, kildens egen versjonsbetegnelse og innholdsavtrykket. Lagringsreferansen til selve
 innholdet er bevisst ikke med.
+
+## Auditloggen
+
+Migrasjon 008 oppretter `audit.events` (`docs/MVP_IMPLEMENTATION_PLAN.md` §25,
+`docs/DATABASE_ARCHITECTURE.md` §35): en append-only logg over sikkerhets- og
+forvaltningskritiske operasjoner.
+
+**Loggen er et supplement, ikke et andre hjem for faglig historikk.** Den kliniske
+historikken ligger fortsatt i revisjonsmodellen og i `knowledge.publication_events`. Det
+auditloggen tilfører er det tverrgående spørsmålet ingen av dem kan besvare: «hva gjorde
+denne aktøren, på tvers av objekter og schemaer?»
+
+| Produsent                               | Dekker                                                           |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| `publication_events_record_audit_event` | publisering, erstatning, avpublisering og rollback av en påstand |
+| `user_roles_record_grant_audit_event`   | tildeling av en applikasjonsrolle                                |
+| `user_roles_record_end_audit_event`     | avslutning eller tilbakekalling av en rolletildeling             |
+
+**`object_id` har bevisst ingen fremmednøkkel.** Det er det ene stedet Antidep avviker fra
+`RESTRICT`-regelen i `docs/DATABASE_ARCHITECTURE.md` §37, og grunnen står i §36: fysisk
+sletting «skal i så fall ha særskilt audit». En fremmednøkkel ville enten blokkert
+slettingen eller fjernet auditraden sammen med objektet. Auditraden bærer derfor et snapshot
+av raden framfor bare en peker, og overlever objektet sitt. `actor_id` er derimot en ekte
+fremmednøkkel med `RESTRICT`.
+
+**Auditskriverne er ikke `SECURITY DEFINER`, og det er med hensikt.** En auditskriver som er
+mer privilegert enn operasjonen den registrerer, er en vei til å skrive falske auditrader.
+Konsekvensen er at den som ikke kan skrive auditraden heller ikke får registrert
+operasjonen — en rolletildeling som ikke kan auditeres, skal ikke kunne registreres.
+
+**Ingen lesevei for klientroller.** `docs/MVP_IMPLEMENTATION_PLAN.md` §47 lister `audit`
+blant schemaene den offentlige klinikerflaten aldri skal ha `SELECT` mot. Tabellen har
+verken grant, policy eller `usage` på schemaet, og ingen view i `api` leser fra den.
+
+**Loggen er tom i migrert tilstand**, av samme grunn som api-projeksjonene er det:
+ingenting er publisert, og ingen rolle er tildelt (`docs/MVP_IMPLEMENTATION_PLAN.md` §74.4).
+Testene skriver derfor sitt eget innhold inne i en transaksjon som rulles tilbake.
 
 ## Hvor seed-data hører hjemme
 
