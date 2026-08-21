@@ -1322,7 +1322,7 @@ står utenfor den planlagte rekken, og nummeret 009 er reservert for DrugProduct
 importfundamentet (§26). Filrekkefølgen er dermed 001, 002, 003, 004, 005, 006, 006a, 007,
 008, 007a — sortert på tidsstempel, ikke på migrasjonsnummer.
 
-Databaselaget teller nå 1090 pgTAP-assertions over 33 testfiler.
+Databaselaget teller nå 1096 pgTAP-assertions over 33 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1738,7 +1738,7 @@ er ikke rørt, og godkjenningene er fortsatt utenfor klientflaten.
    kolonne kalleren mangler grant på, uansett hva viewet inneholder. Et policyuttrykk kan
    derimot fritt referere kolonner kalleren ikke har — privilegiene gjelder spørringen, ikke
    policyen — så radgrensen svekkes ikke av at granten er smal. `knowledge.publication_events`
-   er åpnet på seks av fjorten kolonner; `reason` og `published_by_actor_id` er ikke blant dem.
+   er åpnet på fire av fjorten kolonner; `reason` og `published_by_actor_id` er ikke blant dem.
 
 2. **Et kolonnegrant er usynlig for `has_table_privilege()` og
    `information_schema.role_table_grants`.** En vaktpost som bare spør om tabellprivilegiet
@@ -1753,7 +1753,22 @@ er ikke rørt, og godkjenningene er fortsatt utenfor klientflaten.
    `DATABASE_ARCHITECTURE.md` §7.3 krever. NULL i noen av dem betyr ukjent, aldri «nylig
    vurdert» og aldri «ikke vurdert».
 
-4. **Verdien er frosset, og det er et valg med utløpsdato.** En senere reviewbeslutning på
+4. **Innenfor én transaksjon kan hendelser ikke skilles på tid, og en uuid er ingen
+   rekkefølge.** `published_at` og `created_at` er begge `now()`, altså transaksjonens
+   starttidspunkt (§74.6). Skjer publisering, avpublisering, ny godkjenning og
+   republisering i samme transaksjon, er de to publiseringshendelsene identiske på tid,
+   men bærer ulik `approval_decided_at`. En `order by ... id desc` faller da tilbake på en
+   tilfeldig uuid og plukket den gamle godkjenningen i 94 av 200 forsøk. Feilen ble funnet
+   av den eksterne reviewen på PR #21, etter at CI hadde vært grønn — den ville vært en
+   flakete CI-feil, ikke en stabil. Lesemodellen aggregerer derfor med `max()`, som er
+   korrekt fordi begge kolonnene er monotont ikke-avtagende: `published_at` kan ikke gå
+   bakover, og `approval_decided_at` velges blant append-only beslutninger, så maksimum
+   kan bare stige. **Forgjengerkjeden kunne besvart det eksakt, men ikke bak RLS:** et
+   «finnes ingen etterfølger»-predikat evalueres over de radene kalleren *ser*, og en
+   skjult etterfølger ville fått en tidligere hendelse til å framstå som kjedens hale.
+   Den som senere trenger «siste hendelse» under RLS må regne med det.
+
+5. **Verdien er frosset, og det er et valg med utløpsdato.** En senere reviewbeslutning på
    samme revisjon flytter den ikke. I dag er det riktig, fordi det ikke finnes noen
    reviewsyklus å flytte den med. Migrasjonen som innfører `review_due_at` må ta stilling til
    om en fornyet godkjenning skal oppdatere datoen; posten står i §74.7.

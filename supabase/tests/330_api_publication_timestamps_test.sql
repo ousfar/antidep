@@ -18,7 +18,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(32);
+select plan(38);
 
 create temporary table fixture (name text primary key, id uuid) on commit drop;
 
@@ -400,6 +400,71 @@ select is(
   'påstanden står likevel som nøyaktig én rad: lateralen multipliserer ikke raden');
 reset role;
 
+-- Republisering på en NY godkjenning, i samme transaksjon. Dette er tilfellet
+-- den eksterne reviewen på PR #21 fant: begge hendelsene har identisk
+-- published_at og created_at, fordi now() er transaksjonens starttidspunkt, men
+-- de bærer ULIK approval_decided_at. En «siste hendelse»-rekkefølge som faller
+-- tilbake på id — en tilfeldig uuid — plukket den gamle godkjenningen omtrent
+-- annenhver gang. Viewet aggregerer derfor med max() framfor å sortere.
+insert into workflow.review_decisions
+  (claim_revision_id, claim_revision_creator_actor_id, review_type, decision,
+   rationale, reviewer_actor_id, reviewer_actor_type, decided_at)
+select r.id, r.created_by_actor_id, 'publication_approval', 'approved',
+       'Ny gjennomgang før republisering.', rg.id, 'human', now() - interval '2 hours'
+from knowledge.claim_revisions r, fixture rg
+where r.id = (select id from fixture where name = 'fact_rev') and rg.name = 'reviewer';
+
+select set_config('request.jwt.claims',
+                  '{"sub":"33330000-0000-0000-0000-000000000002"}', true);
+select lives_ok(
+  $$select knowledge.withdraw_claim_publication(
+      (select id from fixture where name = 'fact_claim'),
+      (select id from fixture where name = 'publisher'),
+      'Avpublisert før republisering på ny godkjenning.')$$,
+  'faktumet lar seg avpublisere igjen');
+select lives_ok(
+  $$select knowledge.publish_claim_revision(
+      (select id from fixture where name = 'fact_rev'),
+      (select id from fixture where name = 'publisher'),
+      'Republisert på den nye godkjenningen.')$$,
+  'faktumet lar seg republisere på den nye godkjenningen');
+select set_config('request.jwt.claims', '', true);
+
+-- Forutsetningen testen hviler på: hendelsene er faktisk uskillbare på tid.
+-- Uten denne ville assertionen under kunnet bestå fordi rekkefølgen tilfeldigvis
+-- var entydig, ikke fordi max() gjorde jobben.
+select is(
+  (select count(distinct (published_at, created_at)) from knowledge.publication_events
+   where claim_id = (select id from fixture where name = 'fact_claim')
+     and revision_id = (select id from fixture where name = 'fact_rev')),
+  1::bigint,
+  'de tre hendelsene på revisjonen har identisk published_at og created_at: rekkefølgen er ikke avgjørbar på tid');
+
+select is(
+  (select count(distinct approval_decided_at) from knowledge.publication_events
+   where claim_id = (select id from fixture where name = 'fact_claim')
+     and revision_id = (select id from fixture where name = 'fact_rev')),
+  2::bigint,
+  'men de bærer to ulike godkjenningsdatoer, så det er mulig å plukke feil');
+
+insert into expected_ts (name, at)
+select 'fact_ny_godkjenning', max(rd.decided_at) from workflow.review_decisions rd
+where rd.claim_revision_id = (select id from fixture where name = 'fact_rev')
+  and rd.review_type = 'publication_approval' and rd.decision = 'approved';
+
+set local role anon;
+select is(
+  (select last_reviewed_at from api.published_claims
+   where claim_id = (select id from fixture where name = 'fact_claim')),
+  (select at from expected_ts where name = 'fact_ny_godkjenning'),
+  'lesemodellen viser den NYE godkjenningen republiseringen hviler på, ikke den gamle');
+select is(
+  (select count(*) from api.published_claims
+   where claim_id = (select id from fixture where name = 'fact_claim')),
+  1::bigint,
+  'og påstanden står fortsatt som nøyaktig én rad');
+reset role;
+
 -- Verdien eies av databasen. En kaller som oppgir sin egen dato skal bli
 -- overskrevet, ellers ville «sist faglig vurdert» vært et tall den som
 -- publiserer selv valgte.
@@ -590,21 +655,21 @@ reset role;
 -- Radgrensen: bare hendelsen som beskriver den gjeldende publiseringen.
 -- Historikken bak den — avpubliseringen fra del 5 — er ikke lesbar.
 create view api.probe_events with (security_invoker = true) as
-  select id, claim_id, revision_id, published_at from knowledge.publication_events;
+  select claim_id, revision_id, published_at from knowledge.publication_events;
 grant select on api.probe_events to anon;
 
 select is(
   (select count(*) from knowledge.publication_events
    where claim_id = (select id from fixture where name = 'fact_claim')),
-  3::bigint,
-  'det deterministiske faktumet har tre hendelser: publisert, avpublisert, republisert');
+  5::bigint,
+  'det deterministiske faktumet har fem hendelser: publisert, avpublisert, republisert, avpublisert, republisert');
 
 set local role anon;
 select is(
   (select count(*) from api.probe_events
    where claim_id = (select id from fixture where name = 'fact_claim')),
-  2::bigint,
-  'anon ser bare de to hendelsene som navngir den gjeldende revisjonen, ikke avpubliseringen');
+  3::bigint,
+  'anon ser bare de tre hendelsene som navngir den gjeldende revisjonen, ikke de to avpubliseringene');
 reset role;
 
 select * from finish();

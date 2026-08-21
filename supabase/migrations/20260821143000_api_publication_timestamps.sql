@@ -208,23 +208,42 @@ comment on policy publication_events_current_publication_read on knowledge.publi
 -- være stille sann. Kontroller derfor role_column_grants / has_column_privilege
 -- i tillegg — det gjør 270_publication_access_test.sql nå.
 -- ----------------------------------------------------------------------------
--- id og created_at er med fordi lateralen i viewet trenger en deterministisk
--- «siste hendelse»-rekkefølge, og en ORDER BY er en del av spørringen: en
--- kolonne kalleren mangler grant på, gir «permission denied» selv om den aldri
--- projiseres. Begge er strukturelle og bærer verken klinisk innhold eller
--- personopplysninger. Kolonnene som gjør det — reason, published_by_actor_id,
--- published_by_actor_type — og hele forgjengerkjeden er ikke med.
-grant select (id, claim_id, revision_id, published_at, created_at, approval_decided_at)
+-- Fire kolonner. Viewet trenger ingen rekkefølge og dermed verken id eller
+-- created_at (se punkt 4), så hendelsens identitet, registreringstidspunkt,
+-- publiseringsbegrunnelse, publisererens identitet og hele forgjengerkjeden er
+-- utenfor klientflaten.
+grant select (claim_id, revision_id, published_at, approval_decided_at)
   on knowledge.publication_events to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 -- 4. api.published_claims får de to datoene
 --
--- Sideordnede join-er ville multiplisert raden hvis en påstand hadde flere
--- hendelser på samme revisjon — publisert, avpublisert og publisert igjen er en
--- helt vanlig historikk. Lateralen plukker den gjeldende hendelsen, og de to
--- verdiene kommer fra samme rad, slik at datoene aldri beskriver hver sin
--- publisering.
+-- En sideordnet join ville multiplisert raden: publisert, avpublisert og
+-- publisert igjen gir to hendelser på samme revisjon, og det er en helt vanlig
+-- historikk. Verdiene hentes derfor som aggregater, én skalar hver.
+--
+-- Hvorfor max() og ikke «den siste hendelsen»: innenfor én transaksjon er både
+-- published_at og created_at like på alle hendelser, fordi now() er
+-- transaksjonens starttidspunkt (§74.6). En ORDER BY på dem faller da tilbake på
+-- id, som er en tilfeldig uuid. Skjer publisering, avpublisering, ny godkjenning
+-- og republisering i samme transaksjon, bærer de to hendelsene *ulik*
+-- approval_decided_at, og en uuid-rekkefølge ville plukket den gamle
+-- godkjenningen omtrent annenhver gang. Forgjengerkjeden kunne besvart det
+-- eksakt, men ikke her: RLS skjuler mellomliggende hendelser, så et
+-- «finnes ingen etterfølger»-predikat ville sett en skjult etterfølger som
+-- fraværende og utpekt feil hendelse som kjedens hale.
+--
+-- max() trenger ingen rekkefølge, og er korrekt fordi begge kolonnene er
+-- monotont ikke-avtagende over hendelsene for samme revisjon:
+--
+--   published_at        settes til now() ved innsetting og kan ikke gå bakover.
+--   approval_decided_at settes av triggeren til den største (decided_at,
+--                       created_at, id) blant revisjonens publiseringsgodkjenninger
+--                       på skrivetidspunktet. Beslutningene er append-only, så
+--                       mengden kandidater kan bare vokse, og maksimum bare stige.
+--
+-- Begge maksima kommer dermed fra den samme, siste hendelsen, og datoene kan
+-- ikke beskrive hver sin publisering.
 --
 -- Viewet bærer publiseringspredikatet selv, i tillegg til RLS: hendelsen må
 -- navngi nettopp den revisjonen påstandens peker peker på. Det er samme
@@ -290,8 +309,19 @@ select
   r.content_hash              as content_hash,
   r.created_at                as revision_created_at,
 
-  pub.published_at            as published_at,
-  pub.approval_decided_at     as last_reviewed_at
+  (
+    select max(pe.published_at)
+    from knowledge.publication_events pe
+    where pe.claim_id = c.id
+      and pe.revision_id = r.id
+  )                           as published_at,
+
+  (
+    select max(pe.approval_decided_at)
+    from knowledge.publication_events pe
+    where pe.claim_id = c.id
+      and pe.revision_id = r.id
+  )                           as last_reviewed_at
 from knowledge.claims c
 join knowledge.claim_revisions r
   on r.id = c.current_published_revision_id
@@ -305,14 +335,6 @@ left join catalog.drugs cd
   on cd.id = r.comparator_drug_id
 left join knowledge.evidence_assessments ea
   on ea.claim_revision_id = r.id
-left join lateral (
-  select pe.published_at, pe.approval_decided_at
-  from knowledge.publication_events pe
-  where pe.claim_id = c.id
-    and pe.revision_id = r.id
-  order by pe.published_at desc, pe.created_at desc, pe.id desc
-  limit 1
-) pub on true
 where c.retired_at is null;
 
 comment on column api.published_claims.published_at is

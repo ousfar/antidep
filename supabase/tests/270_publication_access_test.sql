@@ -6,7 +6,7 @@
 -- publiseringspekeren eller lese publiseringshistorikken direkte. Klientflaten
 -- leser publiserte projeksjoner i api (migrasjon 007).
 --
--- Migrasjon 007a åpnet én smal lesevei: seks kolonner på de radene som beskriver
+-- Migrasjon 007a åpnet én smal lesevei: fire kolonner på de radene som beskriver
 -- den gjeldende publiseringen, slik at api.published_claims kan vise
 -- publiserings- og godkjenningsdato. Den er nøyaktig avgrenset her. Selve
 -- oppførselen — hva viewet svarer, og hva som ikke er lesbart — står i
@@ -66,7 +66,7 @@ select is_empty(
 
 -- has_table_privilege() ser ikke kolonnegrant. Assertionen over svarer «ingen
 -- tilgang» også når enkeltkolonner er åpnet, og ble stille sann i det migrasjon
--- 007a ga klientrollene SELECT på seks kolonner. Den uttømmende kontrollen må
+-- 007a ga klientrollene SELECT på fire kolonner. Den uttømmende kontrollen må
 -- derfor gå på role_column_grants. Eierens implisitte privilegier står der som
 -- egen grantee og filtreres bort.
 select set_eq(
@@ -78,20 +78,16 @@ select set_eq(
       and g.grantee in ('anon', 'authenticated', 'service_role', 'PUBLIC')
   $$,
   $$
-    values ('anon:id:SELECT'),
-           ('anon:claim_id:SELECT'),
+    values ('anon:claim_id:SELECT'),
            ('anon:revision_id:SELECT'),
            ('anon:published_at:SELECT'),
-           ('anon:created_at:SELECT'),
            ('anon:approval_decided_at:SELECT'),
-           ('authenticated:id:SELECT'),
            ('authenticated:claim_id:SELECT'),
            ('authenticated:revision_id:SELECT'),
            ('authenticated:published_at:SELECT'),
-           ('authenticated:created_at:SELECT'),
            ('authenticated:approval_decided_at:SELECT')
   $$,
-  'klientrollene har SELECT på nøyaktig de seks kolonnene api-lesemodellen trenger, ingen skriveprivilegier, og service_role ingenting'
+  'klientrollene har SELECT på nøyaktig de fire kolonnene api-lesemodellen trenger, ingen skriveprivilegier, og service_role ingenting'
 );
 
 -- Navngitt negativ kontroll ved siden av set_eq-en over: de kolonnene som bærer
@@ -105,7 +101,8 @@ select is_empty(
            as r(role_name)
     cross join (values ('reason'), ('published_by_actor_id'), ('published_by_actor_type'),
                        ('action'), ('previous_event_id'), ('previous_revision_id'),
-                       ('previous_revision_number'), ('revision_number'), ('object_type'))
+                       ('previous_revision_number'), ('revision_number'), ('object_type'),
+                       ('id'), ('created_at'))
            as c(column_name)
     where has_column_privilege(r.role_name, 'knowledge.publication_events',
                                c.column_name, 'select')

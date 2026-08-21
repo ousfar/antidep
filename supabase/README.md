@@ -76,7 +76,7 @@ objekt i `api` må få egen `GRANT` i migrasjonen som oppretter det. `service_ro
 ingen tilgang til Antidep-schemaene og er ikke applikasjonens universalnøkkel
 (`docs/DATABASE_ARCHITECTURE.md` §49).
 
-Fra migrasjon 007a har klientrollene i tillegg `SELECT` på seks av kolonnene i
+Fra migrasjon 007a har klientrollene i tillegg `SELECT` på fire av kolonnene i
 `knowledge.publication_events` — nok til å lese publiserings- og godkjenningstidspunktet
 for den gjeldende publiseringen, og ikke mer. Publiseringsbegrunnelsen og hvem som
 publiserte er ikke blant dem. Et kolonnegrant er en reell begrensning: et
