@@ -1300,7 +1300,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       db: add api published read model                        (#18)  merget   migrasjon 007
       ci: verify the numeric claims in the plan               (#19)  merget   ingen migrasjon
       db: add audit events                                    (#20)  merget   migrasjon 008
-      db: expose publication and review timestamps in api            migrasjon 007a
+      db: expose publication and review timestamps in api     (#21)  åpen     migrasjon 007a
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
