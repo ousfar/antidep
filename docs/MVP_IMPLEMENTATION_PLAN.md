@@ -1241,10 +1241,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ---
 
-## 74. Status etter migrasjon 007
+## 74. Status etter migrasjon 008
 
-**Oppdatert:** 20. august 2026 (etter migrasjon 007, api-lesemodellen; forrige oppdatering
-etter korreksjonsmigrasjon 006a)
+**Oppdatert:** 21. august 2026 (etter migrasjon 008, auditloggen; forrige oppdatering
+etter migrasjon 007, api-lesemodellen)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1299,21 +1299,25 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       db: make evidence item content hash unambiguous         (#17)  merget   migrasjon 006a
       db: add api published read model                        (#18)  merget   migrasjon 007
       ci: verify the numeric claims in the plan               (#19)  merget   ingen migrasjon
+      db: add audit events                                    (#20)  merget   migrasjon 008
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
 i tråd med §51. Den planlagte PR G — `feat: add admin golden-slice workflow` — er
-dermed ikke bygget ennå, og glir til etter migrasjon 007.
+dermed ikke bygget ennå, og glir til etter migrasjon 008. Rekkefølgen mellom migrasjon
+008 og PR I (`feat: add first drug and evidence UI`) er avgjort til fordel for 008, fordi
+§25 er eksplisitt på at audit skal komme tidlig nok til at resten av admin-MVP-en bygges
+med sporbarhet fra starten. Se §74.10.
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Hva 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
-**Migrasjonsnumrene i §18-§27 navngir planlagt innhold, ikke filrekkefølge.** Den åttende
-migrasjonsfilen er migrasjon 007, fordi den sjuende — korreksjonsmigrasjonen 006a — står
+**Migrasjonsnumrene i §18-§27 navngir planlagt innhold, ikke filrekkefølge.** Den niende
+migrasjonsfilen er migrasjon 008, fordi den sjuende — korreksjonsmigrasjonen 006a — står
 utenfor den planlagte rekken og fikk en bokstav. Konvensjonen finnes nettopp for at
 «migrasjon 007 — API-lesemodell» (§24) skal bety det samme i plan, migrasjoner og tester.
 
-Databaselaget teller nå 960 pgTAP-assertions over 29 testfiler.
+Databaselaget teller nå 1054 pgTAP-assertions over 32 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1332,6 +1336,11 @@ publiseringshistorikk med en kontrollert publiseringsoperasjon.
 Fra migrasjon 007 finnes også leseveien ut: tre views i `api`, de første RLS-policyene, og
 `SELECT` til klientrollene på de tretten tabellene viewene leser. Kjeden er dermed lukket i
 begge ender — det som mangler mellom dem, er en publisering.
+
+Fra migrasjon 008 finnes auditloggen: `audit.events`, med de to produsentene som dekker de
+skriveveiene som faktisk finnes i dag — publisering og rolleforvaltning. Loggen er tom i
+migrert tilstand, av samme grunn som api-projeksjonene er det: ingenting er publisert, og
+ingen rolle er tildelt. Se §74.10.
 
 Innholdet er derimot bevisst minimalt, og det er ikke det samme som at slicen er ferdig:
 
@@ -1374,9 +1383,11 @@ kilde til klientflate står ferdig og testet rundt det tomrommet.
 Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
 
 1. **Enum kontra oppslagstabell — utsatt, og gjort billigere å utsette.** Det finnes
-   37 enum-typer, fordelt på migrasjonene 001-006a med henholdsvis 1, 6, 11, 7, 10, 2
-   og 0. Migrasjon 007 la ikke til flere. Tallet er kontrollert mot kilden
-   (`grep -cE '^create type ' supabase/migrations/*.sql`) og mot databasen.
+   38 enum-typer, fordelt på de ni migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
+   007 og 008 med henholdsvis 1, 6, 11, 7, 10, 2, 0, 0 og 1. Tallet er kontrollert mot
+   kilden (`grep -cE '^create type ' supabase/migrations/*.sql`) og mot databasen.
+   Alle ni ledd er nå oppgitt eksplisitt framfor å la de siste hvile på restpåstanden i
+   `scripts/verify-counts.sh`; det er den formen vakten kontrollerer strengest.
    Viewene caster enum-kolonner til `text`, så den offentlige kontrakten er en streng
    fra et dokumentert vokabular, ikke PostgreSQL-typen. Et senere bytte til
    oppslagstabeller er dermed ikke en brytende API-endring. Castingen sparer også
@@ -1417,7 +1428,10 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | En tilbaketrukket ekstraksjon utløser ingen automatisk avpublisering eller ny review | En publisert påstand kan bli stående mens deler av grunnlaget er underkjent. Lesemodellen merker det nå (§74.9), men livssyklusen er ikke lukket | Admin-flyten (§29). Der hører beslutningen om hva som skal skje med berørte publiseringer hjemme — automatisk avpublisering er en klinisk policy, ikke en implementasjonsdetalj |
 | Publiseringstidspunkt og reviewtidspunkt er ikke eksponert i `api` | En kliniker ser «sist faglig vurdert» bare for de typene som har en evidensvurdering; et deterministisk faktum får ingen dato | Viewet som betjener kliniker-UI-et. Krever først en governance-beslutning om hvor mye av reviewhistorikken som skal være offentlig. `knowledge.publication_events` er helt stengt for klientrollene; `workflow.review_decisions` er åpnet smalt av migrasjon 007, men bare for `review_type = 'extraction_withdrawal'`, så publiseringsgodkjenningene er fortsatt utenfor klientflaten |
 | `api.published_claims` eksponerer populasjonens etikett, ikke dens strukturerte grenser | Aldersgrenser, indikasjon, graviditetskontekst og komorbiditet ligger bare i etiketteksten | Det første viewet som faktisk trenger å filtrere på populasjon. `catalog.populations` er allerede lesbar for klientrollene, så det er en projeksjonsendring, ikke en tilgangsendring |
-| Felles hjelpefunksjoner (`catalog.set_row_timestamps()`, `catalog.set_created_at()`, `knowledge.reject_append_only_mutation()`) brukes fra flere schemaer | Lav; plasseringen er misvisende | Et `util`-schema endrer `DATABASE_ARCHITECTURE.md` §6 og hver schemauttømmende vaktpost i testpakken. Egen beslutning |
+| Felles hjelpefunksjoner (`catalog.set_row_timestamps()`, `catalog.set_created_at()`, `knowledge.reject_append_only_mutation()`) brukes fra flere schemaer | Lav; plasseringen er misvisende. Migrasjon 008 gjorde den mer misvisende: `audit.events` bruker begge de to siste, så `catalog` og `knowledge` eier nå hjelpefunksjoner for et schema som ikke har noe med noen av dem å gjøre | Et `util`-schema endrer `DATABASE_ARCHITECTURE.md` §6 og hver schemauttømmende vaktpost i testpakken. Egen beslutning |
+| Fysisk sletting av en rolletildeling er selv uauditert | En rolletildeling kan fjernes fysisk uten at det står hvem som fjernet den. Auditradene for tildelingen og avslutningen består — det er nettopp derfor `object_id` ikke har fremmednøkkel — men slettingen selv etterlater ingen rad. En trigger kan ikke navngi den som sletter, fordi `DELETE` ikke bærer en aktør, og `audit.events.actor_id` er med hensikt `NOT NULL` | Admin-flyten (§48). Der går slettingen gjennom en kontrollert funksjon som kjenner aktøren, og `DATABASE_ARCHITECTURE.md` §36 sitt krav om «særskilt audit» ved fysisk sletting kan innfris |
+| Endringer på `provenance.actors` auditeres ikke | Aktørraden er festepunktet for all attribusjon, og visningsnavn, beskrivelse og tilbaketrekking kan endres uten spor. Identiteten er riktignok frosset av `provenance.freeze_actor_identity()`, så det som kan endres er presentasjon og livssyklus, ikke hvem aktøren er | Samme trigger som over, og av samme grunn: tabellen har ingen kolonne som sier hvem som endret raden, så en trigger har ingen aktør å registrere |
+| `audit.events.request_or_run_id` har ingen produsent | Auditrader kan ikke grupperes etter forespørselen eller agentkjøringen de hørte til, så en operasjon som består av flere skrivinger framstår som uavhengige hendelser | `provenance.agent_runs`, eller det første admin-RPC-laget som har en forespørselsidentitet å sende med |
 
 ### 74.8 Gjeld innfridd i korreksjonsmigrasjon 006a
 
@@ -1542,6 +1556,100 @@ oppslaget kunne treffe en urelatert rad. Policykommentarene fra 007 er de først
 kommentarene i Antidep-schemaene som verken beskriver en relasjon, en funksjon eller en
 type, og gjorde svakheten nåbar. Hver gren binder nå sin egen `classoid`, og policyer er
 tatt inn i vakten framfor å falle utenfor den.
+
+### 74.10 Hva migrasjon 008 innførte
+
+`20260821090000_audit_events.sql` oppretter `audit.events` (§25), vokabularet
+`audit.event_operation`, og de to produsentene som gjør loggen til noe annet enn en tom
+tabell.
+
+**Sporvalget.** To spor var byggbare etter migrasjon 007: audit (§25) og det første
+kliniker-UI-et (§30, PR I). Audit ble valgt fordi §25 selv begrunner rekkefølgen — audit
+skal komme tidlig nok til at resten av admin-MVP-en bygges med sporbarhet fra starten — og
+fordi kliniker-UI-et støter på en governance-beslutning med det samme: gjeldsposten om
+publiserings- og reviewtidspunkt i `api` har nettopp det viewet som trigger, og krever
+først en avgjørelse om hvor mye av reviewhistorikken som skal være offentlig. Audit har
+ingen slik forutsetning.
+
+**Auditloggen er et supplement, ikke et andre hjem for faglig historikk.**
+`DATABASE_ARCHITECTURE.md` §35 er eksplisitt på det. Den kliniske historikken ligger
+fortsatt i revisjonsmodellen og i `knowledge.publication_events`. Det loggen tilfører er
+det tverrgående spørsmålet ingen av dem kan besvare: «hva gjorde denne aktøren, på tvers av
+objekter og schemaer?» Derfor er raden ett smalt spor per operasjon, ikke en kopi av
+innholdet.
+
+**`object_id` har bevisst ingen fremmednøkkel, og det er migrasjonens ene avvik fra §37.**
+Grunnen står i §36: fysisk sletting er reservert for feilopprettede objekter, personvernkrav
+og administrativt vedlikehold, og «skal i så fall ha særskilt audit». En fremmednøkkel ville
+gjort nettopp den auditen umulig — enten ville slettingen blitt blokkert av auditraden,
+eller auditraden ville forsvunnet med objektet den dokumenterer. Auditraden bærer derfor et
+snapshot framfor bare en peker, og `320_audit_operations_test.sql` demonstrerer egenskapen
+ved faktisk å slette rolletildelingen og lese auditsporet etterpå. `actor_id` er derimot en
+ekte fremmednøkkel med `RESTRICT`: der er ikke overlevelse spørsmålet, men at en aktør ikke
+skal kunne slettes bort under sin egen historikk.
+
+**Loggen daterer, den ordner ikke.** Et løpenummer ville vært den nærliggende måten å gi en
+append-only logg en total orden. Den ville vært falsk, av samme grunn som §74.6 slo fast for
+publisering: et løpenummer tildeles ved innsetting, ikke ved commit, så to transaksjoner kan
+commite i motsatt rekkefølge av tildelingen, og en rullet tilbake transaksjon etterlater
+hull. Rekkefølgespørsmål besvares der de har et svar — hendelseskjeden i
+`knowledge.publication_events` og gyldighetsintervallene i `workflow.user_roles`.
+
+**Objektpekeren er avledet, ikke oppgitt.** `object_schema` og `object_table` er genererte
+kolonner over `operation`, etter samme mønster som `workflow.user_roles.scope_type` og
+`knowledge.publication_events.object_type`. Kunne de oppgis uavhengig, kunne de komme i
+utakt, og loggen ville kunnet påstå at en rolletildeling skjedde i `knowledge`. Begge er
+`NOT NULL`, slik at en enum-verdi som legges til uten at `CASE`-uttrykket utvides feiler ved
+innsetting framfor å gi en tom kolonne.
+
+**Vokabularet er domenehandlinger, ikke DML-verb.** «update på `workflow.user_roles`»
+forteller ikke den som gjennomgår loggen om en rettighet ble utvidet eller tilbakekalt, og
+det er nettopp det spørsmålet loggen finnes for. Prisen er at hver ny auditert operasjon
+krever en migrasjon. Det er en villet pris: en logg som stilltiende utvider seg til nye
+operasjoner, utvider seg også til operasjoner ingen har tatt stilling til om skal auditeres.
+
+**Produsentene er triggere, og de er bevisst ikke `SECURITY DEFINER`.** §60 navngir
+«append-only audit» som en av de få legitime triggerbrukene, og grunnen er at en trigger
+ikke kan glemmes av neste skrivevei — rolletildelinger har i dag ingen kontrollert funksjon
+over seg i det hele tatt. At auditskriverne kjører med kallerens rettigheter er en
+sikkerhetsbeslutning: en auditskriver som er mer privilegert enn operasjonen den
+registrerer, er en vei til å skrive falske auditrader. Konsekvensen er at den som ikke kan
+skrive auditraden heller ikke får registrert operasjonen. Det er riktig vei å feile, og det
+testes med en rolle som får `INSERT` på `workflow.user_roles` og ingenting i `audit`.
+
+**Loggen har ingen lesevei for klientroller.** §47 lister `audit` blant schemaene den
+offentlige klinikerflaten aldri skal ha `SELECT` mot. Tabellen har derfor ingen grant, ingen
+policy, ingen `usage` på schemaet, og `310_audit_access_test.sql` kontrollerer i tillegg at
+ingen view i `api` leser fra den — grantene fra migrasjon 007 virker gjennom viewene, så et
+slikt view ville vært en vei forbi alle tre lagene uten at noen grant på `audit.events` var
+nødvendig.
+
+**Vaktposten i `040_catalog_structure_test.sql` ble snevret, ikke fjernet.** Den påstod at
+`audit` var tomt; den påstår nå at schemaet inneholder nøyaktig én relasjon. Et objekt som
+sniker seg inn i `audit` uten en migrasjon som forklarer det, fanges fortsatt.
+
+**Mutasjonstesting, og hva den avdekket.** Trettitre mutasjoner ble kjørt mot de nye
+testene og mot tallvakten. Alle blir fanget nå, men tre gjorde det ikke i første omgang, og
+alle tre av samme grunn: assertionen var *stille sann* framfor sann.
+
+- En `is_empty` over en join mellom auditraden og publiseringshendelsen passerte også når
+  joinen ikke traff i det hele tatt — altså nettopp når `occurred_at` var feil. Den er nå
+  formulert som en telling.
+- Kontrollen av at en uendret oppdatering ikke gir en auditrad kjørte ikke i det hele tatt
+  under mutasjonen den skulle fange, fordi oppdateringen da feilet først. Den er nå pakket i
+  `lives_ok`.
+- Kontrollen av at en operasjon som ikke kan auditeres heller ikke kan utføres, bestod av to
+  feil grunner etter hverandre: først fordi et aktøroppslag i testdataene traff
+  `permission denied for schema provenance`, og deretter — etter at oppslaget var fjernet —
+  fordi RLS på `workflow.user_roles` avviser skrivingen før triggeren i det hele tatt kjører.
+  Testen åpner nå alle tre lagene inne i transaksjonen, slik at auditskrivingen er det
+  eneste som gjenstår, og kontrollerer feilmeldingen og ikke bare SQLSTATE: `42501` alene
+  skiller ikke «kunne ikke skrive auditraden» fra en hvilken som helst annen rettighetsfeil
+  på veien.
+
+Tallvakten ble mutert på ytterpunktene og ikke bare i midten (§74.9-lærdommen fra #19):
+første ledd, siste ledd, forkortet påstand, ett ledd for langt, og en omformulering som
+fjerner påstanden. Alle fem ble fanget.
 
 ---
 
