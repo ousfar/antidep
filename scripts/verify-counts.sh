@@ -71,19 +71,45 @@ sjekk "enum-typer totalt" \
 # Totalen alene ville ikke fanget at fordelingen er feil, og det var nettopp
 # fordelingen som drev fra hverandre: gjeldsposten oppga 37 for både 005 og 006.
 # Tallene er formulert som antallet lagt til i hver migrasjon, i filrekkefølge.
+#
+# Påstanden brytes over to linjer i planen. En linjebasert grep fanget derfor
+# bare prefikset fram til bruddet, og siste ledd stod ukontrollert — en
+# mutasjon av det overlevde. Linjeskift normaliseres nå bort før mønsteret
+# brukes.
+plan_flat=$(tr '\n' ' ' < "$PLAN" | tr -s ' ')
 paastatt_fordeling=$(
-  grep -oE 'henholdsvis [0-9]+(, [0-9]+)*(,? og [0-9]+)?' "$PLAN" \
+  printf '%s' "$plan_flat" \
+    | grep -oE 'henholdsvis [0-9]+(, [0-9]+)*(,? og [0-9]+)?' \
     | head -1 | grep -oE '[0-9]+' | paste -sd, -
 )
 faktisk_fordeling=$(
   grep -hcE '^create type ' supabase/migrations/*.sql | paste -sd, -
 )
-# Planen lister 001-006a; 007 og senere står som «la ikke til flere» i teksten.
-# Sammenlign derfor bare så mange ledd som planen faktisk oppgir.
-antall_ledd=$(printf '%s' "$paastatt_fordeling" | tr ',' '\n' | grep -c .)
-faktisk_fordeling=$(printf '%s' "$faktisk_fordeling" | cut -d, -f1-"${antall_ledd:-0}")
-sjekk "enum-typer per migrasjon" \
-  "$paastatt_fordeling" "$faktisk_fordeling" "create type per fil"
+
+antall_paastatt=$(printf '%s' "$paastatt_fordeling" | tr ',' '\n' | grep -c .)
+antall_faktisk=$(printf '%s' "$faktisk_fordeling" | tr ',' '\n' | grep -c .)
+
+# Planen lister 001-006a eksplisitt og sier om resten at de «ikke la til flere».
+# Begge deler er påstander, og begge kontrolleres. Å bare sammenligne så mange
+# ledd som planen oppgir — uten å kontrollere at avkortingen er berettiget —
+# gjorde en kort fangst til en stille godkjenning: en påstand som var kortere
+# enn den skulle, matchet alltid sitt eget prefiks.
+if [ "$antall_paastatt" -gt "$antall_faktisk" ]; then
+  printf '  AVVIK    %-26s dokumentet oppgir %s ledd, men det finnes bare %s migrasjonsfiler\n' \
+    "enum-typer per migrasjon" "$antall_paastatt" "$antall_faktisk"
+  feil=1
+else
+  sjekk "enum-typer per migrasjon" \
+    "$paastatt_fordeling" \
+    "$(printf '%s' "$faktisk_fordeling" | cut -d, -f1-"${antall_paastatt:-0}")" \
+    "create type per fil"
+
+  # Restpåstanden: migrasjonene planen ikke lister opp, la ikke til enum-typer.
+  rest=$(printf '%s' "$faktisk_fordeling" | tr ',' '\n' | tail -n +"$((antall_paastatt + 1))")
+  rest_ikke_null=$(printf '%s' "$rest" | grep -vc '^0$' || true)
+  sjekk "enum-typer etter de oppgitte" "0" "${rest_ikke_null:-0}" \
+    "antall migrasjoner med enum-typer utover de $antall_paastatt planen lister"
+fi
 
 echo
 if [ "$feil" -ne 0 ]; then
