@@ -1241,10 +1241,11 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ---
 
-## 74. Status etter migrasjon 007a
+## 74. Status etter lesemodellklienten
 
-**Oppdatert:** 21. august 2026 (etter migrasjon 007a, publiserings- og reviewtidspunkt i
-api-lesemodellen; forrige oppdatering etter migrasjon 008, auditloggen)
+**Oppdatert:** 22. august 2026 (etter `feat: add published read model client`, den typede
+leseveien fra `api` inn i appen; forrige oppdatering etter migrasjon 007a, publiserings- og
+reviewtidspunkt i api-lesemodellen)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1262,7 +1263,7 @@ api-lesemodellen; forrige oppdatering etter migrasjon 008, auditloggen)
 [~] Golden evidence slice
 [!] First admin workflow
 [!] First published Claim
-[ ] First clinician UI
+[~] First clinician UI
 [ ] Comparison golden slice
 [ ] Norwegian product ingest
 [ ] Pilot evidence pipeline
@@ -1300,7 +1301,8 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       db: add api published read model                        (#18)  merget   migrasjon 007
       ci: verify the numeric claims in the plan               (#19)  merget   ingen migrasjon
       db: add audit events                                    (#20)  merget   migrasjon 008
-      db: expose publication and review timestamps in api     (#21)  åpen     migrasjon 007a
+      db: expose publication and review timestamps in api     (#21)  merget   migrasjon 007a
+      feat: add published read model client                   (#22)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1310,8 +1312,15 @@ dermed ikke bygget ennå, og glir til etter migrasjon 008. Rekkefølgen mellom m
 §25 er eksplisitt på at audit skal komme tidlig nok til at resten av admin-MVP-en bygges
 med sporbarhet fra starten. Se §74.10.
 
+PR I er nå påbegynt. `feat: add published read model client` er dens første del og
+inneholder ingen visning: den etablerer den typede leseveien fra `api` inn i appen, slik at
+komponentene i neste del bygges mot en kontrakt framfor mot løse objekter. Delingen følger
+§51 — «bygg ClaimCard» og «bygg evidence drawer» står der som egne PR-er. Se §74.12.
+
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
-ferdig, ikke i en senere. Hva 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
+ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #21. Hva
+006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
 **Migrasjonsnumrene i §18-§27 navngir planlagt innhold, ikke filrekkefølge.** Den niende
 migrasjonsfilen er migrasjon 008, fordi den sjuende — korreksjonsmigrasjonen 006a — står
@@ -1445,6 +1454,7 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Fysisk sletting av en rolletildeling er selv uauditert | En rolletildeling kan fjernes fysisk uten at det står hvem som fjernet den. Auditradene for tildelingen og avslutningen består — det er nettopp derfor `object_id` ikke har fremmednøkkel — men slettingen selv etterlater ingen rad. En trigger kan ikke navngi den som sletter, fordi `DELETE` ikke bærer en aktør, og `audit.events.actor_id` er med hensikt `NOT NULL` | Admin-flyten (§48). Der går slettingen gjennom en kontrollert funksjon som kjenner aktøren, og `DATABASE_ARCHITECTURE.md` §36 sitt krav om «særskilt audit» ved fysisk sletting kan innfris |
 | Endringer på `provenance.actors` auditeres ikke | Aktørraden er festepunktet for all attribusjon, og visningsnavn, beskrivelse og tilbaketrekking kan endres uten spor. Identiteten er riktignok frosset av `provenance.freeze_actor_identity()`, så det som kan endres er presentasjon og livssyklus, ikke hvem aktøren er | Samme trigger som over, og av samme grunn: tabellen har ingen kolonne som sier hvem som endret raden, så en trigger har ingen aktør å registrere |
 | `audit.events.request_or_run_id` har ingen produsent | Auditrader kan ikke grupperes etter forespørselen eller agentkjøringen de hørte til, så en operasjon som består av flere skrivinger framstår som uavhengige hendelser | `provenance.agent_runs`, eller det første admin-RPC-laget som har en forespørselsidentitet å sende med |
+| `api`-kontrakten i TypeScript er ikke maskinelt kontrollert mot databasen | Radtypene, `Database`-typen og de lukkede vokabularene i `src/types/` er håndskrevne påstander om `api`. En kolonne som skifter navn eller blir nullbar, eller en ny enum-verdi, gjør typen usann uten at noe feiler. `describeClaimCertainty()` fanger en ukjent `certainty_level` i kjøretid; `relationship_type`, `*_availability` og `source_status` har ingen tilsvarende kontroll | En kontroll i CI som sammenligner `information_schema.columns` for `api` mot typene — databasejobben har allerede en kjørende stack — eller den første migrasjonen som endrer et api-view |
 
 ### 74.8 Gjeld innfridd i korreksjonsmigrasjon 006a
 
@@ -1778,6 +1788,72 @@ PR I) ingen gjenstående forutsetning i databasen. Viewene svarer fortsatt `[]` 
 publisert, så UI-et må bygges mot en tom projeksjon og behandle den som en førsteklasses
 tilstand: «ingen data», «ingen vurderbar evidens» og «lav risiko» skal se forskjellige ut
 (`ANTIDEP_CONSTITUTION.md` §6, §17).
+
+### 74.12 Hva lesemodellklienten innførte
+
+`feat: add published read model client` er den første appkoden siden bootstrap (PR A) og
+første del av PR I (§30, §68). Den oppretter ingen migrasjon, ingen komponenter og ingen
+ruting, og leser ingenting i seg selv: viewene svarer fortsatt `[]`.
+
+Den består av radtypene for de tre api-viewene (`src/types/api.ts`), `Database`-typen
+supabase-js parametriseres med (`src/types/database.ts`), klienten (`src/lib/supabase.ts`),
+de tre lesefunksjonene (`src/lib/published-read-model.ts`) og avledningen av sikkerhetsgrad
+(`src/lib/claim-certainty.ts`).
+
+**Fem beslutninger, i den rekkefølgen de betyr noe klinisk:**
+
+1. **Tomt er en egen tilstand, ikke en tom liste.** Lesefunksjonene returnerer en lukket
+   union `ok | empty | error` der `ok` per konstruksjon aldri har null rader. En kaller kan
+   ikke rendre et tomt sett som en liste uten først å ha tatt stilling til `empty`, og en
+   feil kan ikke forsvinne i den samme tomme listen. Det er den strukturelle formen av
+   kravet om at «ingen data» aldri skal se ut som «lav risiko» (`ANTIDEP_CONSTITUTION.md`
+   §6, §17), og den gjelder fra første komponent i neste PR.
+
+2. **De to NULL-lignende sikkerhetstilstandene er skilt i én avledning.**
+   `describeClaimCertainty()` gir `graded`, `no_assessable_evidence`,
+   `not_applicable_deterministic_fact` eller `unknown`. En klient som forgrener direkte på
+   `certainty_level` gjør de to første usynlige for hverandre ved første `if (!level)`.
+   `unknown` dekker to kontraktsbrudd — en evidenssyntese uten vurdering, og en verdi
+   utenfor vokabularet — og ingen av de fire tilstandene kan renderes som en lav gradering.
+
+3. **Lukket vokabular bare der klienten forgrener, og med kjøretidskontroll.** Enum-verdiene
+   er tekst i kontrakten (§74.5 punkt 1), så en TypeScript-union er en påstand om databasen
+   som ingenting håndhever. Linjen er trukket etter klinisk konsekvens: kunnskapstype,
+   sikkerhetsgrad, relasjonstype, `*_availability` og kildestatus er lukkede unioner; resten
+   er dokumentert `string`, og promoteres av den PR-en som faktisk forgrener på dem. Gjelden
+   som følger, står i §74.7.
+
+4. **Evidensen sorteres bevisst nøytralt.** En rekkefølge etter `relationship_type` ville
+   satt støttende funn først og gjort presentasjonsrekkefølgen til en vekting av evidensen.
+   Motstridende funn skal stå side om side med støttende (§9), så api-laget sorterer bare
+   på lenkens id — stabilt mellom kall, uten mening — og overlater rekkefølgen i
+   klinikerflaten til visningen, der den er en designbeslutning.
+
+5. **Nøkkelvakten er positiv, ikke en svarteliste.** `assertPublishableKey()` avviser alt
+   annet enn `anon` og `authenticated`, ikke bare `service_role`, slik at en framtidig
+   privilegert rolle ikke slipper gjennom fordi den ikke var navngitt. Vakten er et
+   supplement til at hemmeligheter aldri legges i repoet (`DATABASE_ARCHITECTURE.md` §49),
+   ikke en lås; den fanger den dagen noen kopierer feil verdi inn i `.env.local`. Klienten
+   er dessuten bundet til `api`, slik at et forsøk på å navngi en kanonisk tabell blir en
+   typefeil framfor et 404 i produksjon.
+
+**En stille feilmodus ble truffet under arbeidet, og fanges nå.** supabase-js forkaster en
+`Database`-type som ikke oppfyller formen sin — uten feilmelding — og gir da `never` som
+radtype. `never` er tilordnbart til alt, så typecheck og tester fortsetter å passere mens
+spørringene ikke lenger er typet. To skrivemåter utløser det: en Row deklarert som
+`interface` (uten implisitt indekssignatur) og tomme oppslag skrevet som
+`Record<string, never>` (som slår ut radtypen til hvert view gjennom snittet
+`Tables & Views`). Begge er prøvd mot kompilatoren, ikke antatt, og
+`src/lib/published-read-model.test.ts` bærer en kompileringsvakt som gir typefeil hvis
+radtypen kollapser igjen. Vakten håndheves av `npm run typecheck`, ikke av vitest, som
+fjerner typene — det står i filen, slik at ingen tror testkjøringen dekker den. Dette er
+samme kategori som den stille sanne assertionen i §74.11 punkt 2: en kontroll kan slutte å
+måle uten å feile.
+
+**Hva som gjenstår av PR I.** Ruting, legemiddelside, claim-komponent, «Hvorfor sier Antidep
+dette?» og kildedetalj (§30). Avhengighetsvalgene for ruting og server-state (§7) er ikke
+tatt, fordi denne delen ikke trenger dem. Klinikerflaten må bygges mot den tomme
+projeksjonen og behandle den som en førsteklasses tilstand — §74.11 sist.
 
 ---
 
