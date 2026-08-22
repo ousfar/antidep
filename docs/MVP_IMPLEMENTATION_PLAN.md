@@ -1813,8 +1813,13 @@ de tre lesefunksjonene (`src/lib/published-read-model.ts`) og avledningen av sik
    `describeClaimCertainty()` gir `graded`, `no_assessable_evidence`,
    `not_applicable_deterministic_fact` eller `unknown`. En klient som forgrener direkte på
    `certainty_level` gjør de to første usynlige for hverandre ved første `if (!level)`.
-   `unknown` dekker to kontraktsbrudd — en evidenssyntese uten vurdering, og en verdi
-   utenfor vokabularet — og ingen av de fire tilstandene kan renderes som en lav gradering.
+   `unknown` dekker fire kontraktsbrudd — en ukjent kunnskapstype, en evidenssyntese uten
+   vurdering, en verdi utenfor vokabularet, og et deterministisk faktum som likevel bærer en
+   gradering — og ingen av de fire tilstandene kan renderes som en lav gradering.
+   Kunnskapstypen kontrolleres først og på alle veier: den avgjør hvilken sikkerhetstilstand
+   som er gyldig, så en fjerde epistemisk kategori med en tilsynelatende gyldig gradering
+   skal ikke passere som en ordinær GRADE-vurdert påstand. Den første utformingen kontrollerte
+   den bare på NULL-veien; det ble funnet av den eksterne reviewen på PR #22 og er rettet der.
 
 3. **Lukket vokabular bare der klienten forgrener, og med kjøretidskontroll.** Enum-verdiene
    er tekst i kontrakten (§74.5 punkt 1), så en TypeScript-union er en påstand om databasen

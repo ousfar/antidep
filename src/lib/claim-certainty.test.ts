@@ -100,6 +100,47 @@ describe('kontraktsbrudd blir ukjent, aldri godartet', () => {
       describeClaimCertainty(claim({ knowledge_type: 'kommende_type', certainty_level: null })),
     ).toMatchObject({ kind: 'unknown', reason: 'unrecognised_knowledge_type' })
   })
+
+  it('en ukjent kunnskapstype slår gjennom selv når graderingen er gyldig', () => {
+    // Kunnskapstypen avgjør hvilken sikkerhetstilstand som er gyldig. Ble den
+    // bare kontrollert på NULL-veien, ville en fjerde epistemisk kategori med
+    // en gradering blitt presentert som en ordinær GRADE-vurdert påstand.
+    expect(
+      describeClaimCertainty(claim({ knowledge_type: 'kommende_type', certainty_level: 'high' })),
+    ).toEqual({
+      kind: 'unknown',
+      reason: 'unrecognised_knowledge_type',
+      rawCertaintyLevel: 'high',
+      rawKnowledgeType: 'kommende_type',
+    })
+  })
+
+  it('en ukjent kunnskapstype slår gjennom også for no_assessable_evidence', () => {
+    expect(
+      describeClaimCertainty(
+        claim({
+          knowledge_type: 'kommende_type',
+          certainty_level: 'no_assessable_evidence',
+          evidence_gap: 'Ingen studier.',
+        }),
+      ),
+    ).toMatchObject({ kind: 'unknown', reason: 'unrecognised_knowledge_type' })
+  })
+
+  it('et deterministisk faktum som bærer en gradering er også et brudd', () => {
+    // Den andre halvdelen av «NULL hvis og bare hvis deterministic_fact».
+    // En GRADE-merking ville gitt faktumet en epistemisk status det ikke har.
+    expect(
+      describeClaimCertainty(
+        claim({ knowledge_type: 'deterministic_fact', certainty_level: 'moderate' }),
+      ),
+    ).toEqual({
+      kind: 'unknown',
+      reason: 'assessment_on_deterministic_fact',
+      rawCertaintyLevel: 'moderate',
+      rawKnowledgeType: 'deterministic_fact',
+    })
+  })
 })
 
 describe('ingen tilstand kan forveksles med en lav gradering', () => {
@@ -110,6 +151,8 @@ describe('ingen tilstand kan forveksles med en lav gradering', () => {
       claim({ certainty_level: null }),
       claim({ certainty_level: 'ganske_sikker' }),
       claim({ certainty_level: '' }),
+      claim({ knowledge_type: 'kommende_type', certainty_level: 'high' }),
+      claim({ knowledge_type: 'deterministic_fact', certainty_level: 'high' }),
     ]
     for (const input of ikkeGraderte) {
       expect(describeClaimCertainty(input).kind).not.toBe('graded')

@@ -55,14 +55,29 @@ export type ClaimCertainty =
    */
   | { readonly kind: 'not_applicable_deterministic_fact' }
   /**
-   * Kontraktsbrudd. `missing_assessment`: en evidenssyntese eller klinisk
-   * anbefaling uten vurdering, som publiseringsgaten skal ha stoppet.
-   * `unrecognised_level`: en verdi utenfor det kjente vokabularet.
-   * Begge skal vises som ukjent sikkerhet, aldri som lav og aldri som ingen.
+   * Kontraktsbrudd. Fire grunner, alle med samme konsekvens: vis ukjent
+   * sikkerhet, aldri lav og aldri ingen.
+   *
+   *   `unrecognised_knowledge_type`   kunnskapstypen er ikke en Antidep kjenner,
+   *                                   så det er ukjent hvilken sikkerhetstilstand
+   *                                   som i det hele tatt er gyldig for den.
+   *   `missing_assessment`            en evidenssyntese eller klinisk anbefaling
+   *                                   uten vurdering, som publiseringsgaten G10
+   *                                   skal ha stoppet.
+   *   `unrecognised_level`            en sikkerhetsverdi utenfor vokabularet.
+   *   `assessment_on_deterministic_fact`
+   *                                   et deterministisk faktum som likevel bærer
+   *                                   en gradering. Migrasjon 004 tillater det
+   *                                   ikke, og en GRADE-merking ville gitt
+   *                                   faktumet en epistemisk status det ikke har.
    */
   | {
       readonly kind: 'unknown'
-      readonly reason: 'missing_assessment' | 'unrecognised_level' | 'unrecognised_knowledge_type'
+      readonly reason:
+        | 'unrecognised_knowledge_type'
+        | 'missing_assessment'
+        | 'unrecognised_level'
+        | 'assessment_on_deterministic_fact'
       readonly rawCertaintyLevel: string | null
       readonly rawKnowledgeType: string
     }
@@ -86,28 +101,35 @@ function isKnownKnowledgeType(value: string): boolean {
 
 export function describeClaimCertainty(claim: ClaimCertaintyInput): ClaimCertainty {
   const level = claim.certainty_level
+  const raw = { rawCertaintyLevel: level, rawKnowledgeType: claim.knowledge_type } as const
+
+  // Kunnskapstypen først, og på alle veier. Det er den som avgjør hvilken
+  // sikkerhetstilstand som er gyldig, så en type Antidep ikke kjenner gjør hele
+  // vurderingen utolkbar — også når graderingen i seg selv ser gyldig ut. Ble
+  // kontrollen bare gjort på NULL-veien, ville en fjerde kunnskapstype med en
+  // gradering blitt presentert som en helt ordinær GRADE-vurdert påstand, og den
+  // ukjente epistemiske kategorien vært usynlig (ANTIDEP_CONSTITUTION.md §5).
+  if (!isKnownKnowledgeType(claim.knowledge_type)) {
+    return { kind: 'unknown', reason: 'unrecognised_knowledge_type', ...raw }
+  }
 
   if (level === null) {
     if (claim.knowledge_type === 'deterministic_fact') {
       return { kind: 'not_applicable_deterministic_fact' }
     }
-    return {
-      kind: 'unknown',
-      reason: isKnownKnowledgeType(claim.knowledge_type)
-        ? 'missing_assessment'
-        : 'unrecognised_knowledge_type',
-      rawCertaintyLevel: null,
-      rawKnowledgeType: claim.knowledge_type,
-    }
+    return { kind: 'unknown', reason: 'missing_assessment', ...raw }
   }
 
   if (!isKnownCertaintyLevel(level)) {
-    return {
-      kind: 'unknown',
-      reason: 'unrecognised_level',
-      rawCertaintyLevel: level,
-      rawKnowledgeType: claim.knowledge_type,
-    }
+    return { kind: 'unknown', reason: 'unrecognised_level', ...raw }
+  }
+
+  // Den andre halvdelen av «NULL hvis og bare hvis deterministic_fact».
+  // Publiseringsgaten og migrasjon 004 gjør dette umulig i databasen i dag;
+  // avledningen hviler ikke på det, fordi den også leser data fra en database
+  // den ikke selv har migrert.
+  if (claim.knowledge_type === 'deterministic_fact') {
+    return { kind: 'unknown', reason: 'assessment_on_deterministic_fact', ...raw }
   }
 
   if (level === 'no_assessable_evidence') {
