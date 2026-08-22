@@ -89,13 +89,20 @@ faktisk_fordeling=$(
 antall_paastatt=$(printf '%s' "$paastatt_fordeling" | tr ',' '\n' | grep -c .)
 antall_faktisk=$(printf '%s' "$faktisk_fordeling" | tr ',' '\n' | grep -c .)
 
-# Planen lister 001-006a eksplisitt og sier om resten at de «ikke la til flere».
-# Begge deler er påstander, og begge kontrolleres. Å bare sammenligne så mange
-# ledd som planen oppgir — uten å kontrollere at avkortingen er berettiget —
-# gjorde en kort fangst til en stille godkjenning: en påstand som var kortere
-# enn den skulle, matchet alltid sitt eget prefiks.
-if [ "$antall_paastatt" -gt "$antall_faktisk" ]; then
-  printf '  AVVIK    %-26s dokumentet oppgir %s ledd, men det finnes bare %s migrasjonsfiler\n' \
+# Fordelingen skal oppgi ett ledd per migrasjonsfil, verken flere eller færre.
+#
+# Å bare sammenligne så mange ledd som planen oppgir — uten å kontrollere at
+# avkortingen er berettiget — gjorde en kort påstand til en stille godkjenning:
+# en påstand som var kortere enn den skulle, matchet alltid sitt eget prefiks.
+#
+# Restpåstanden under fanget det så lenge det siste oppgitte leddet var det
+# siste som ikke var null. Migrasjon 007a la ikke til enum-typer, og da ble
+# halen null: en påstand forkortet til ni ledd passerte restpåstanden, samtidig
+# som prosaen rundt den fortsatt sa «de ti migrasjonsfilene». Derfor kreves nå
+# fullstendighet direkte. Restpåstanden beholdes som en andre linje, ikke som
+# den eneste.
+if [ "$antall_paastatt" -ne "$antall_faktisk" ]; then
+  printf '  AVVIK    %-26s dokumentet oppgir %s ledd, men det finnes %s migrasjonsfiler\n' \
     "enum-typer per migrasjon" "$antall_paastatt" "$antall_faktisk"
   feil=1
 else
