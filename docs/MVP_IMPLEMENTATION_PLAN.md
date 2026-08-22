@@ -1930,7 +1930,12 @@ alle de lukkede vokabularene mot migrasjonene.
 **Gjeld: én halvpart innfridd, én post lagt til.** `tests/api-vocabularies.test.ts` leser de
 versjonerte migrasjonene og krever at hver lukket union i `src/types/api.ts` er nøyaktig sin
 enum, og i tillegg at skillet mellom dimensjonale og dimensjonsløse effektmål er det samme som
-`claim_revisions_magnitude_unit_check`. Ingen database trengs; framgangsmåten er den samme som
+`claim_revisions_magnitude_unit_check`. Uthentingen leser ikke bare `create type`: en senere
+`alter type … add value` eller `rename value` regnes med, og en endringsform testen ikke kan
+tolke stopper den framfor å bli ignorert. Uten det ville vaktposten sluttet å måle første gang
+et enum ble utvidet — den ville passert mens databasen kunne returnere en verdi unionen ikke
+kjenner. Ingen migrasjon bruker `alter type` i dag; kodeveien er derfor prøvd mot syntetisk
+SQL, slik at den virker den dagen den trengs. Ingen database trengs; framgangsmåten er den samme som
 i `tests/data-api-exposure.test.ts`. Kolonnenavn, nullbarhet og kolonnetyper står fortsatt
 ukontrollert, og gjeldsposten i §74.7 er strammet inn til det. Den nye posten er databasens
 manglende binding mellom effektmål og komparator.
@@ -1943,8 +1948,8 @@ Uker overlever altså ikke, og de regnes ikke tilbake: enheten databasen faktisk
 som vises. Alt som ikke passer formen — ISO 8601 fra en annen `IntervalStyle`, eller et
 negativt intervall — gjengis uendret framfor å tolkes på slump.
 
-**Hva som ble verifisert.** 28 mutasjoner ble innført én om gangen og alle fanget: 23 mot
-kortet, sikkerhetsvisningen, avledningen og formateringen, og fem mot den nye vaktposten på
+**Hva som ble verifisert.** 33 mutasjoner ble innført én om gangen og alle fanget: 23 mot
+kortet, sikkerhetsvisningen, avledningen og formateringen, og ti mot den nye vaktposten på
 vokabularene. Typene ble sondert framfor antatt — en tilordning av en verdi utenfor hvert nytt
 vokabular gir fire typefeil, og kollapsvakten fra §74.12 slår fortsatt ut når en radtype
 skrives om til `interface`. Kortet ble kjørt i Chromium på 1280 og på en ekte 390 px

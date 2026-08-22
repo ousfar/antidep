@@ -43,21 +43,72 @@ function migrationSql(): string {
 
 const SQL = migrationSql()
 
-/** Verdiene i `create type <navn> as enum (…)`, i den rekkefølgen SQL-en gir dem. */
-function enumValues(qualifiedName: string): string[] {
-  const pattern = new RegExp(
-    `create type ${qualifiedName.replace('.', '\\.')} as enum\\s*\\(([^)]*)\\)`,
-    'i',
-  )
-  const match = pattern.exec(SQL)
-  if (match?.[1] === undefined) {
-    throw new Error(`fant ingen enum-definisjon for ${qualifiedName} i ${MIGRATIONS}`)
-  }
-  return match[1]
+function quotedList(source: string): string[] {
+  return source
     .split(',')
     .map((entry) => entry.trim().replace(/^'|'$/g, ''))
     .filter((entry) => entry.length > 0)
 }
+
+/**
+ * Verdiene en enum har *etter at alle migrasjonene er kjørt*.
+ *
+ * `create type` alene er ikke nok. Utvider en senere migrasjon enumet med
+ * `alter type … add value`, ville en kontroll som bare leste den opprinnelige
+ * definisjonen fortsatt passert — mens databasen kan returnere en verdi
+ * TypeScript-unionen ikke kjenner. Vaktposten ville sluttet å måle uten å
+ * feile, som er nøyaktig feilmodusen den finnes for å unngå.
+ *
+ * Formene som forstås er `add value ['if not exists'] 'x' [before|after 'y']`
+ * og `rename value 'a' to 'b'`. Alt annet kaster framfor å bli ignorert: en
+ * DDL-form vi ikke har tenkt på skal stoppe testen, ikke gli forbi den.
+ * (PostgreSQL kan ikke fjerne en enum-verdi, så det finnes ingen tredje form å
+ * dekke i dag.)
+ */
+function enumValuesFrom(sql: string, qualifiedName: string): string[] {
+  const name = qualifiedName.replace('.', '\\.')
+
+  const created = new RegExp(`create type ${name} as enum\\s*\\(([^)]*)\\)`, 'i').exec(sql)
+  if (created?.[1] === undefined) {
+    throw new Error(`fant ingen enum-definisjon for ${qualifiedName} i ${MIGRATIONS}`)
+  }
+  const values = quotedList(created[1])
+
+  // Endringene leses i filrekkefølge, altså i den rekkefølgen de faktisk kjøres.
+  for (const alter of sql.matchAll(new RegExp(`alter type ${name}\\s+([^;]*);`, 'gi'))) {
+    const body = (alter[1] ?? '').replace(/\s+/g, ' ').trim()
+
+    const added = /^add value (?:if not exists )?'([^']*)'(?: (?:before|after) '[^']*')?$/i.exec(
+      body,
+    )
+    if (added?.[1] !== undefined) {
+      if (!values.includes(added[1])) {
+        values.push(added[1])
+      }
+      continue
+    }
+
+    const renamed = /^rename value '([^']*)' to '([^']*)'$/i.exec(body)
+    if (renamed?.[1] !== undefined && renamed[2] !== undefined) {
+      const at = values.indexOf(renamed[1])
+      if (at === -1) {
+        throw new Error(
+          `«alter type ${qualifiedName} rename value '${renamed[1]}'» viser til en verdi som ikke finnes`,
+        )
+      }
+      values[at] = renamed[2]
+      continue
+    }
+
+    throw new Error(
+      `ukjent «alter type ${qualifiedName}»-form, som denne testen ikke kan tolke: ${body}`,
+    )
+  }
+
+  return values
+}
+
+const enumValues = (qualifiedName: string): string[] => enumValuesFrom(SQL, qualifiedName)
 
 describe('de lukkede vokabularene er nøyaktig enum-ene i migrasjonene', () => {
   it.each([
@@ -81,6 +132,68 @@ describe('de lukkede vokabularene er nøyaktig enum-ene i migrasjonene', () => {
     // enumValues() kaster, men bare hvis den kalles på et navn som finnes.
     expect(enumValues('knowledge.claim_direction')).toContain('no_clear_difference')
     expect(() => enumValues('knowledge.finnes_ikke')).toThrow(/fant ingen enum-definisjon/)
+  })
+})
+
+describe('uthentingen tar med senere endringer av enumet', () => {
+  // Ingen migrasjon bruker `alter type` i dag, så den virkelige SQL-en
+  // eksersiserer bare `create type`. Uten disse testene ville koden som
+  // håndterer endringene stått uprøvd fram til den dagen den trengs — og det er
+  // nettopp den dagen vaktposten må virke.
+  const CREATE = "create type knowledge.demo as enum ('a', 'b');"
+
+  it('leser den opprinnelige definisjonen', () => {
+    expect(enumValuesFrom(CREATE, 'knowledge.demo')).toEqual(['a', 'b'])
+  })
+
+  it('tar med en verdi lagt til senere', () => {
+    // Uten dette passerer vaktposten mens databasen kan returnere «c».
+    const sql = `${CREATE}\nalter type knowledge.demo add value 'c';`
+    expect(enumValuesFrom(sql, 'knowledge.demo')).toEqual(['a', 'b', 'c'])
+  })
+
+  it('tar med en verdi lagt til med if not exists og plassering', () => {
+    const sql = `${CREATE}\nalter type knowledge.demo add value if not exists 'c' before 'b';`
+    expect(new Set(enumValuesFrom(sql, 'knowledge.demo'))).toEqual(new Set(['a', 'b', 'c']))
+  })
+
+  it('teller ikke en verdi to ganger', () => {
+    const sql = `${CREATE}\nalter type knowledge.demo add value if not exists 'b';`
+    expect(enumValuesFrom(sql, 'knowledge.demo')).toEqual(['a', 'b'])
+  })
+
+  it('følger en omdøpt verdi', () => {
+    const sql = `${CREATE}\nalter type knowledge.demo rename value 'b' to 'c';`
+    expect(enumValuesFrom(sql, 'knowledge.demo')).toEqual(['a', 'c'])
+  })
+
+  it('leser endringene i rekkefølge', () => {
+    const sql = [
+      CREATE,
+      "alter type knowledge.demo add value 'c';",
+      "alter type knowledge.demo rename value 'c' to 'd';",
+    ].join('\n')
+    expect(enumValuesFrom(sql, 'knowledge.demo')).toEqual(['a', 'b', 'd'])
+  })
+
+  it('rører ikke et annet enum med liknende navn', () => {
+    const sql = `${CREATE}\ncreate type knowledge.other as enum ('x');\nalter type knowledge.other add value 'y';`
+    expect(enumValuesFrom(sql, 'knowledge.demo')).toEqual(['a', 'b'])
+    expect(enumValuesFrom(sql, 'knowledge.other')).toEqual(['x', 'y'])
+  })
+
+  it('kaster på en endringsform den ikke kan tolke, framfor å ignorere den', () => {
+    // Det er dette som gjør at vaktposten ikke kan bli stille: en DDL-form vi
+    // ikke har tenkt på stopper testen i stedet for å gli forbi.
+    const sql = `${CREATE}\nalter type knowledge.demo owner to postgres;`
+    expect(() => enumValuesFrom(sql, 'knowledge.demo')).toThrow(/ukjent «alter type/)
+  })
+
+  it('kaster når en omdøping viser til en verdi som ikke finnes', () => {
+    const sql = `${CREATE}\nalter type knowledge.demo rename value 'z' to 'c';`
+    expect(() => enumValuesFrom(sql, 'knowledge.demo')).toThrow(
+      /viser til en verdi som ikke finnes/,
+    )
   })
 })
 
