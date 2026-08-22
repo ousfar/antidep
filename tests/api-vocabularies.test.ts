@@ -1,7 +1,11 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { describeClaimMagnitude } from '../src/lib/claim-effect'
+import {
+  describeClaimMagnitude,
+  isWithinArmMeasure,
+  type ClaimComparatorState,
+} from '../src/lib/claim-effect'
 import {
   CERTAINTY_LEVELS,
   CLAIM_DIRECTIONS,
@@ -12,6 +16,7 @@ import {
   KNOWLEDGE_TYPES,
   SOURCE_STATUSES,
   VALUE_AVAILABILITIES,
+  type EffectMeasure,
 } from '../src/types/api'
 
 // ============================================================================
@@ -214,13 +219,29 @@ describe('skillet mellom dimensjonale og dimensjonsløse effektmål følger migr
     expect(requiresUnit.every((measure) => EFFECT_MEASURES.includes(measure as never))).toBe(true)
   })
 
+  // Komparatoren velges slik at den stemmer med målet, ellers ville den andre
+  // invarianten — kontrastivt mål krever komparator — slått ut først og skjult
+  // det denne testen faktisk måler.
+  function fittingComparator(measure: EffectMeasure): ClaimComparatorState {
+    return isWithinArmMeasure(measure) ? { kind: 'none' } : { kind: 'placebo' }
+  }
+
   it.each(EFFECT_MEASURES)('%s behandles som migrasjonen sier', (measure) => {
     const dimensional = requiresUnit.includes(measure)
-    expect(describeClaimMagnitude(measure, 1.2, 'kg')).toMatchObject(
+    const comparator = fittingComparator(measure)
+    expect(
+      describeClaimMagnitude(
+        { magnitude_measure: measure, magnitude_value: 1.2, magnitude_unit: 'kg' },
+        comparator,
+      ),
+    ).toMatchObject(
       dimensional ? { kind: 'quantified' } : { reason: 'unit_on_dimensionless_measure' },
     )
-    expect(describeClaimMagnitude(measure, 1.2, null)).toMatchObject(
-      dimensional ? { reason: 'missing_unit' } : { kind: 'quantified' },
-    )
+    expect(
+      describeClaimMagnitude(
+        { magnitude_measure: measure, magnitude_value: 1.2, magnitude_unit: null },
+        comparator,
+      ),
+    ).toMatchObject(dimensional ? { reason: 'missing_unit' } : { kind: 'quantified' })
   })
 })

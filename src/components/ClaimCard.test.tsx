@@ -84,6 +84,28 @@ function hasDetail(label: string): boolean {
   return screen.queryByText(label, { selector: 'dt' }) !== null
 }
 
+/**
+ * Bare det kortet *påstår* i en detalj — merknadene som forklarer et brudd er
+ * holdt utenfor.
+ *
+ * Skillet er ikke pedantisk. Merknaden på et uforenlig par sier «dette er ikke
+ * det samme som en endring fra behandlingsstart», og en test som bare leter
+ * etter ordlyden i hele feltet ville slått ut på selve benektelsen. Det vi må
+ * kontrollere er at kortet ikke *hevder* baselinelesningen.
+ */
+function detailClaimText(label: string): string {
+  const term = screen.getByText(label, { selector: 'dt' })
+  const value = term.parentElement?.querySelector('dd')
+  if (value == null) {
+    throw new Error(`fant ingen verdi for detaljen «${label}»`)
+  }
+  const copy = value.cloneNode(true) as HTMLElement
+  copy.querySelectorAll('.claim-card__detail-note').forEach((note) => {
+    note.remove()
+  })
+  return copy.textContent ?? ''
+}
+
 // ----------------------------------------------------------------------------
 
 describe('kortets struktur følger §13', () => {
@@ -567,4 +589,267 @@ describe('kortet rendres uten advarsler fra React', () => {
       }
     },
   )
+})
+
+describe('et kontrastivt effektmål uten komparator får ingen plausibel lesning', () => {
+  const CONTRASTIVE_UNITS: Partial<Record<EffectMeasure, EstimateUnit | null>> = {
+    mean_difference: 'kg',
+    standardised_mean_difference: null,
+    risk_ratio: null,
+    odds_ratio: null,
+  }
+
+  it('mean_change med «ingen komparator» viser tallet og leses som endring fra baseline', () => {
+    // Den gyldige kombinasjonen. Den skal fortsatt kunne presenteres slik
+    // migrasjon 004 definerer `none`.
+    renderCard({
+      comparator_kind: 'none',
+      comparator_drug_id: null,
+      magnitude_measure: 'mean_change',
+      magnitude_value: 1.7,
+      magnitude_unit: 'kg',
+    })
+    const text = detail('Størrelse og sammenligning')
+    expect(text).toContain('Gjennomsnittlig endring 1,7 kg.')
+    expect(text).toContain('Ingen komparator: endring fra behandlingsstart.')
+  })
+
+  it('mean_difference med «ingen komparator» skjuler tallet', () => {
+    renderCard({
+      comparator_kind: 'none',
+      comparator_drug_id: null,
+      magnitude_measure: 'mean_difference',
+      magnitude_value: 1.7,
+      magnitude_unit: 'kg',
+    })
+    expect(detail('Størrelse og sammenligning')).not.toContain('1,7')
+  })
+
+  it('mean_difference med «ingen komparator» omskrives ikke til endring fra baseline', () => {
+    // Kjernen i feilen: «endring fra behandlingsstart» er en gyldig lesning av
+    // mean_change + none, men en helt annen påstand for mean_difference + none.
+    // UI-et skal ikke reparere et kontraktsbrudd ved å gi det en plausibel, men
+    // annen klinisk betydning.
+    renderCard({
+      comparator_kind: 'none',
+      comparator_drug_id: null,
+      magnitude_measure: 'mean_difference',
+      magnitude_value: 1.7,
+      magnitude_unit: 'kg',
+    })
+    expect(detailClaimText('Størrelse og sammenligning')).not.toMatch(
+      /endring fra behandlingsstart/i,
+    )
+    // Forklaringen skal derimot si nettopp at det ikke er det samme.
+    expect(detail('Størrelse og sammenligning')).toMatch(
+      /ikke det samme som en endring fra behandlingsstart/i,
+    )
+  })
+
+  it('mean_difference med «ingen komparator» sier hvorfor størrelsen ikke er tolkbar', () => {
+    renderCard({
+      comparator_kind: 'none',
+      comparator_drug_id: null,
+      magnitude_measure: 'mean_difference',
+      magnitude_value: 1.7,
+      magnitude_unit: 'kg',
+    })
+    const text = detail('Størrelse og sammenligning')
+    expect(text).toContain('Størrelsen er ikke tolkbar.')
+    expect(text).toMatch(/forskjell mellom to grupper, men påstanden oppgir ingen komparator/i)
+    expect(text).toContain('Ingen komparator er registrert.')
+  })
+
+  it.each(Object.keys(CONTRASTIVE_UNITS) as EffectMeasure[])(
+    '%s uten komparator skjuler tallet',
+    (measure) => {
+      // Invarianten gjelder alle kontrastive mål, ikke bare mean_difference.
+      renderCard({
+        comparator_kind: 'none',
+        comparator_drug_id: null,
+        magnitude_measure: measure,
+        magnitude_value: 1.7,
+        magnitude_unit: CONTRASTIVE_UNITS[measure] ?? null,
+      })
+      const text = detail('Størrelse og sammenligning')
+      expect(text).not.toContain('1,7')
+      expect(text).toContain('Størrelsen er ikke tolkbar.')
+      expect(detailClaimText('Størrelse og sammenligning')).not.toMatch(
+        /endring fra behandlingsstart/i,
+      )
+    },
+  )
+
+  it.each(Object.keys(CONTRASTIVE_UNITS) as EffectMeasure[])(
+    '%s med placebo viser tallet',
+    (measure) => {
+      renderCard({
+        comparator_kind: 'placebo',
+        comparator_drug_id: null,
+        comparator_drug_name: null,
+        magnitude_measure: measure,
+        magnitude_value: 1.7,
+        magnitude_unit: CONTRASTIVE_UNITS[measure] ?? null,
+      })
+      const text = detail('Størrelse og sammenligning')
+      expect(text).toContain('1,7')
+      expect(text).toContain('Sammenlignet med placebo.')
+    },
+  )
+
+  it('et kontrastivt mål med et navngitt legemiddel viser tallet', () => {
+    renderCard({
+      comparator_kind: 'drug',
+      comparator_drug_id: '99999999-9999-4999-8999-999999999999',
+      comparator_drug_name: 'Virkestoff B',
+      magnitude_measure: 'mean_difference',
+      magnitude_value: 1.7,
+      magnitude_unit: 'kg',
+    })
+    const text = detail('Størrelse og sammenligning')
+    expect(text).toContain('Gjennomsnittsforskjell 1,7 kg.')
+    expect(text).toContain('Sammenlignet med Virkestoff B.')
+  })
+
+  it('mean_change med en komparator skjuler tallet og sier hvorfor', () => {
+    // Motsatt vei: en endring innenfor én arm, presentert som om den var en
+    // sammenligning.
+    renderCard({
+      comparator_kind: 'placebo',
+      magnitude_measure: 'mean_change',
+      magnitude_value: 1.7,
+      magnitude_unit: 'kg',
+    })
+    const text = detail('Størrelse og sammenligning')
+    expect(text).not.toContain('1,7')
+    expect(text).toMatch(/endring innenfor én behandlingsarm/i)
+  })
+
+  it('en komparator som selv er brutt gjør tallet utolkbart', () => {
+    renderCard({ comparator_kind: 'usual_care' as PublishedClaimRow['comparator_kind'] })
+    const text = detail('Størrelse og sammenligning')
+    expect(text).not.toContain('1,7')
+    expect(text).toContain('Komparatoren er ikke tolkbar.')
+  })
+
+  it('en påstand kan ikke sammenlignes med virkestoffet den selv handler om', () => {
+    renderCard({
+      comparator_kind: 'drug',
+      comparator_drug_id: BASE.drug_id,
+      comparator_drug_name: BASE.drug_name,
+    })
+    const text = detail('Størrelse og sammenligning')
+    expect(text).not.toContain('1,7')
+    expect(text).toContain('Komparatoren er ikke tolkbar.')
+    expect(text).not.toContain(`Sammenlignet med ${BASE.drug_name}.`)
+  })
+
+  it('en uten tallfesting rammes ikke av regelen', () => {
+    // Uten et tall finnes det ingen feillesning å hindre, og «none» er da bare
+    // kategorien påstanden bærer.
+    renderCard({
+      comparator_kind: 'none',
+      comparator_drug_id: null,
+      magnitude_measure: null,
+      magnitude_value: null,
+      magnitude_unit: null,
+    })
+    const text = detail('Størrelse og sammenligning')
+    expect(text).toContain('Størrelsen er ikke tallfestet.')
+    expect(text).toContain('Ingen komparator: endring fra behandlingsstart.')
+  })
+})
+
+describe('et deterministisk faktum som likevel bærer retning eller størrelse, merkes', () => {
+  const FACT_WITH_EFFECT = {
+    knowledge_type: 'deterministic_fact',
+    statement: 'Testpåstand: Virkestoff A finnes som tablett 50 mg.',
+    certainty_level: null,
+    certainty_framework: null,
+    uncertainty_summary: null,
+    comparator_kind: 'none',
+    comparator_drug_id: null,
+    comparator_drug_name: null,
+  } as const satisfies Partial<PublishedClaimRow>
+
+  it('en retning på et deterministisk faktum står, men ikke som en vanlig retning', () => {
+    // Skjules den, forsvinner et kontraktsbrudd. Vises den umerket, får en
+    // verdi som ikke gjelder for kunnskapstypen se ut som en som gjør det
+    // (ANTIDEP_CONSTITUTION.md §5).
+    const { container } = renderCard({
+      ...FACT_WITH_EFFECT,
+      direction: 'increase',
+      magnitude_measure: null,
+      magnitude_value: null,
+      magnitude_unit: null,
+    })
+    const line = container.querySelector('.claim-card__direction')
+    expect(line).toHaveTextContent('Økning')
+    expect(line).toHaveTextContent(/har verken retning eller effektstørrelse/i)
+  })
+
+  it('en størrelse på et deterministisk faktum står, men merket', () => {
+    renderCard({
+      ...FACT_WITH_EFFECT,
+      direction: null,
+      magnitude_measure: 'mean_change',
+      magnitude_value: 50,
+      magnitude_unit: 'kg',
+    })
+    const text = detail('Størrelse og sammenligning')
+    expect(text).toContain('Gjennomsnittlig endring 50 kg.')
+    expect(text).toMatch(/har verken retning eller effektstørrelse/i)
+  })
+
+  it('merket gjelder ikke de andre kunnskapstypene', () => {
+    const { container } = renderCard({ knowledge_type: 'evidence_synthesis' })
+    expect(container).not.toHaveTextContent(/har verken retning eller effektstørrelse/i)
+  })
+
+  it('et deterministisk faktum uten retning og størrelse får ingen merknad', () => {
+    // Der er feltene utelatt, og det er ingenting å merke.
+    const { container } = renderCard({
+      ...FACT_WITH_EFFECT,
+      direction: null,
+      magnitude_measure: null,
+      magnitude_value: null,
+      magnitude_unit: null,
+    })
+    expect(container).not.toHaveTextContent(/har verken retning eller effektstørrelse/i)
+  })
+})
+
+describe('en tallfestet effekt overlever ikke «ingen vurderbar evidens»', () => {
+  const NO_ASSESSABLE = {
+    certainty_level: 'no_assessable_evidence',
+    evidence_gap: 'Ingen studier med relevant oppfølgingstid.',
+  } as const satisfies Partial<PublishedClaimRow>
+
+  it('viser ikke tallet', () => {
+    // Grunnlaget er vurdert som ikke graderbart. Et punktestimat ved siden av
+    // den tilstanden er falsk presisjon (ANTIDEP_CONSTITUTION.md §6), og
+    // migrasjon 004 sier det rett ut om magnitude_value.
+    renderCard(NO_ASSESSABLE)
+    expect(detail('Størrelse og sammenligning')).not.toContain('1,7')
+  })
+
+  it('sier hvorfor', () => {
+    renderCard(NO_ASSESSABLE)
+    const text = detail('Størrelse og sammenligning')
+    expect(text).toContain('Størrelsen er ikke tolkbar.')
+    expect(text).toMatch(/kan ikke være mer presis enn evidensen under den/i)
+  })
+
+  it('viser fortsatt sikkerhetstilstanden som den vurderte tilstanden den er', () => {
+    // Tallet forsvinner, men «ingen vurderbar evidens» skal ikke bli til noe
+    // annet på veien.
+    renderCard(NO_ASSESSABLE)
+    expect(screen.getByText('Ingen vurderbar evidens')).toBeInTheDocument()
+    expect(card()).toHaveTextContent(NO_ASSESSABLE.evidence_gap)
+  })
+
+  it('rører ikke en gradert påstand', () => {
+    renderCard()
+    expect(detail('Størrelse og sammenligning')).toContain('Gjennomsnittsforskjell 1,7 kg.')
+  })
 })

@@ -1458,7 +1458,9 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Endringer på `provenance.actors` auditeres ikke | Aktørraden er festepunktet for all attribusjon, og visningsnavn, beskrivelse og tilbaketrekking kan endres uten spor. Identiteten er riktignok frosset av `provenance.freeze_actor_identity()`, så det som kan endres er presentasjon og livssyklus, ikke hvem aktøren er | Samme trigger som over, og av samme grunn: tabellen har ingen kolonne som sier hvem som endret raden, så en trigger har ingen aktør å registrere |
 | `audit.events.request_or_run_id` har ingen produsent | Auditrader kan ikke grupperes etter forespørselen eller agentkjøringen de hørte til, så en operasjon som består av flere skrivinger framstår som uavhengige hendelser | `provenance.agent_runs`, eller det første admin-RPC-laget som har en forespørselsidentitet å sende med |
 | `api`-kontrakten i TypeScript er ikke maskinelt kontrollert mot databasens kolonner | Radtypene og `Database`-typen i `src/types/` er håndskrevne påstander om `api`. En kolonne som skifter navn, blir nullbar eller endrer type gjør dem usanne uten at noe feiler. Vokabularhalvdelen er lukket: `tests/api-vocabularies.test.ts` leser migrasjonene og krever at hver lukket union er nøyaktig sin enum (§74.13). Kolonnenavn, nullbarhet og kolonnetyper står igjen | En kontroll i CI som sammenligner `information_schema.columns` for `api` mot typene — databasejobben har allerede en kjørende stack — eller den første migrasjonen som endrer et api-view |
-| Ingen regel binder et kontrastivt effektmål til en komparator | `knowledge.claim_revisions` tillater `magnitude_measure = 'mean_difference'` sammen med `comparator_kind = 'none'`. En gjennomsnittsforskjell uten noe å skille fra er ikke tolkbar, og databasen sier ikke fra. Kortet svarer på det ved å gjøre tallet og komparatoren til ett felt som alltid vises sammen (§74.13), men det er en visningsregel, ikke en invariant | Migrasjonen som legger til betingelsen, eller admin-flyten (§29), som er første sted en redaktør kan skrive kombinasjonen. Regelen må ta stilling til `mean_change`, som er en endring fra behandlingsstart og korrekt har `none` |
+| Ingen regel binder et kontrastivt effektmål til en komparator | `knowledge.claim_revisions` tillater fortsatt `magnitude_measure = 'mean_difference'` sammen med `comparator_kind = 'none'`, og en redaktør kan skrive kombinasjonen. Presentasjonslaget nekter nå å tolke den (§74.13), men det er et forsvar i visningen, ikke en invariant: dataene er like ugyldige, og enhver annen leser av `api` ser dem rå | Migrasjonen som legger til betingelsen, eller admin-flyten (§29), som er første sted en redaktør kan skrive kombinasjonen. Regelen må ta stilling til `mean_change`, som er en endring fra behandlingsstart og korrekt har `none` |
+| Ingen regel binder en tallfestet effekt til at evidensen er graderbar | En revisjon kan bære `magnitude_value` samtidig som vurderingen er `no_assessable_evidence` — som ifølge migrasjon 004 betyr at det ikke finnes tilstrekkelig grunnlag til å gjøre en vurdering i det hele tatt. Kolonnekommentaren på `magnitude_value` sier selv at en påstand som er mer presis enn evidensen under den, er et brudd på `ANTIDEP_CONSTITUTION.md` §4 og §6, men ingen `CHECK` håndhever det på tvers av de to tabellene. Presentasjonslaget skjuler tallet (§74.13); databasen tillater det | Samme migrasjon som over, eller admin-flyten. Regelen krysser `knowledge.claim_revisions` og `knowledge.evidence_assessments`, så den må enten være en trigger eller en betingelse i publiseringsgaten |
+| Modellen kan ikke avgjøre om en effektstørrelses fortegn stemmer med påstandens retning | `direction = 'increase'` med `magnitude_value = -0,4` ser motstridende ut, men er det ikke nødvendigvis: fortegnet hører til skalaen `magnitude_unit` måler på, og modellen registrerer ikke om den skalaens positive retning peker samme vei som temaet påstanden handler om. «Økning i vekttap» med en negativ vektforskjell er konsistent. Kontrollen er derfor bevisst ikke innført — den ville gitt falske utslag på gyldige data | Det første objektet som registrerer polariteten til et utfall i forhold til sitt `ClinicalConcept`. Uten det kan verken UI eller en databaseregel bedømme fortegnet |
 
 ### 74.8 Gjeld innfridd i korreksjonsmigrasjon 006a
 
@@ -1892,14 +1894,20 @@ alle de lukkede vokabularene mot migrasjonene.
    stillhet ville vært §17-feilen. Dette ble funnet ved å se på gjengivelsen i nettleseren,
    ikke av en test.
 
-2. **Et tall står aldri uten sin komparator.** Størrelse og sammenligning er ett felt, og det
-   feltet er alltid til stede. Databasen håndhever ikke at et kontrastivt effektmål har en
-   komparator — gjeldsposten er registrert i §74.7 — og «gjennomsnittsforskjell 1,7 kg» uten
-   noe å skille fra er ikke tolkbart
-   (`PRODUCT_INFORMATION_ARCHITECTURE.md` §19). Hvert kontraktsbrudd på størrelsen gir sin
-   egen forklaring framfor et tall: et tall uten mål, et mål uten tall, et ukjent mål, en
-   ukjent enhet, et dimensjonalt mål uten enhet, og en enhet på et dimensjonsløst mål.
-   Tallet vises ikke i noen av dem.
+2. **Effektmål og komparator er én påstand, og et uforenlig par tolkes ikke.**
+   `comparator_kind = 'none'` betyr ikke «komparator mangler»; migrasjon 004 sier at det betyr
+   *en endring fra behandlingsstart*. Det er en påstand om hva tallet måler, og den må stemme
+   med effektmålet: `mean_change` måler innenfor én arm, mens `mean_difference`, SMD, RR og OR
+   måler mellom to. «Gjennomsnittsforskjell 1,7 kg» med `none` har ingen gruppe å være
+   forskjellig fra, og å presentere den som «endring fra behandlingsstart» ville gitt et
+   kontraktsbrudd en plausibel, men gal klinisk betydning. Størrelsen avledes derfor med
+   komparatoren i hånden, og et uforenlig par kan ikke bli `quantified`: tallet er
+   utilgjengelig for visningen framfor å måtte huskes skjult av den. Kontrastiv er
+   komplementet til innenfor-arm, ikke en egen liste, så et sjette effektmål krever komparator
+   til noen tar stilling til det. Tre tilstander holdes fra hverandre, fordi de krever hver sin
+   retting: en gyldig `none` der målet faktisk beskriver endring fra baseline, en komparator
+   som selv er brutt, og et par der hvert felt er gyldig men kombinasjonen ikke er det. Hvert
+   kontraktsbrudd på størrelsen gir sin egen forklaring framfor et tall.
 
 3. **Ingen skala, og ingen fargeramme over graderingene.** §17 navngir «en tom skala» som
    nettopp det mønsteret som får manglende data til å se ut som lav risiko: en firetrinns
@@ -1948,9 +1956,48 @@ Uker overlever altså ikke, og de regnes ikke tilbake: enheten databasen faktisk
 som vises. Alt som ikke passer formen — ISO 8601 fra en annen `IntervalStyle`, eller et
 negativt intervall — gjengis uendret framfor å tolkes på slump.
 
-**Hva som ble verifisert.** 33 mutasjoner ble innført én om gangen og alle fanget: 23 mot
-kortet, sikkerhetsvisningen, avledningen og formateringen, og ti mot den nye vaktposten på
-vokabularene. Typene ble sondert framfor antatt — en tilordning av en verdi utenfor hvert nytt
+**Tre kombinasjonsfeil funnet i sluttgjennomgangen.** Alle tre er samme type: hvert felt er
+gyldig for seg, mens paret betyr noe annet enn delene. De ble ikke funnet av mutasjonstesting,
+fordi mutasjonene traff koden og ikke antakelsen om at feltene kunne vurderes hver for seg.
+
+1. **`mean_difference` med `comparator_kind = 'none'`.** Kortet skrev
+   «Gjennomsnittsforskjell 1,7 kg. Ingen komparator: endring fra behandlingsstart.»
+   Den siste setningen er en gyldig lesning av `mean_change + none`, men en helt annen
+   påstand for `mean_difference + none` — presentasjonslaget reparerte altså et
+   kontraktsbrudd ved å gi det en plausibel, men gal klinisk betydning. Rettet ved at
+   størrelsen avledes med komparatoren i hånden (punkt 2 over), og at baselinelesningen
+   bare skrives ut når målet lisensierer den.
+
+2. **Tallfestet effekt sammen med `no_assessable_evidence`.** Migrasjon 004 sier at den
+   tilstanden betyr at det ikke finnes tilstrekkelig grunnlag til å gjøre en vurdering i det
+   hele tatt, og kolonnekommentaren på `magnitude_value` sier selv at en påstand som er mer
+   presis enn evidensen under den, er et brudd på `ANTIDEP_CONSTITUTION.md` §4 og §6. Kortet
+   viste likevel punktestimatet ved siden av «Ingen vurderbar evidens». Tallet skjules nå, med
+   begrunnelsen synlig. Avgrenset til den vurderte tilstanden: `unknown` dekker blant annet en
+   kunnskapstype Antidep ikke kjenner, og da er det sikkerhetsvisningen som sier fra.
+
+3. **Deterministisk faktum som likevel bærer retning eller størrelse.** §74.13 punkt 1 utelot
+   de to aksene når de er tomme, men viste dem umerket når de ikke er det — og da så en verdi
+   som ikke gjelder for kunnskapstypen nøyaktig ut som en som gjør det (§5). Verdien står
+   fortsatt, siden det å skjule den ville skjult bruddet, men den er nå merket. Parallellen på
+   sikkerhetsaksen er `assessment_on_deterministic_fact`.
+
+**En kontroll ble vurdert og bevisst ikke innført.** Fortegnet på en effektstørrelse kan se ut
+til å motsi påstandens retning — `increase` med −0,4 — men modellen registrerer ikke om den
+positive retningen på skalaen `magnitude_unit` måler i, peker samme vei som temaet påstanden
+handler om. «Økning i vekttap» med en negativ vektforskjell er konsistent, så en fortegnsregel
+ville gitt falske utslag på gyldige data. Registrert som gjeld i §74.7 framfor implementert.
+
+**Forsvaret i visningen lukker ikke databaseinvarianten.** Databasen tillater fortsatt begge
+kombinasjonene, en redaktør kan skrive dem, og enhver annen leser av `api` ser dem rå. De to
+lagene er registrert hver for seg i §74.7.
+
+**Hva som ble verifisert.** 46 mutasjoner ble innført én om gangen og alle fanget: 23 mot
+kortet, sikkerhetsvisningen, avledningen og formateringen, ti mot vaktposten på vokabularene,
+og tretten mot kombinasjonsreglene over. Én mutasjon overlevde først, og var et funn i seg
+selv: `baselineReadingIsLicensed()` kalte `isWithinArmMeasure()` i en gren som avledningen
+allerede hadde gjort uoppnåelig. En uprøvbar vakt ser ut som et vern uten å være det, så
+grenen ble fjernet framfor at mutasjonen ble notert som et unntak. Typene ble sondert framfor antatt — en tilordning av en verdi utenfor hvert nytt
 vokabular gir fire typefeil, og kollapsvakten fra §74.12 slår fortsatt ut når en radtype
 skrives om til `interface`. Kortet ble kjørt i Chromium på 1280 og på en ekte 390 px
 mobilviewport gjennom devtools-protokollen, fordi `--window-size` klemmes til minst 500 px og

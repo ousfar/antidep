@@ -65,6 +65,7 @@ import {
   describeClaimEffect,
   type ClaimComparatorState,
   type ClaimDirectionState,
+  type ClaimMagnitudeFault,
   type ClaimMagnitudeState,
 } from '../lib/claim-effect'
 import { formatIntervalText, formatNumber, formatTimestampAsDate } from '../lib/norwegian-format'
@@ -136,10 +137,7 @@ function magnitudeText(magnitude: ClaimMagnitudeState): string {
   }
 }
 
-const MAGNITUDE_FAULTS: Record<
-  Extract<ClaimMagnitudeState, { kind: 'unknown' }>['reason'],
-  string
-> = {
+const MAGNITUDE_FAULTS: Record<ClaimMagnitudeFault, string> = {
   value_without_measure:
     'Tallet står uten effektmålet som gir det betydning, og vises derfor ikke. ' +
     'Samme tall kan være en gjennomsnittsforskjell eller en oddsratio.',
@@ -150,6 +148,20 @@ const MAGNITUDE_FAULTS: Record<
     'Effektmålet krever en enhet, og enheten mangler. Uten den er tallet klinisk tvetydig.',
   unit_on_dimensionless_measure:
     'Effektmålet er dimensjonsløst og skal ikke bære en enhet. Tallet vises derfor ikke.',
+  contrastive_measure_without_comparator:
+    'Effektmålet uttrykker en forskjell mellom to grupper, men påstanden oppgir ingen komparator. ' +
+    'Da finnes det ingen gruppe tallet er en forskjell fra, og det vises derfor ikke. Dette er ' +
+    'ikke det samme som en endring fra behandlingsstart.',
+  within_arm_measure_with_comparator:
+    'Effektmålet beskriver en endring innenfor én behandlingsarm, mens påstanden oppgir en ' +
+    'komparator. Tallet er da ikke den sammenligningen påstanden ser ut til å gjøre, og vises ' +
+    'derfor ikke.',
+  comparator_not_interpretable:
+    'Komparatoren er ikke tolkbar, og et effektmål uten et sammenligningsledd som holder, er ' +
+    'ikke tolkbart heller. Tallet vises derfor ikke.',
+  precision_exceeds_assessable_evidence:
+    'Påstanden tallfester en effekt, men evidensgrunnlaget er vurdert som ikke graderbart. En ' +
+    'påstand kan ikke være mer presis enn evidensen under den, så tallet vises ikke.',
 }
 
 function magnitudeNote(magnitude: ClaimMagnitudeState): string | null {
@@ -168,15 +180,37 @@ function magnitudeNote(magnitude: ClaimMagnitudeState): string | null {
   }
 }
 
-function comparatorText(comparator: ClaimComparatorState): string {
+/**
+ * Om «endring fra behandlingsstart» er en lovlig lesning av `none` her.
+ *
+ * Det er den dokumenterte betydningen av `none` (migrasjon 004), men bare når
+ * effektmålet sier det samme. Står `none` sammen med et mål som ikke måler
+ * innenfor én arm, ville setningen gitt tallet en klinisk betydning påstanden
+ * ikke har — nettopp fortolkningen som skal unngås.
+ *
+ * Selve sammenligningen av mål og komparator gjøres ikke her. `describeClaim-
+ * Magnitude()` slipper ikke et uforenlig par gjennom til `quantified`, så en
+ * tallfestet størrelse ved siden av `none` er allerede bekreftet å måle
+ * innenfor én arm. Det som gjenstår er derfor bare: er størrelsen tolkbar?
+ * Et `isWithinArmMeasure()`-kall i tillegg ville vært en gren ingen test kan nå,
+ * og en uprøvbar vakt ser ut som et vern uten å være det.
+ */
+function baselineReadingIsLicensed(magnitude: ClaimMagnitudeState): boolean {
+  return magnitude.kind !== 'unknown'
+}
+
+function comparatorText(comparator: ClaimComparatorState, baselineLicensed: boolean): string {
   switch (comparator.kind) {
     case 'drug':
       return `Sammenlignet med ${comparator.drugName}.`
     case 'placebo':
       return 'Sammenlignet med placebo.'
     case 'none':
-      // «none» er en registrert tilstand, ikke en manglende verdi.
-      return 'Ingen komparator: endring fra behandlingsstart.'
+      // «none» er en registrert tilstand, ikke en manglende verdi — men den
+      // beskriver en endring fra behandlingsstart bare når målet gjør det.
+      return baselineLicensed
+        ? 'Ingen komparator: endring fra behandlingsstart.'
+        : 'Ingen komparator er registrert.'
     case 'unknown':
       return 'Komparatoren er ikke tolkbar.'
   }
@@ -250,7 +284,8 @@ export function ClaimCard({ claim, evidenceHref }: ClaimCardProps) {
   const headingId = useId()
   const linkId = useId()
 
-  const effect = describeClaimEffect(claim)
+  const certainty = describeClaimCertainty(claim)
+  const effect = describeClaimEffect(claim, certainty)
   const withdrawal = withdrawalText(claim.withdrawn_evidence_count)
   const reviewed =
     claim.last_reviewed_at === null ? null : formatTimestampAsDate(claim.last_reviewed_at)
@@ -260,12 +295,24 @@ export function ClaimCard({ claim, evidenceHref }: ClaimCardProps) {
   // Se merknaden øverst: for et deterministisk faktum er en tom retning og en
   // tom størrelse ikke aktuelle, ikke manglende.
   const deterministic = claim.knowledge_type === 'deterministic_fact'
-  const showDirection = !(deterministic && effect.direction.kind === 'not_expressed')
-  const showMagnitude = !(
-    deterministic &&
-    effect.magnitude.kind === 'not_quantified' &&
-    effect.comparator.kind === 'none'
-  )
+  const directionEmpty = effect.direction.kind === 'not_expressed'
+  const magnitudeEmpty =
+    effect.magnitude.kind === 'not_quantified' && effect.comparator.kind === 'none'
+  const showDirection = !(deterministic && directionEmpty)
+  const showMagnitude = !(deterministic && magnitudeEmpty)
+
+  // Den andre halvdelen av den samme regelen. Bærer et deterministisk faktum
+  // likevel en retning eller en effektstørrelse, skjules den ikke — men den
+  // presenteres heller ikke som en helt vanlig retning eller størrelse. Uten
+  // merknaden ville et felt som ikke gjelder for kunnskapstypen sett nøyaktig
+  // ut som ett som gjør det, og det er den samme fortolkningsfeilen som over
+  // (ANTIDEP_CONSTITUTION.md §5). Parallellen på sikkerhetsaksen er
+  // `assessment_on_deterministic_fact`.
+  const directionOverreach = deterministic && !directionEmpty
+  const magnitudeOverreach = deterministic && !magnitudeEmpty
+  const OVERREACH_NOTE =
+    'Et deterministisk faktum har verken retning eller effektstørrelse. Verdien står i ' +
+    'databasen, men gjelder ikke for denne kunnskapstypen.'
 
   // Usikkerhetsteksten er påkrevd for evidenssynteser og kliniske anbefalinger
   // (migrasjon 004). Mangler den likevel, sies det — også for en kunnskapstype
@@ -295,10 +342,13 @@ export function ClaimCard({ claim, evidenceHref }: ClaimCardProps) {
             </span>
           )}
           {directionText(effect.direction)}
+          {directionOverreach ? (
+            <span className="claim-card__detail-note">{OVERREACH_NOTE}</span>
+          ) : null}
         </p>
       ) : null}
 
-      <ClaimCertainty certainty={describeClaimCertainty(claim)} />
+      <ClaimCertainty certainty={certainty} />
 
       {withdrawal === null ? null : (
         <p className="claim-card__withdrawal" role="note">
@@ -328,10 +378,16 @@ export function ClaimCard({ claim, evidenceHref }: ClaimCardProps) {
             <dt>Størrelse og sammenligning</dt>
             {/* Ett felt, med hensikt: tallet skal ikke kunne stå uten komparatoren. */}
             <dd>
-              {`${magnitudeText(effect.magnitude)} ${comparatorText(effect.comparator)}`}
+              {`${magnitudeText(effect.magnitude)} ${comparatorText(
+                effect.comparator,
+                baselineReadingIsLicensed(effect.magnitude),
+              )}`}
               {magnitudeNoteText === null ? null : (
                 <span className="claim-card__detail-note">{magnitudeNoteText}</span>
               )}
+              {magnitudeOverreach ? (
+                <span className="claim-card__detail-note">{OVERREACH_NOTE}</span>
+              ) : null}
             </dd>
           </div>
         ) : null}
