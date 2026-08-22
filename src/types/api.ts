@@ -25,18 +25,30 @@
 //
 //   Lukket union der klienten forgrener på verdien, og der en uventet verdi
 //   som faller i feil gren ville vært klinisk feil — kunnskapstype (§5),
-//   sikkerhetsgrad (§6, §17), relasjon til evidensen (§9), hvorfor en verdi
-//   mangler (§17) og kildestatus (§14).
+//   sikkerhetsgrad (§6, §17), påstandens retning (§17), komparator og
+//   effektmål (§4, §6), relasjon til evidensen (§9), hvorfor en verdi mangler
+//   (§17) og kildestatus (§14).
 //
 //   Dokumentert `string` ellers. Å promotere et vokabular til union hører til
 //   den PR-en som faktisk forgrener på det.
 //
-// En lukket union alene fanger ingenting i kjøretid. Bare de to vokabularene
-// `claim-certainty.ts` faktisk forgrener på — kunnskapstype og sikkerhetsgrad —
-// har en kontroll som gjør en ukjent verdi til en eksplisitt ukjent tilstand.
-// De øvrige tre står uten, og gjeldsposten er registrert i
-// MVP_IMPLEMENTATION_PLAN.md §74.7. Den PR-en som forgrener på et av dem, skal
-// legge til kontrollen samtidig.
+// En lukket union alene fanger ingenting i kjøretid. Vokabularene med en
+// kjøretidskontroll er de `claim-certainty.ts` og `claim-effect.ts` faktisk
+// forgrener på: kunnskapstype, sikkerhetsgrad, retning, komparator, effektmål
+// og enhet. En ukjent verdi blir der en eksplisitt ukjent tilstand framfor å
+// falle i en godartet gren. `relationship_type`, `*_availability` og
+// `source_status` står fortsatt uten kontroll, fordi ingenting forgrener på dem
+// ennå; gjeldsposten er registrert i MVP_IMPLEMENTATION_PLAN.md §74.7. Den
+// PR-en som forgrener på et av dem, skal legge til kontrollen samtidig.
+//
+// Et vokabular er det samme uansett hvilken rad det står i, så komparator,
+// effektmål og enhet er lukket på evidensradene også. Men kontrollen kjøres der
+// avledningen kjøres, og i dag leses bare påstandsradene: en evidensrad har
+// ingen kjøretidskontroll ennå. Avledningene tar imot `string | null` nettopp
+// for at evidensvisningen skal kunne gjenbruke dem uten å endre dem.
+//
+// `tests/api-vocabularies.test.ts` kontrollerer at hver lukket union her er
+// nøyaktig den enum-en migrasjonene definerer.
 //
 // Paragrafhenvisninger er til docs/ANTIDEP_CONSTITUTION.md der ikke annet står.
 // ============================================================================
@@ -135,6 +147,57 @@ export const SOURCE_STATUSES = [
 ] as const
 export type SourceStatus = (typeof SOURCE_STATUSES)[number]
 
+/**
+ * Retningen en påstand selv konkluderer med.
+ *
+ * Vokabularet er bevisst ikke det samme som retningen én kilde rapporterer på
+ * et evidensfunn (`reported_direction`). Det har en fjerde verdi, `not_stated`,
+ * og en påstand er Antideps syntese på tvers av grunnlaget — en annen epistemisk
+ * status (§5). Å behandle de to som samme vokabular ville latt «kilden oppgir
+ * ingen retning» og «Antidep konkluderer med ingen klar forskjell» bytte plass.
+ *
+ * `no_clear_difference` er et resultat: grunnlaget viser ingen klar forskjell.
+ * Det er noe annet enn at retningen ikke er angitt (NULL) og noe annet enn at
+ * evidensen ikke lar seg vurdere (`certainty_level`). Ingen av dem betyr ingen
+ * effekt eller ingen risiko (§17).
+ */
+export const CLAIM_DIRECTIONS = ['increase', 'decrease', 'no_clear_difference'] as const
+export type ClaimDirection = (typeof CLAIM_DIRECTIONS)[number]
+
+/**
+ * Hva en påstand eller et evidensfunn sammenlignes mot. `none` betyr at det
+ * ikke finnes en komparator — ikke at komparatoren er ukjent. Uten komparator
+ * er en effektstørrelse ikke tolkbar (§19 i
+ * PRODUCT_INFORMATION_ARCHITECTURE.md), så en klient som viser et tall må vise
+ * denne verdien med det.
+ */
+export const COMPARATOR_KINDS = ['drug', 'placebo', 'none'] as const
+export type ComparatorKind = (typeof COMPARATOR_KINDS)[number]
+
+/**
+ * Effektmålet en tallverdi er uttrykt i. Vokabularet er lukket fordi målet
+ * avgjør hva tallet betyr: 1,7 som `mean_difference` er en gjennomsnittsforskjell
+ * i en enhet, mens 1,7 som `odds_ratio` er dimensjonsløst og har 1 som
+ * nullpunkt. Et tall uten sitt mål er ikke tolkbart, og et tall med feil mål er
+ * klinisk feil.
+ */
+export const EFFECT_MEASURES = [
+  'mean_change',
+  'mean_difference',
+  'standardised_mean_difference',
+  'risk_ratio',
+  'odds_ratio',
+] as const
+export type EffectMeasure = (typeof EFFECT_MEASURES)[number]
+
+/**
+ * Enheten et dimensjonalt estimat er uttrykt i. Påkrevd for `mean_change` og
+ * `mean_difference`, og forbudt for de dimensjonsløse målene (migrasjon 004).
+ * Uten enhet er et vekttall klinisk tvetydig.
+ */
+export const ESTIMATE_UNITS = ['kg', 'percent'] as const
+export type EstimateUnit = (typeof ESTIMATE_UNITS)[number]
+
 // ----------------------------------------------------------------------------
 // api.published_drugs
 // ----------------------------------------------------------------------------
@@ -183,16 +246,20 @@ export type PublishedClaimRow = {
   timeframe_min: IntervalText | null
   timeframe_max: IntervalText | null
   /** Uten komparator er en effektstørrelse ikke tolkbar. */
-  comparator_kind: string
+  comparator_kind: ComparatorKind
   comparator_drug_id: Uuid | null
   comparator_drug_name: string | null
 
-  /** `null` betyr at revisjonen ikke angir retning — ikke at retningen er nøytral (§17). */
-  direction: string | null
-  magnitude_measure: string | null
+  /**
+   * `null` betyr at revisjonen ikke angir retning — ikke at retningen er
+   * nøytral og ikke at det ikke er noen forskjell (§17). Bruk
+   * `describeClaimEffect()` framfor å forgrene her.
+   */
+  direction: ClaimDirection | null
+  magnitude_measure: EffectMeasure | null
   /** `null` betyr at effekten ikke er kvantifisert, ikke at den er null (§17). */
   magnitude_value: number | null
-  magnitude_unit: string | null
+  magnitude_unit: EstimateUnit | null
 
   qualifiers: string | null
   /** Alltid utfylt for evidenssynteser og kliniske anbefalinger (§6). */
@@ -271,7 +338,7 @@ export type PublishedClaimEvidenceRow = {
   intervention_drug_id: Uuid
   intervention_drug_name: string
   intervention_detail: string | null
-  comparator_kind: string
+  comparator_kind: ComparatorKind
   comparator_drug_id: Uuid | null
   comparator_drug_name: string | null
   comparator_detail: string | null
@@ -283,11 +350,18 @@ export type PublishedClaimEvidenceRow = {
   timepoint_max: IntervalText | null
   timepoint_availability: ValueAvailability
 
-  /** Retningen kilden selv rapporterer. Antideps vurdering ligger i `relationship_type`. */
+  /**
+   * Retningen kilden selv rapporterer, fra `knowledge.effect_direction` — et
+   * annet vokabular enn påstandens `direction`, med den fjerde verdien
+   * `not_stated`. Antideps egen vurdering av funnet ligger i
+   * `relationship_type`. Dokumentert `string` fordi ingenting forgrener på den
+   * ennå; den PR-en som gjør det, skal lukke vokabularet og legge til
+   * kjøretidskontrollen samtidig.
+   */
   reported_direction: string
-  effect_measure: string | null
+  effect_measure: EffectMeasure | null
   estimate: number | null
-  estimate_unit: string | null
+  estimate_unit: EstimateUnit | null
   estimate_availability: ValueAvailability
   ci_lower: number | null
   ci_upper: number | null

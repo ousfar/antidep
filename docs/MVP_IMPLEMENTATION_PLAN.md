@@ -1241,11 +1241,11 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ---
 
-## 74. Status etter lesemodellklienten
+## 74. Status etter claim-kortet
 
-**Oppdatert:** 22. august 2026 (etter `feat: add published read model client`, den typede
-leseveien fra `api` inn i appen; forrige oppdatering etter migrasjon 007a, publiserings- og
-reviewtidspunkt i api-lesemodellen)
+**Oppdatert:** 22. august 2026 (etter `feat: add claim card and certainty display`, den første
+klinikerflaten; forrige oppdatering etter `feat: add published read model client`, den typede
+leseveien fra `api` inn i appen)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1302,7 +1302,8 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       ci: verify the numeric claims in the plan               (#19)  merget   ingen migrasjon
       db: add audit events                                    (#20)  merget   migrasjon 008
       db: expose publication and review timestamps in api     (#21)  merget   migrasjon 007a
-      feat: add published read model client                   (#22)  åpen     ingen migrasjon
+      feat: add published read model client                   (#22)  merget   ingen migrasjon
+      feat: add claim card and certainty display              (#23)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1312,14 +1313,16 @@ dermed ikke bygget ennå, og glir til etter migrasjon 008. Rekkefølgen mellom m
 §25 er eksplisitt på at audit skal komme tidlig nok til at resten av admin-MVP-en bygges
 med sporbarhet fra starten. Se §74.10.
 
-PR I er nå påbegynt. `feat: add published read model client` er dens første del og
-inneholder ingen visning: den etablerer den typede leseveien fra `api` inn i appen, slik at
-komponentene i neste del bygges mot en kontrakt framfor mot løse objekter. Delingen følger
-§51 — «bygg ClaimCard» og «bygg evidence drawer» står der som egne PR-er. Se §74.12.
+PR I bygges i deler, slik §51 forutsetter: «bygg ClaimCard» og «bygg evidence drawer» står
+der som egne PR-er. Første del, `feat: add published read model client`, inneholdt ingen
+visning og etablerte den typede leseveien fra `api` inn i appen (§74.12). Andre del,
+`feat: add claim card and certainty display`, er den første klinikerflaten: presentasjons-
+enheten for én publisert påstand, uten ruting og uten datahenting (§74.13). Det som gjenstår
+av PR I, står sist i §74.13.
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #21. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #22. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
 **Migrasjonsnumrene i §18-§27 navngir planlagt innhold, ikke filrekkefølge.** Den niende
@@ -1454,7 +1457,10 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Fysisk sletting av en rolletildeling er selv uauditert | En rolletildeling kan fjernes fysisk uten at det står hvem som fjernet den. Auditradene for tildelingen og avslutningen består — det er nettopp derfor `object_id` ikke har fremmednøkkel — men slettingen selv etterlater ingen rad. En trigger kan ikke navngi den som sletter, fordi `DELETE` ikke bærer en aktør, og `audit.events.actor_id` er med hensikt `NOT NULL` | Admin-flyten (§48). Der går slettingen gjennom en kontrollert funksjon som kjenner aktøren, og `DATABASE_ARCHITECTURE.md` §36 sitt krav om «særskilt audit» ved fysisk sletting kan innfris |
 | Endringer på `provenance.actors` auditeres ikke | Aktørraden er festepunktet for all attribusjon, og visningsnavn, beskrivelse og tilbaketrekking kan endres uten spor. Identiteten er riktignok frosset av `provenance.freeze_actor_identity()`, så det som kan endres er presentasjon og livssyklus, ikke hvem aktøren er | Samme trigger som over, og av samme grunn: tabellen har ingen kolonne som sier hvem som endret raden, så en trigger har ingen aktør å registrere |
 | `audit.events.request_or_run_id` har ingen produsent | Auditrader kan ikke grupperes etter forespørselen eller agentkjøringen de hørte til, så en operasjon som består av flere skrivinger framstår som uavhengige hendelser | `provenance.agent_runs`, eller det første admin-RPC-laget som har en forespørselsidentitet å sende med |
-| `api`-kontrakten i TypeScript er ikke maskinelt kontrollert mot databasen | Radtypene, `Database`-typen og de lukkede vokabularene i `src/types/` er håndskrevne påstander om `api`. En kolonne som skifter navn eller blir nullbar, eller en ny enum-verdi, gjør typen usann uten at noe feiler. `describeClaimCertainty()` fanger en ukjent `certainty_level` i kjøretid; `relationship_type`, `*_availability` og `source_status` har ingen tilsvarende kontroll | En kontroll i CI som sammenligner `information_schema.columns` for `api` mot typene — databasejobben har allerede en kjørende stack — eller den første migrasjonen som endrer et api-view |
+| `api`-kontrakten i TypeScript er ikke maskinelt kontrollert mot databasens kolonner | Radtypene og `Database`-typen i `src/types/` er håndskrevne påstander om `api`. En kolonne som skifter navn, blir nullbar eller endrer type gjør dem usanne uten at noe feiler. Vokabularhalvdelen er lukket: `tests/api-vocabularies.test.ts` leser migrasjonene og krever at hver lukket union er nøyaktig sin enum (§74.13). Kolonnenavn, nullbarhet og kolonnetyper står igjen | En kontroll i CI som sammenligner `information_schema.columns` for `api` mot typene — databasejobben har allerede en kjørende stack — eller den første migrasjonen som endrer et api-view |
+| Ingen regel binder et kontrastivt effektmål til en komparator | `knowledge.claim_revisions` tillater fortsatt `magnitude_measure = 'mean_difference'` sammen med `comparator_kind = 'none'`, og en redaktør kan skrive kombinasjonen. Presentasjonslaget nekter nå å tolke den (§74.13), men det er et forsvar i visningen, ikke en invariant: dataene er like ugyldige, og enhver annen leser av `api` ser dem rå | Migrasjonen som legger til betingelsen, eller admin-flyten (§29), som er første sted en redaktør kan skrive kombinasjonen. Regelen må ta stilling til `mean_change`, som er en endring fra behandlingsstart og korrekt har `none` |
+| Ingen regel binder en tallfestet effekt til at evidensen er graderbar | En revisjon kan bære `magnitude_value` samtidig som vurderingen er `no_assessable_evidence` — som ifølge migrasjon 004 betyr at det ikke finnes tilstrekkelig grunnlag til å gjøre en vurdering i det hele tatt. Kolonnekommentaren på `magnitude_value` sier selv at en påstand som er mer presis enn evidensen under den, er et brudd på `ANTIDEP_CONSTITUTION.md` §4 og §6, men ingen `CHECK` håndhever det på tvers av de to tabellene. Presentasjonslaget skjuler tallet (§74.13); databasen tillater det | Samme migrasjon som over, eller admin-flyten. Regelen krysser `knowledge.claim_revisions` og `knowledge.evidence_assessments`, så den må enten være en trigger eller en betingelse i publiseringsgaten |
+| Modellen kan ikke avgjøre om en effektstørrelses fortegn stemmer med påstandens retning | `direction = 'increase'` med `magnitude_value = -0,4` ser motstridende ut, men er det ikke nødvendigvis: fortegnet hører til skalaen `magnitude_unit` måler på, og modellen registrerer ikke om den skalaens positive retning peker samme vei som temaet påstanden handler om. «Økning i vekttap» med en negativ vektforskjell er konsistent. Kontrollen er derfor bevisst ikke innført — den ville gitt falske utslag på gyldige data | Det første objektet som registrerer polariteten til et utfall i forhold til sitt `ClinicalConcept`. Uten det kan verken UI eller en databaseregel bedømme fortegnet |
 
 ### 74.8 Gjeld innfridd i korreksjonsmigrasjon 006a
 
@@ -1859,6 +1865,154 @@ måle uten å feile.
 dette?» og kildedetalj (§30). Avhengighetsvalgene for ruting og server-state (§7) er ikke
 tatt, fordi denne delen ikke trenger dem. Klinikerflaten må bygges mot den tomme
 projeksjonen og behandle den som en førsteklasses tilstand — §74.11 sist.
+
+### 74.13 Hva claim-kortet innførte
+
+`feat: add claim card and certainty display` er andre del av PR I (§30, §68) og den første
+klinikerflaten. Den oppretter ingen migrasjon, ingen ruting og ingen datahenting, og legger
+ingen ny avhengighet til: avhengighetsvalgene i §7 for ruting og server-state er fortsatt
+ikke tatt, fordi rene presentasjonskomponenter ikke trenger dem.
+
+Den består av presentasjonsenheten for én publisert påstand
+(`src/components/ClaimCard.tsx`), sikkerhetsvisningen (`src/components/ClaimCertainty.tsx`),
+avledningen av påstandens strukturerte betydning (`src/lib/claim-effect.ts`) og norsk
+gjengivelse av intervaller, tidsstempler og tall (`src/lib/norwegian-format.ts`). Fire
+vokabularer er lukket i `src/types/api.ts`, og `tests/api-vocabularies.test.ts` kontrollerer
+alle de lukkede vokabularene mot migrasjonene.
+
+**Fem beslutninger, i den rekkefølgen de betyr noe klinisk:**
+
+1. **«Ikke aktuelt» og «mangler» er forskjellige ting, og kunnskapstypen avgjør hvilken.** Et
+   deterministisk faktum — et handelsnavn, en legemiddelform — har ingen retning og ingen
+   effektstørrelse. Å skrive «størrelsen er ikke tallfestet, og det betyr ikke at effekten er
+   null» på «finnes som tablett 50 mg» er en kategorifeil som låner faktumet en epistemisk
+   ramme det ikke har (`ANTIDEP_CONSTITUTION.md` §5). De to aksene utelates derfor for et
+   deterministisk faktum — men bare når de faktisk er tomme; bærer faktumet likevel en
+   retning eller en størrelse, er det noe å vise. Det er samme skille som
+   `not_applicable_deterministic_fact` gjør på sikkerhetsaksen. For de to andre
+   kunnskapstypene gjelder det motsatte: der er en manglende tallfesting informasjon, og
+   stillhet ville vært §17-feilen. Dette ble funnet ved å se på gjengivelsen i nettleseren,
+   ikke av en test.
+
+2. **Effektmål og komparator er én påstand, og et uforenlig par tolkes ikke.**
+   `comparator_kind = 'none'` betyr ikke «komparator mangler»; migrasjon 004 sier at det betyr
+   *en endring fra behandlingsstart*. Det er en påstand om hva tallet måler, og den må stemme
+   med effektmålet: `mean_change` måler innenfor én arm, mens `mean_difference`, SMD, RR og OR
+   måler mellom to. «Gjennomsnittsforskjell 1,7 kg» med `none` har ingen gruppe å være
+   forskjellig fra, og å presentere den som «endring fra behandlingsstart» ville gitt et
+   kontraktsbrudd en plausibel, men gal klinisk betydning. Størrelsen avledes derfor med
+   komparatoren i hånden, og et uforenlig par kan ikke bli `quantified`: tallet er
+   utilgjengelig for visningen framfor å måtte huskes skjult av den. Kontrastiv er
+   komplementet til innenfor-arm, ikke en egen liste, så et sjette effektmål krever komparator
+   til noen tar stilling til det. Tre tilstander holdes fra hverandre, fordi de krever hver sin
+   retting: en gyldig `none` der målet faktisk beskriver endring fra baseline, en komparator
+   som selv er brutt, og et par der hvert felt er gyldig men kombinasjonen ikke er det. Hvert
+   kontraktsbrudd på størrelsen gir sin egen forklaring framfor et tall.
+
+3. **Ingen skala, og ingen fargeramme over graderingene.** §17 navngir «en tom skala» som
+   nettopp det mønsteret som får manglende data til å se ut som lav risiko: en firetrinns
+   indikator ville tvunget «ingen vurderbar evidens» og «ukjent sikkerhet» inn på samme akse
+   som «svært lav», som et trinn under framfor som noe annet. Teksten bærer betydningen (§20),
+   og en visuell skala hører først hjemme når hvert trinn har en definert semantikk å vise
+   (§18). «Traffic-light medicine» er dessuten et eksplisitt antimønster (§65), og høy
+   sikkerhet i kunnskapsgrunnlaget er ikke et grønt lys — den sier ingenting om hvor gunstig
+   funnet er. De ikke-graderte tilstandene skiller seg strukturelt: de bærer ingen
+   `data-certainty-level`, og stilsettet henger den graderte drakten på nettopp det
+   attributtet, så en ny ikke-gradert tilstand kan ikke arve utseendet til en gradering.
+
+4. **Veien til evidensen er påkrevd, og den er en lenke.** `evidenceHref` er ikke valgfri:
+   produktinvariant 9 sier at brukeren alltid skal finne «Hvorfor sier Antidep dette?», og et
+   valgfritt felt ville gjort det til noe en kaller kan glemme. At det er en lenke og ikke en
+   handling, gjør evidensvisningen delbar og bokmerkbar (§55). URL-en eies av rutingen, ikke
+   av kortet, så evidensvisningen kan bygges uten å endre kortet.
+
+5. **Fire vokabularer lukket, alle med kjøretidskontroll.** `claim_direction`,
+   `comparator_kind`, `effect_measure` og `estimate_unit` forgrenes det nå på, og regelen fra
+   §74.12 punkt 3 er at den PR-en som forgrener, legger til kontrollen samtidig. Påstandens
+   `direction` er bevisst ikke evidensfunnets `reported_direction`: det vokabularet har den
+   fjerde verdien `not_stated`, og å slå dem sammen ville latt «kilden oppgir ingen retning»
+   og «Antidep konkluderer med ingen klar forskjell» bytte plass. `relationship_type`,
+   `*_availability` og `source_status` står fortsatt uten kontroll, fordi ingenting forgrener
+   på dem ennå.
+
+**Gjeld: én halvpart innfridd, én post lagt til.** `tests/api-vocabularies.test.ts` leser de
+versjonerte migrasjonene og krever at hver lukket union i `src/types/api.ts` er nøyaktig sin
+enum, og i tillegg at skillet mellom dimensjonale og dimensjonsløse effektmål er det samme som
+`claim_revisions_magnitude_unit_check`. Uthentingen leser ikke bare `create type`: en senere
+`alter type … add value` eller `rename value` regnes med, og en endringsform testen ikke kan
+tolke stopper den framfor å bli ignorert. Uten det ville vaktposten sluttet å måle første gang
+et enum ble utvidet — den ville passert mens databasen kunne returnere en verdi unionen ikke
+kjenner. Ingen migrasjon bruker `alter type` i dag; kodeveien er derfor prøvd mot syntetisk
+SQL, slik at den virker den dagen den trengs. Ingen database trengs; framgangsmåten er den samme som
+i `tests/data-api-exposure.test.ts`. Kolonnenavn, nullbarhet og kolonnetyper står fortsatt
+ukontrollert, og gjeldsposten i §74.7 er strammet inn til det. Den nye posten er databasens
+manglende binding mellom effektmål og komparator.
+
+**Serialiseringen av `interval` er kontrollert, ikke antatt.** PostgREST gir PostgreSQLs egen
+tekstform, og Supabase kjører med standardinnstillingen `IntervalStyle = postgres`. Formene er
+lest ut av en PostgreSQL 16-instans: `interval '8 weeks'` blir `56 days`, `'3 months'` blir
+`3 mons`, `'18 months'` blir `1 year 6 mons`, og `to_json()` gir samme streng som `::text`.
+Uker overlever altså ikke, og de regnes ikke tilbake: enheten databasen faktisk bærer er den
+som vises. Alt som ikke passer formen — ISO 8601 fra en annen `IntervalStyle`, eller et
+negativt intervall — gjengis uendret framfor å tolkes på slump.
+
+**Tre kombinasjonsfeil funnet i sluttgjennomgangen.** Alle tre er samme type: hvert felt er
+gyldig for seg, mens paret betyr noe annet enn delene. De ble ikke funnet av mutasjonstesting,
+fordi mutasjonene traff koden og ikke antakelsen om at feltene kunne vurderes hver for seg.
+
+1. **`mean_difference` med `comparator_kind = 'none'`.** Kortet skrev
+   «Gjennomsnittsforskjell 1,7 kg. Ingen komparator: endring fra behandlingsstart.»
+   Den siste setningen er en gyldig lesning av `mean_change + none`, men en helt annen
+   påstand for `mean_difference + none` — presentasjonslaget reparerte altså et
+   kontraktsbrudd ved å gi det en plausibel, men gal klinisk betydning. Rettet ved at
+   størrelsen avledes med komparatoren i hånden (punkt 2 over), og at baselinelesningen
+   bare skrives ut når målet lisensierer den.
+
+2. **Tallfestet effekt sammen med `no_assessable_evidence`.** Migrasjon 004 sier at den
+   tilstanden betyr at det ikke finnes tilstrekkelig grunnlag til å gjøre en vurdering i det
+   hele tatt, og kolonnekommentaren på `magnitude_value` sier selv at en påstand som er mer
+   presis enn evidensen under den, er et brudd på `ANTIDEP_CONSTITUTION.md` §4 og §6. Kortet
+   viste likevel punktestimatet ved siden av «Ingen vurderbar evidens». Tallet skjules nå, med
+   begrunnelsen synlig. Avgrenset til den vurderte tilstanden: `unknown` dekker blant annet en
+   kunnskapstype Antidep ikke kjenner, og da er det sikkerhetsvisningen som sier fra.
+
+3. **Deterministisk faktum som likevel bærer retning eller størrelse.** §74.13 punkt 1 utelot
+   de to aksene når de er tomme, men viste dem umerket når de ikke er det — og da så en verdi
+   som ikke gjelder for kunnskapstypen nøyaktig ut som en som gjør det (§5). Verdien står
+   fortsatt, siden det å skjule den ville skjult bruddet, men den er nå merket. Parallellen på
+   sikkerhetsaksen er `assessment_on_deterministic_fact`.
+
+**En kontroll ble vurdert og bevisst ikke innført.** Fortegnet på en effektstørrelse kan se ut
+til å motsi påstandens retning — `increase` med −0,4 — men modellen registrerer ikke om den
+positive retningen på skalaen `magnitude_unit` måler i, peker samme vei som temaet påstanden
+handler om. «Økning i vekttap» med en negativ vektforskjell er konsistent, så en fortegnsregel
+ville gitt falske utslag på gyldige data. Registrert som gjeld i §74.7 framfor implementert.
+
+**Forsvaret i visningen lukker ikke databaseinvarianten.** Databasen tillater fortsatt begge
+kombinasjonene, en redaktør kan skrive dem, og enhver annen leser av `api` ser dem rå. De to
+lagene er registrert hver for seg i §74.7.
+
+**Hva som ble verifisert.** 46 mutasjoner ble innført én om gangen og alle fanget: 23 mot
+kortet, sikkerhetsvisningen, avledningen og formateringen, ti mot vaktposten på vokabularene,
+og tretten mot kombinasjonsreglene over. Én mutasjon overlevde først, og var et funn i seg
+selv: `baselineReadingIsLicensed()` kalte `isWithinArmMeasure()` i en gren som avledningen
+allerede hadde gjort uoppnåelig. En uprøvbar vakt ser ut som et vern uten å være det, så
+grenen ble fjernet framfor at mutasjonen ble notert som et unntak. Typene ble sondert framfor antatt — en tilordning av en verdi utenfor hvert nytt
+vokabular gir fire typefeil, og kollapsvakten fra §74.12 slår fortsatt ut når en radtype
+skrives om til `interface`. Kortet ble kjørt i Chromium på 1280 og på en ekte 390 px
+mobilviewport gjennom devtools-protokollen, fordi `--window-size` klemmes til minst 500 px og
+en skjermdump alene ville sett ut som avkuttet tekst uten å være det: ingen horisontal
+overflyt, og ingen konsollmeldinger utover en manglende favicon på den midlertidige
+forhåndsvisningssiden. En vitest-kontroll fanger dessuten `console.error` fra React på flere
+varianter av kortet.
+
+**Hva som gjenstår av PR I.** Ruting, legemiddelsidene `/drugs/sertralin` og
+`/drugs/mirtazapin`, temasiden for vekt, evidensvisningen bak «Hvorfor sier Antidep dette?» og
+kildedetaljen (§30). Evidensvisningen er en egen PR (§51). Avhengighetsvalgene for ruting og
+server-state (§7) hører til den PR-en som først trenger dem. Viewene svarer fortsatt `[]`, så
+den første siden må behandle den tomme projeksjonen som en førsteklasses tilstand — `ok` i
+lesemodellen har per konstruksjon aldri null rader, nettopp for å tvinge det fram (§74.12
+punkt 1).
 
 ---
 

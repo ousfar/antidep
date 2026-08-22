@@ -70,3 +70,155 @@ main {
 main h2 {
   margin-top: 0;
 }
+
+/* ==========================================================================
+   Claim-komponenten og sikkerhetsvisningen
+   (PRODUCT_INFORMATION_ARCHITECTURE.md §13-§20)
+
+   Fargen er nøytral og bærer ingen klinisk mening. «Traffic-light medicine»
+   er et eksplisitt antimønster (§65), og høy sikkerhet i kunnskapsgrunnlaget
+   er ikke et grønt lys: den sier ingenting om hvor gunstig funnet er. Alle
+   graderingene ser derfor like ut og skilles på tekst (§20).
+
+   De ikke-graderte sikkerhetstilstandene skiller seg i art, ikke i grad: de
+   mangler `data-certainty-level`, og den graderte drakten henger på nettopp
+   det attributtet. En tom eller nedtonet skala ville vært den feillesningen
+   §17 forbyr — «ingen vurderbar evidens» som et trinn under «svært lav».
+
+   Mobil er førsteklasses (§47): kortet er enkolonnes som utgangspunkt, og
+   detaljlisten legger seg i to kolonner først når det er plass.
+   ========================================================================== */
+
+.claim-card {
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-block: 1rem;
+}
+
+.claim-card__knowledge-type {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.claim-card__statement {
+  margin: 0.25rem 0 0;
+  font-size: 1.125rem;
+  line-height: 1.4;
+}
+
+.claim-card__direction {
+  margin: 0.5rem 0 0;
+  font-weight: 600;
+}
+
+.claim-card__direction-symbol {
+  margin-inline-end: 0.25rem;
+}
+
+.claim-card__withdrawal {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-inline-start: 4px solid var(--color-text);
+  border-radius: 0.25rem;
+  font-size: 0.9375rem;
+}
+
+.claim-card__details {
+  margin: 0.75rem 0 0;
+  display: grid;
+  gap: 0.5rem 1rem;
+}
+
+@media (min-width: 34rem) {
+  .claim-card__details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.claim-card__detail dt {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.claim-card__detail dd {
+  margin: 0;
+}
+
+.claim-card__detail-note {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.claim-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.claim-card__reviewed {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.claim-card__evidence-link {
+  /* Nåbar uten presisjonspress (§49). */
+  display: inline-block;
+  padding: 0.375rem 0;
+  min-height: 2.75rem;
+  line-height: 2;
+  color: var(--color-focus);
+}
+
+.claim-certainty {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-inline-start: 4px solid var(--color-border);
+  border-radius: 0.25rem;
+}
+
+/* Den graderte drakten. Lik for alle fire nivåene, med vilje. */
+.claim-certainty[data-certainty-level] {
+  border-inline-start-style: solid;
+}
+
+/* Ikke-gradert: en annen strek, ikke en svakere. */
+.claim-certainty:not([data-certainty-level]) {
+  border-inline-start-style: dashed;
+}
+
+.claim-certainty__label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.claim-certainty__value {
+  display: block;
+  font-weight: 600;
+}
+
+.claim-certainty__note,
+.claim-certainty__caveat {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+}
+
+.claim-certainty__caveat {
+  color: var(--color-text-muted);
+}
