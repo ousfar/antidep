@@ -1,0 +1,112 @@
+import { describe, expect, it } from 'vitest'
+import { formatIntervalText, formatNumber, formatTimestampAsDate } from './norwegian-format'
+
+// Formene under er ikke oppdiktede. De er lest ut av PostgreSQL 16 med
+// standardinnstillingen IntervalStyle = postgres, som er den Supabase kjører,
+// og to_json() gir nøyaktig samme streng som ::text.
+describe('intervalltekst fra PostgreSQL', () => {
+  it.each([
+    // [databaseverdi, kilden den kom fra, forventet norsk tekst]
+    ['56 days', "interval '8 weeks'", '56 dager'],
+    ['7 days', "interval '1 week'", '7 dager'],
+    ['1 day', "interval '1 day'", '1 dag'],
+    ['3 mons', "interval '3 months'", '3 måneder'],
+    ['1 mon', "interval '1 month'", '1 måned'],
+    ['1 year', "interval '12 months'", '1 år'],
+    ['1 year 6 mons', "interval '18 months'", '1 år 6 måneder'],
+    ['1 year 2 mons 3 days', 'sammensatt intervall', '1 år 2 måneder 3 dager'],
+    ['12:00:00', "interval '12 hours'", '12 timer'],
+    ['1 mon 5 days 06:00:00', 'dato- og klokkeledd sammen', '1 måned 5 dager 6 timer'],
+    ['00:30:00', "interval '30 minutes'", '30 minutter'],
+    ['00:00:45', "interval '45 seconds'", '45 sekunder'],
+    ['01:01:01', 'ett av hver, i entall', '1 time 1 minutt 1 sekund'],
+  ])('%s (%s) blir «%s»', (raw, _source, expected) => {
+    expect(formatIntervalText(raw)).toEqual({ kind: 'formatted', text: expected })
+  })
+
+  it('et nullintervall blir en varighet, ikke en tom streng', () => {
+    // En tom streng ville sett ut som en manglende verdi, og et manglende felt
+    // er nettopp det som ikke skal kunne forveksles med data (§17).
+    expect(formatIntervalText('00:00:00')).toEqual({ kind: 'formatted', text: '0 sekunder' })
+  })
+})
+
+describe('et intervall som ikke lar seg tolke, gjengis uendret', () => {
+  it.each([
+    ['P56D', 'ISO 8601 fra en annen IntervalStyle'],
+    ['PT12H', 'ISO 8601, bare klokkeledd'],
+    ['-1 days', 'negativt intervall, som migrasjon 004 forbyr på et tidsrom'],
+    ['1 days -02:00:00', 'negativt klokkeledd'],
+    ['56 fortnights', 'en enhet PostgreSQL ikke skriver ut'],
+    ['56 days extra', 'et ledd for mye'],
+    ['3 mons 5', 'et tall uten enhet'],
+    ['', 'tom streng'],
+    ['   ', 'bare blanktegn'],
+    ['1,5 days', 'desimaltall der PostgreSQL skriver heltall'],
+  ])('%s (%s)', (raw) => {
+    expect(formatIntervalText(raw)).toEqual({ kind: 'unrecognised', text: raw })
+  })
+
+  it('gjengir råverdien uendret, ikke en normalisert utgave av den', () => {
+    // Poenget med `unrecognised` er at leseren ser hva som faktisk står.
+    expect(formatIntervalText('  P56D  ')).toEqual({ kind: 'unrecognised', text: '  P56D  ' })
+  })
+})
+
+describe('tidsstempler', () => {
+  it('gir norsk dato uten klokkeslett', () => {
+    expect(formatTimestampAsDate('2026-08-21T09:15:00+00:00')).toEqual({
+      kind: 'formatted',
+      text: '21. august 2026',
+    })
+  })
+
+  it('bruker norsk tid, ikke maskinens sone', () => {
+    // 22:30 UTC er 00:30 neste døgn i Oslo om sommeren. Datoen en kliniker ser
+    // skal være den samme uansett hvor leseren sitter, og testen skal ikke
+    // avhenge av maskinen den kjører på.
+    expect(formatTimestampAsDate('2026-08-21T22:30:00Z')).toEqual({
+      kind: 'formatted',
+      text: '22. august 2026',
+    })
+  })
+
+  it('gjengir et utolkbart tidsstempel rått framfor «Invalid Date»', () => {
+    expect(formatTimestampAsDate('ikke en dato')).toEqual({
+      kind: 'unrecognised',
+      text: 'ikke en dato',
+    })
+  })
+})
+
+describe('tall', () => {
+  it('bruker norsk desimalkomma', () => {
+    expect(formatNumber(1.7)).toEqual({ kind: 'formatted', text: '1,7' })
+  })
+
+  it('avkorter ikke desimaler', () => {
+    // Standardverdien for maximumFractionDigits er 3. Uten overstyring ville
+    // 1,7143 blitt 1,714 — en klinisk verdi endret av en formateringsdetalj.
+    expect(formatNumber(1.7143)).toEqual({ kind: 'formatted', text: '1,7143' })
+  })
+
+  it('beholder et heltall som heltall', () => {
+    expect(formatNumber(2)).toEqual({ kind: 'formatted', text: '2' })
+  })
+
+  it('beholder null som null', () => {
+    // 0 er en målt verdi, ikke en manglende verdi, og skal ikke forsvinne.
+    expect(formatNumber(0)).toEqual({ kind: 'formatted', text: '0' })
+  })
+
+  it('gjengir et negativt tall med minustegn', () => {
+    expect(formatNumber(-0.4)).toEqual({ kind: 'formatted', text: '−0,4' })
+  })
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY])(
+    '%s er et kontraktsbrudd og gjengis rått',
+    (value) => {
+      expect(formatNumber(value)).toEqual({ kind: 'unrecognised', text: String(value) })
+    },
+  )
+})
