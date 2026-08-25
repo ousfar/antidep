@@ -2049,7 +2049,12 @@ ubygde evidensvisningen og en side for ukjent adresse.
    midtklikk fortsatt åpner i ny fane, at `popstate` og nettleserens fram/tilbake virker, og
    at eksterne lenker ikke fanges. Det er en klasse feil som ser ut som ingenting til den
    dagen den ikke gjør det. Data-modusen (`createBrowserRouter`, loaders) er bevisst ikke tatt
-   i bruk: den ville innført et server-state-mønster gjennom bakdøren.
+   i bruk: den ville innført et server-state-mønster gjennom bakdøren. Avhengigheten hevet
+   dessuten Node-gulvet, og avdekket at `engines.node` allerede var usann: `jsdom` krever
+   `^22.22.2`, mens roten erklærte `>=22`, og `npm ci` nøyde seg med en advarsel. Gulvet er
+   rettet til det laveste treet faktisk tilfredsstiller, og `.npmrc` gjør avviket til en feil
+   framfor en advarsel — en erklæring ingenting håndhever, er den formen for påstand §74.8
+   handler om.
 2. **Server-state: ingen avhengighet.** §7 ber om at kategorien utsettes til behovet er
    demonstrert. Flaten har tre lesespørringer, ingen mutasjoner, ingen invalidering og ingen
    bakgrunnsoppfriskning. `useReadModel()` er en effekt og en tilstand, og legger nøyaktig én
