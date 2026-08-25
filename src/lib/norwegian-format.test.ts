@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { formatIntervalText, formatNumber, formatTimestampAsDate } from './norwegian-format'
+import {
+  compareNorwegian,
+  formatIntervalText,
+  formatNumber,
+  formatTimestampAsDate,
+} from './norwegian-format'
 
 // Formene under er ikke oppdiktede. De er lest ut av PostgreSQL 16 med
 // standardinnstillingen IntervalStyle = postgres, som er den Supabase kjører,
@@ -109,4 +114,19 @@ describe('tall', () => {
       expect(formatNumber(value)).toEqual({ kind: 'unrecognised', text: String(value) })
     },
   )
+})
+
+describe('compareNorwegian', () => {
+  it('setter æ, ø og å sist, og i norsk rekkefølge', () => {
+    // En sortering på tegnverdi gir å (U+00E5) før æ (U+00E6) før ø (U+00F8).
+    expect(['ø', 'å', 'æ', 'z'].sort(compareNorwegian)).toEqual(['z', 'æ', 'ø', 'å'])
+  })
+
+  it('sorterer «aa» som «å», slik norsk kollasjon gjør', () => {
+    expect(['aal', 'bil'].sort(compareNorwegian)).toEqual(['bil', 'aal'])
+  })
+
+  it('er en ordinær alfabetisk sortering ellers', () => {
+    expect(['sertralin', 'mirtazapin'].sort(compareNorwegian)).toEqual(['mirtazapin', 'sertralin'])
+  })
 })

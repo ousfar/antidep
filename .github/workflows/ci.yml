@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Hele historikken: verify-counts.sh kontrollerer at hver PR-rad ført
+          # som «merget» i §74.2 har sin commit. En grunn klone ville gjort hver
+          # rad til et avvik, og kontrollen sier fra framfor å slå seg av.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

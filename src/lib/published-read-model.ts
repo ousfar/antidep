@@ -77,6 +77,38 @@ export async function fetchPublishedDrugs(
   )
 }
 
+/**
+ * Alle publiserte påstander.
+ *
+ * Finnes fordi temasiden må slå opp et klinisk begrep fra en slug, og `api`
+ * ikke eksponerer noen temaprojeksjon: `published_claims` er det eneste stedet
+ * `topic_label` finnes, og en slug kan ikke inverteres til en etikett
+ * (`src/lib/slug.ts`). Settet lastes derfor i sin helhet og filtreres i
+ * klienten.
+ *
+ * Det holder så lenge det publiserte settet er lite, og det er registrert som
+ * gjeld i MVP_IMPLEMENTATION_PLAN.md §74.7: triggeren er et `api.published_-
+ * topics`-view eller en slug-kolonne i katalogen, som lar temasiden filtrere
+ * på serversiden slik legemiddelsiden allerede gjør.
+ *
+ * Sorteringen er alfabetisk på virkestoff og deretter på tema. Det er en
+ * stabil rekkefølge uten klinisk mening; hvilken rekkefølge en visning
+ * presenterer settet i, er en designbeslutning som hører til visningen
+ * (ANTIDEP_CONSTITUTION.md §9, PRODUCT_INFORMATION_ARCHITECTURE.md §29).
+ */
+export async function fetchPublishedClaims(
+  client: AntidepClient,
+): Promise<ReadModelResult<PublishedClaimRow>> {
+  return toResult(
+    await client
+      .from('published_claims')
+      .select('*')
+      .order('drug_name', { ascending: true })
+      .order('topic_label', { ascending: true })
+      .order('statement', { ascending: true }),
+  )
+}
+
 /** De publiserte påstandene der virkestoffet er subjekt. */
 export async function fetchPublishedClaimsForDrug(
   client: AntidepClient,

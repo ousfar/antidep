@@ -1241,11 +1241,11 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ---
 
-## 74. Status etter claim-kortet
+## 74. Status etter rutingen og de første sidene
 
-**Oppdatert:** 22. august 2026 (etter `feat: add claim card and certainty display`, den første
-klinikerflaten; forrige oppdatering etter `feat: add published read model client`, den typede
-leseveien fra `api` inn i appen)
+**Oppdatert:** 25. august 2026 (etter `feat: add routing and first clinician pages`, den første
+navigerbare klinikerflaten; forrige oppdatering etter `feat: add claim card and certainty
+display`, presentasjonsenheten for én publisert påstand)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1286,6 +1286,11 @@ sier ingenting om status.
 `First admin workflow` og `First published Claim` står som `[!]` — blokkert og avhengig
 av en beslutning, ikke av kode. Se §74.4.
 
+**Slice 2 (§30) er ikke ferdig.** Rutingen, legemiddelsidene og temasiden finnes, men
+definition of done krever at klinikeren også kan se *hva evidensen er* og *hvilken kilde
+som støtter eller motsier* påstanden. Evidensvisningen og kildedetaljen er ikke bygget, og
+er en egen PR (§51). Se §74.14.
+
 ### 74.2 Faktisk PR-rekkefølge
 
 ```text
@@ -1303,7 +1308,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       db: add audit events                                    (#20)  merget   migrasjon 008
       db: expose publication and review timestamps in api     (#21)  merget   migrasjon 007a
       feat: add published read model client                   (#22)  merget   ingen migrasjon
-      feat: add claim card and certainty display              (#23)  åpen     ingen migrasjon
+      feat: add claim card and certainty display              (#23)  merget   ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1317,13 +1322,21 @@ PR I bygges i deler, slik §51 forutsetter: «bygg ClaimCard» og «bygg evidenc
 der som egne PR-er. Første del, `feat: add published read model client`, inneholdt ingen
 visning og etablerte den typede leseveien fra `api` inn i appen (§74.12). Andre del,
 `feat: add claim card and certainty display`, er den første klinikerflaten: presentasjons-
-enheten for én publisert påstand, uten ruting og uten datahenting (§74.13). Det som gjenstår
-av PR I, står sist i §74.13.
+enheten for én publisert påstand, uten ruting og uten datahenting (§74.13). Tredje del,
+`feat: add routing and first clinician pages`, er den første navigerbare flaten: adressene,
+forsiden, legemiddelsidene og temasiden, med datahenting (§74.14). Det som gjenstår av PR I,
+står sist i §74.14.
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #22. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #23. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
+
+Konvensjonen har sviktet fire ganger på rad, og er derfor ikke lenger bare en konvensjon:
+`scripts/verify-counts.sh` krever at hver rad unntatt den nyeste står som `merget`, og at
+hver rad ført som `merget` har sin commit i git-historikken. Den nyeste raden er unntatt,
+fordi en PR ikke kan kjenne sin egen mergestatus — og nettopp derfor slår kontrollen ut i
+det øyeblikket noen legger til raden under en foreldet rad.
 
 **Migrasjonsnumrene i §18-§27 navngir planlagt innhold, ikke filrekkefølge.** Den niende
 migrasjonsfilen er migrasjon 008, fordi den sjuende — korreksjonsmigrasjonen 006a — står
@@ -1461,6 +1474,9 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Ingen regel binder et kontrastivt effektmål til en komparator | `knowledge.claim_revisions` tillater fortsatt `magnitude_measure = 'mean_difference'` sammen med `comparator_kind = 'none'`, og en redaktør kan skrive kombinasjonen. Presentasjonslaget nekter nå å tolke den (§74.13), men det er et forsvar i visningen, ikke en invariant: dataene er like ugyldige, og enhver annen leser av `api` ser dem rå | Migrasjonen som legger til betingelsen, eller admin-flyten (§29), som er første sted en redaktør kan skrive kombinasjonen. Regelen må ta stilling til `mean_change`, som er en endring fra behandlingsstart og korrekt har `none` |
 | Ingen regel binder en tallfestet effekt til at evidensen er graderbar | En revisjon kan bære `magnitude_value` samtidig som vurderingen er `no_assessable_evidence` — som ifølge migrasjon 004 betyr at det ikke finnes tilstrekkelig grunnlag til å gjøre en vurdering i det hele tatt. Kolonnekommentaren på `magnitude_value` sier selv at en påstand som er mer presis enn evidensen under den, er et brudd på `ANTIDEP_CONSTITUTION.md` §4 og §6, men ingen `CHECK` håndhever det på tvers av de to tabellene. Presentasjonslaget skjuler tallet (§74.13); databasen tillater det | Samme migrasjon som over, eller admin-flyten. Regelen krysser `knowledge.claim_revisions` og `knowledge.evidence_assessments`, så den må enten være en trigger eller en betingelse i publiseringsgaten |
 | Modellen kan ikke avgjøre om en effektstørrelses fortegn stemmer med påstandens retning | `direction = 'increase'` med `magnitude_value = -0,4` ser motstridende ut, men er det ikke nødvendigvis: fortegnet hører til skalaen `magnitude_unit` måler på, og modellen registrerer ikke om den skalaens positive retning peker samme vei som temaet påstanden handler om. «Økning i vekttap» med en negativ vektforskjell er konsistent. Kontrollen er derfor bevisst ikke innført — den ville gitt falske utslag på gyldige data | Det første objektet som registrerer polariteten til et utfall i forhold til sitt `ClinicalConcept`. Uten det kan verken UI eller en databaseregel bedømme fortegnet |
+| Adressen til et katalogobjekt er avledet av visningsnavnet, ikke lagret | `/drugs/sertralin` og `/topics/vektendring` bygges ved å slå opp sluggen mot de kanoniske navnene i det publiserte settet (`src/lib/slug.ts`). En slug avledet av et visningsnavn er ikke en stabil identitet: endres navnet i katalogen, endres adressen, og en delt lenke slutter å virke (§55). Avledningen er dessuten tapsgivende, så to navn kan kollidere — oppslaget svarer da `ambiguous` framfor å velge, men adressen er ikke lenger entydig | En slug-kolonne i katalogen etter mønster av `provenance.actors.actor_key`, i den migrasjonen som først trenger en permanent lenke — eller det første katalogobjektet som faktisk kan skifte navn. Spørsmålet ble utsatt i §74.5 punkt 2 «til en klient faktisk trenger en menneskelesbar nøkkel i URL-er»; det behovet har nå meldt seg, og utsettelsen er derfor gjeld og ikke lenger et åpent valg |
+| Temasiden laster hele det publiserte settet | `api` har ingen temaprojeksjon, og en slug kan ikke inverteres til en etikett, så `/topics/:slug` henter alle publiserte påstander og filtrerer i klienten. Det skalerer ikke: en kunnskapsbase med hundrevis av påstander lastes i sin helhet for å vise ett tema, og klienten gjør et arbeid databasen burde gjort | Et `api.published_topics`-view, eller en slug-kolonne i katalogen (posten over), som lar temasiden filtrere på serversiden slik legemiddelsiden allerede gjør. Utløses i praksis av den første utvidelsen av pilotinnholdet (§33) |
+| Katalogstatusen på et virkestoff vises ikke i klinikerflaten | `api.published_drugs.status` bærer `active`, `historical` eller `withdrawn`, men beskriver Antideps forvaltning av virkestoffet og ikke markedsstatus i Norge — det står eksplisitt i kommentaren på `catalog.drug_status`. «Aktiv» ved siden av et virkestoffnavn ville blitt lest som det siste, og §58 holder workflow-status utenfor klinikerflaten, så verdien er utelatt. Prisen er at en kliniker ikke kan se at Antidep ikke lenger vedlikeholder et virkestoff det står publiserte påstander om | Det første virkestoffet med publiserte påstander og status ulik `active`. Da må vokabularet lukkes og få kjøretidskontroll (§74.12 punkt 3), og ordlyden må navngi Antidep som subjekt framfor å se ut som en markedsstatus |
 
 ### 74.8 Gjeld innfridd i korreksjonsmigrasjon 006a
 
@@ -2013,6 +2029,130 @@ server-state (§7) hører til den PR-en som først trenger dem. Viewene svarer f
 den første siden må behandle den tomme projeksjonen som en førsteklasses tilstand — `ok` i
 lesemodellen har per konstruksjon aldri null rader, nettopp for å tvinge det fram (§74.12
 punkt 1).
+
+### 74.14 Hva rutingen og de første sidene innførte
+
+`feat: add routing and first clinician pages` er tredje del av PR I (§30, §68) og den første
+navigerbare klinikerflaten. Den oppretter ingen migrasjon. Den består av adressene
+(`src/app/routes.ts`), sluggavledningen (`src/lib/slug.ts`), klienttilstanden
+(`src/app/antidep-client.ts`), hentingen (`src/app/use-read-model.ts`), fraværs- og
+feiltilstandene (`src/components/KnowledgeNotice.tsx`), grupperingen
+(`src/app/ClaimGroups.tsx`) og fem sider: forsiden, legemiddelsiden, temasiden, den ennå
+ubygde evidensvisningen og en side for ukjent adresse.
+
+**Avhengighetsvalgene i §7 er tatt, og det ene av dem er å la være.**
+
+1. **Ruting: `react-router`, i deklarativ modus.** Én transitiv avhengighet (`cookie-es`), og
+   den etablerte standarden. Alternativet — en håndskrevet ruter på History API-et — ville
+   spart avhengigheten og kostet nettopp de detaljene en ruter finnes for: at ctrl-, cmd- og
+   midtklikk fortsatt åpner i ny fane, at `popstate` og nettleserens fram/tilbake virker, og
+   at eksterne lenker ikke fanges. Det er en klasse feil som ser ut som ingenting til den
+   dagen den ikke gjør det. Data-modusen (`createBrowserRouter`, loaders) er bevisst ikke tatt
+   i bruk: den ville innført et server-state-mønster gjennom bakdøren.
+2. **Server-state: ingen avhengighet.** §7 ber om at kategorien utsettes til behovet er
+   demonstrert. Flaten har tre lesespørringer, ingen mutasjoner, ingen invalidering og ingen
+   bakgrunnsoppfriskning. `useReadModel()` er en effekt og en tilstand, og legger nøyaktig én
+   ting til lesemodellens tre: at svaret ikke er kommet ennå.
+3. **Dypelenker krever en omskrivingsregel på verten.** `vercel.json` sender alle stier til
+   `index.html`. Uten den ville `/drugs/sertralin` gitt 404 ved direkte åpning og ved
+   oppdatering — altså ville dypelenken virket overalt unntatt der §55 faktisk krever den.
+   Regelen ligger i repoet framfor i prosjektinnstillingene hos Vercel, i tråd med §54.
+
+**Fem beslutninger, i den rekkefølgen de betyr noe klinisk:**
+
+1. **Fem tomme skjermer, fem forskjellige utsagn.** En side som leser publisert kunnskap kan
+   ende uten innhold av fem grunner, og de betyr ikke det samme: spørringen laster; Antidep
+   har ikke publisert noe i det hele tatt; adressen traff ikke noe publisert; adressen er
+   tvetydig; spørringen feilet. Alle fem ville vært samme blanke flate, og en blank flate
+   leses som «ingenting å bekymre seg for». Hver av dem har derfor sin egen ordlyd, og de
+   tre fraværstilstandene bærer den samme setningen om at fravær i Antidep ikke er
+   dokumentasjon på fravær av effekt, bivirkning eller risiko (`ANTIDEP_CONSTITUTION.md` §17,
+   `PRODUCT_INFORMATION_ARCHITECTURE.md` §32, §65 «No-data-as-zero»). Setningen står ett sted,
+   i `KnowledgeNotice.tsx`, fordi den skrevet på nytt per side ville drevet fra hverandre.
+   «Laster» er skilt fra «tomt» strukturelt og ikke bare i tekst: `useReadModel()` starter i
+   `loading`, og et svar kan ikke vises som en tom liste (§74.12 punkt 1).
+
+2. **En tom projeksjon sier ingenting om virkestoffet i adressen.** `/drugs/sertralin` mot et
+   tomt `api.published_drugs` betyr at Antidep ikke har publisert noe — ikke at virkestoffet
+   er ukjent, og slett ikke at det er uten risiko. De to utsagnene er skilt: den tomme
+   projeksjonen sier «om noe virkestoff», og et treff som mangler sier eksplisitt at det er et
+   utsagn om Antideps innhold og ikke om virkestoffet. Overskriften er dessuten aldri sluggen
+   fra URL-en; å sette den ville gjort en adresse leseren skrev, til noe Antidep ser ut til å
+   hevde.
+
+3. **Adressen er avledet av navnet, og tvetydighet er en tilstand.** `api` eksponerer ingen
+   slug (§74.5 punkt 2), så `/drugs/sertralin` finnes ved å avlede sluggen av hvert kanonisk
+   navn i det publiserte settet. Avledningen er tapsgivende — norske bokstaver skrives om, så
+   to navn kan kollidere — og et oppslag som velger det første treffer riktig nesten alltid og
+   viser feil virkestoff resten av tiden. Det siste er en feil som ser ut som et gyldig svar,
+   så oppslaget svarer `ambiguous` og siden sier fra. Påstandens identitet er ikke berørt:
+   evidensvisningen adresseres med `claim_id`, som overlever en ny publisering.
+
+4. **Rekkefølge er ikke rangering, og to påstander ved siden av hverandre er ikke en
+   sammenligning.** «UI-derived recommendations» er et eksplisitt antimønster (§65), og
+   invariant 14 sier at visuell orden ikke skal bli en anbefaling ved en tilfeldighet. En
+   temaside med to virkestoff under samme overskrift *er* en ordnet liste, og leseren fyller
+   inn en mening hvis vi ikke oppgir den. Rekkefølgen er derfor alfabetisk, sorteringen gjøres
+   i visningen framfor å arves fra spørringen — `order by` i PostgreSQL bruker databasens
+   kollasjon, som ikke er norsk, så en visning som *sier* at rekkefølgen er alfabetisk må selv
+   gjøre den alfabetisk — og begge deler skrives ut. En liste bærer dessuten to påstander på én
+   gang: rekkefølgen, og at dette er settet. Den andre er den farligste her, fordi to virkestoff
+   under et tema leses som at de øvrige ikke har temaet, så begge listene sier hva de er: det
+   Antidep har publisert, ikke et fullstendig sett. Temasiden sier i tillegg at påstandene
+   ikke er en sammenligning: de kan ha ulik populasjon, ulik komparator og ulik tidsramme, og
+   sammenligning er en egen visning med egen semantikk (§21-§24, §29). Kollasjonen er norsk og
+   ikke tegnverdi, av samme grunn: en liste en norsk leser leser som usortert, ser ut som en
+   liste sortert etter noe annet — for eksempel etter viktighet.
+
+5. **Dokumentstrukturen er en klinisk egenskap, ikke pynt.** Kortet rendret `h3` da det stod
+   alene; en side har nå `h2` og gruppene `h3`, så kortet fikk `headingLevel` og ligger på
+   `h4` under gruppen sin. Et hopp i nivå gir feil disposisjon for en skjermleser (§50, §53).
+   Fokus flyttes til hovedområdet ved hver navigering, men ikke ved første render, fordi en
+   klientside-navigering ellers etterlater en skjermleser i forrige side. Hopplenken er
+   første fokuserbare element (§49, §52), og dokumenttittelen settes per adresse, slik at et
+   bokmerke og en delt lenke har et navn (§55, §57).
+
+**Det som ikke vises, og hvorfor.** Handelsnavn, klasse, norske legemiddelformer og styrker
+(§10) finnes ikke i datamodellen ennå og kommer med DrugProduct-fundamentet (§26) og slice 4
+(§32); de er utelatt framfor gjettet på. Katalogstatusen på virkestoffet er utelatt av en
+annen grunn: kolonnen beskriver Antideps forvaltning og ikke markedsstatus i Norge, og
+«aktiv» ved siden av et virkestoffnavn ville blitt lest som det siste. Begge er registrert i
+§74.7, den siste som gjeld.
+
+**Evidensadressen finnes, men visningen gjør det ikke.** `/claims/:claimId/evidence` er
+registrert som rute og svarer med en side som sier at visningen ikke er bygget. Uten ruten
+ville lenken fra hvert kort gitt «siden finnes ikke», som ikke er sant — adressen er riktig,
+innholdet mangler. **Produktinvariant 9 er dermed ikke innfridd ennå.** Det er ikke gjeld,
+men gjenstående arbeid: evidensvisningen er den neste PR-en (§51).
+
+**Gjeld: tre poster lagt til.** Adressen til et katalogobjekt er avledet av visningsnavnet og
+ikke lagret; temasiden laster hele det publiserte settet fordi `api` ikke har noen
+temaprojeksjon; katalogstatusen vises ikke. Alle tre står i §74.7 med sin egen trigger. Den
+første er den samme avveiningen §74.5 punkt 2 utsatte — utsettelsen er nå gjeld, fordi
+behovet den ventet på har meldt seg.
+
+**Vaktposten på PR-tabellen.** §74.2 sin statuskolonne har vært foreldet ved fire
+sesjonsstarter på rad. `scripts/verify-counts.sh` kontrollerer nå at hver rad unntatt den
+nyeste står som `merget`, og at hver `merget`-rad har sin commit i git-historikken. Den
+nyeste raden er unntatt fordi en PR ikke kan kjenne sin egen mergestatus; kontrollen slår
+derfor ut i det øyeblikket noen legger til raden under en foreldet rad — som er nøyaktig når
+forsømmelsen skjer. CI-jobben henter hele historikken for at den andre halvdelen skal kunne
+måle; en avkortet historikk gir feilmelding framfor stillhet.
+
+**Hva som ble verifisert.** `npm run lint`, `npm run format:check`, `npm run typecheck`,
+`npm run test` og `npm run build` er kjørt og passerer, sammen med
+`./scripts/verify-counts.sh`. Vitest-suiten er utvidet med sider, ruting, sluggavledning,
+hentetilstander og gruppering. Mutasjonstesting er kjørt etter mønsteret i §74.13: hver ny
+regel er fjernet én om gangen, og testen som påstår å teste den, er kontrollert å feile.
+Flaten er kjørt i Chromium på 1280 px og på en ekte 390 px mobilviewport gjennom
+devtools-protokollen — ikke gjennom `--window-size`, som klemmes til minst 500 px — uten
+horisontal overflyt og uten konsollmeldinger utover en manglende favicon.
+
+**Hva som gjenstår av PR I.** Evidensvisningen bak «Hvorfor sier Antidep dette?» og
+kildedetaljen (§30). Evidensvisningen er en egen PR (§51), og kildesiden er en annen visning
+enn evidensvisningen (§42). Viewene svarer fortsatt `[]`, så begge må bygges mot den tomme
+projeksjonen på samme måte som sidene her. Det som gjenstår for at slice 2 skal være ferdig,
+er dermed nøyaktig de to punktene i definition of done som handler om evidens og kilde.
 
 ---
 
