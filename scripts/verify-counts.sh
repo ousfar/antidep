@@ -10,8 +10,9 @@
 #
 # Kilden vinner alltid. Slår kontrollen ut, er dokumentet feil — ikke koden.
 #
-# Kun kildekode: ingen database, ingen Docker, ingen npm-avhengigheter. Kjøres
-# i CI-jobben «Lint, format, typecheck, test og build».
+# Kun kildekode og git: ingen database, ingen Docker, ingen npm-avhengigheter.
+# Kjøres i CI-jobben «Lint, format, typecheck, test og build», som henter hele
+# historikken fordi statuskontrollen under leser den.
 #
 #   ./scripts/verify-counts.sh
 #
@@ -118,6 +119,68 @@ else
     "antall migrasjoner med enum-typer utover de $antall_paastatt planen lister"
 fi
 
+# 5. Statusen på PR-radene i §74.2.
+#
+# Konvensjonen er at statuskolonnen beskriver tilstanden da raden ble skrevet:
+# den nyeste raden står som «åpen» til neste PR retter den. Konvensjonen virker
+# bare hvis neste PR faktisk gjør det, og fire ganger på rad har den nyeste raden
+# vært foreldet ved sesjonsstart.
+#
+# Regelen som kontrolleres er derfor: alle rader unntatt den siste skal stå som
+# «merget». Den siste er unntatt, fordi en PR ikke kan vite sin egen
+# mergestatus — og nettopp derfor fanges forsømmelsen i det øyeblikket noen
+# legger til raden under den.
+#
+# I tillegg kontrolleres den andre veien mot git: en rad ført som «merget» skal
+# ha en commit `(#N)` i historikken. Det fanger en rad som er merket ferdig for
+# tidlig.
+pr_rader=$(grep -oE '\(#[0-9]+\) +(merget|åpen)' "$PLAN")
+pr_linjer=$(grep -cE '\(#[0-9]+\)' "$PLAN" || true)
+antall_rader=$(printf '%s' "$pr_rader" | grep -c . || true)
+
+if [ "${antall_rader:-0}" -eq 0 ]; then
+  printf '  FEIL     %-26s fant ingen PR-rader i %s\n' "PR-rader" "$PLAN"
+  feil=1
+else
+  # En linje med (#N) uten status ville falt ut av kontrollen under uten å
+  # feile, og da ville «den siste raden» pekt på feil rad.
+  sjekk "PR-rader med status" "$antall_rader" "$pr_linjer" "linjer med (#N) i planen"
+
+  foreldet=$(
+    printf '%s\n' "$pr_rader" | sed '$d' | grep 'åpen' | grep -oE '#[0-9]+' | paste -sd' ' -
+  )
+  if [ -n "$foreldet" ]; then
+    printf '  AVVIK    %-26s står som åpen, men er ikke den nyeste raden: %s\n' \
+      "foreldet PR-status" "$foreldet"
+    feil=1
+  else
+    printf '  ok       %-26s alle rader unntatt den nyeste står som merget\n' "foreldet PR-status"
+  fi
+
+  # Den andre veien: git er kilden, dokumentet er påstanden.
+  if ! git rev-parse --git-dir >/dev/null 2>&1; then
+    printf '  FEIL     %-26s kontrollen krever et git-arbeidstre\n' "merget mot historikk"
+    feil=1
+  elif [ "$(git rev-parse --is-shallow-repository)" != "false" ]; then
+    # En grunn klone ville gjort hver «merget»-rad til et avvik. Kontrollen sier
+    # fra framfor å slå seg av; CI henter hele historikken (fetch-depth: 0).
+    printf '  FEIL     %-26s historikken er avkortet (shallow clone)\n' "merget mot historikk"
+    feil=1
+  else
+    historikk=$(git log --format='%s' | grep -oE '\(#[0-9]+\)' | tr -d '(#)' | sort -u)
+    for tidlig in $(printf '%s\n' "$pr_rader" | grep 'merget' | grep -oE '[0-9]+'); do
+      printf '%s\n' "$historikk" | grep -qx "$tidlig" || ufunnet="${ufunnet:-} #$tidlig"
+    done
+    if [ -n "${ufunnet:-}" ]; then
+      printf '  AVVIK    %-26s ført som merget, men uten commit i historikken:%s\n' \
+        "merget mot historikk" "$ufunnet"
+      feil=1
+    else
+      printf '  ok       %-26s hver merget rad har sin commit\n' "merget mot historikk"
+    fi
+  fi
+fi
+
 echo
 if [ "$feil" -ne 0 ]; then
   cat <<'HJELP'
@@ -126,6 +189,10 @@ Minst én påstand stemmer ikke med kilden.
 Kilden vinner: rett tallet i dokumentet, ikke i koden. Står det «fant ingen
 påstand», er setningen omformulert slik at vakten ikke finner den lenger —
 rett da enten setningen eller mønsteret her, framfor å fjerne kontrollen.
+
+Står det «foreldet PR-status», er §74.2 ikke ført videre: statuskolonnen på
+raden over den nyeste beskriver fortsatt tilstanden da raden ble skrevet. Rett
+den til «merget» i den PR-en som legger til raden under.
 
 Tilstandstall som ikke dekkes her — publiserte påstander, RLS-policyer,
 tabeller med klientgrant — krever en kjørende database. Se supabase/README.md.

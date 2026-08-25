@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   fetchPublishedClaimEvidence,
+  fetchPublishedClaims,
   fetchPublishedClaimsForDrug,
   fetchPublishedDrugs,
 } from './published-read-model'
@@ -222,5 +223,41 @@ describe('kontrakttypene når fram til klienten', () => {
       claimRowReachesTheClient,
       evidenceRowReachesTheClient,
     ]).toEqual([true, true, true])
+  })
+})
+
+describe('alle publiserte påstander', () => {
+  it('leser hele viewet uten filter', async () => {
+    // Temasiden må kunne slå opp et klinisk begrep fra en slug, og `api` har
+    // ingen temaprojeksjon. Et filter her ville avgrenset settet slugen kan
+    // slås opp i.
+    const { client, queries } = fakeClient({ data: [], error: null })
+    await fetchPublishedClaims(client)
+    expect(queries).toHaveLength(1)
+    expect(queries[0]?.view).toBe('published_claims')
+    expect(queries[0]?.filters).toEqual([])
+  })
+
+  it('sorterer stabilt på virkestoff, tema og formulering', () => {
+    const { client, queries } = fakeClient({ data: [], error: null })
+    return fetchPublishedClaims(client).then(() => {
+      expect(queries[0]?.orders).toEqual([
+        ['drug_name', { ascending: true }],
+        ['topic_label', { ascending: true }],
+        ['statement', { ascending: true }],
+      ])
+    })
+  })
+
+  it('en tom projeksjon er empty, ikke ok', () => {
+    return expect(
+      fetchPublishedClaims(fakeClient({ data: [], error: null }).client),
+    ).resolves.toEqual({ status: 'empty' })
+  })
+
+  it('en feil er en feil', () => {
+    return expect(
+      fetchPublishedClaims(fakeClient({ data: null, error: { message: 'avvist' } }).client),
+    ).resolves.toEqual({ status: 'error', message: 'avvist' })
   })
 })

@@ -222,3 +222,208 @@ main h2 {
 .claim-certainty__caveat {
   color: var(--color-text-muted);
 }
+
+/* ==========================================================================
+   Skallet: hopplenke, toppfelt og utviklingsvarsel
+
+   Hopplenken er første fokuserbare element og synlig først når den har fokus
+   (PRODUCT_INFORMATION_ARCHITECTURE.md §49, §52). Den flyttes ikke ut av
+   dokumentflyten med `display: none`, som ville gjort den ufokuserbar.
+   ========================================================================== */
+
+.skip-link {
+  position: absolute;
+  inset-inline-start: 0.5rem;
+  inset-block-start: -4rem;
+  z-index: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  background: var(--color-background);
+  color: var(--color-focus);
+  transition: inset-block-start 0.1s ease-out;
+}
+
+.skip-link:focus {
+  inset-block-start: 0.5rem;
+}
+
+header h1 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+header h1 a:hover {
+  text-decoration: underline;
+}
+
+/* Varselet er tekst, ikke en farget stripe: fargen er aldri eneste bærer av
+   betydning (§20). Streken er et supplement. */
+.development-notice {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-inline-start: 4px solid var(--color-text);
+  font-size: 0.9375rem;
+}
+
+/* ==========================================================================
+   Sidene
+   ========================================================================== */
+
+.page-kicker {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.page-kicker + h2 {
+  margin-top: 0.25rem;
+}
+
+.page-lead {
+  margin: 0.5rem 0 1rem;
+  color: var(--color-text-muted);
+}
+
+/* Katalogen lagrer virkestoffnavn med liten forbokstav («sertralin»). Store
+   forbokstaver settes typografisk framfor i DOM-en, slik at teksten en
+   skjermleser og en test ser, fortsatt er den kanoniske verdien. */
+.drug-name::first-letter,
+.topic-name::first-letter {
+  text-transform: uppercase;
+}
+
+.drug-facts {
+  display: grid;
+  gap: 0.5rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.drug-facts__item dt {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.drug-facts__item dd {
+  margin: 0;
+}
+
+.drug-index {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.drug-index__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-block: 0.5rem;
+  border-block-end: 1px solid var(--color-border);
+}
+
+.drug-index__link {
+  /* Nåbar uten presisjonspress (§49). */
+  display: inline-block;
+  min-height: 2.75rem;
+  line-height: 2.75;
+  font-size: 1.0625rem;
+  color: var(--color-focus);
+}
+
+.drug-index__link::first-letter {
+  text-transform: uppercase;
+}
+
+.drug-index__count {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+/* ==========================================================================
+   Tilstandene som ikke er en påstand
+   (KnowledgeNotice.tsx)
+
+   De tre skiller seg i art, ikke i grad, og ingen av dem er en nedtonet
+   utgave av innhold: en blek eller tom flate ville vært nettopp den
+   feillesningen §17 forbyr. Ingen av dem bruker farge som eneste signal (§20).
+   ========================================================================== */
+
+.knowledge-notice {
+  margin-block: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+}
+
+.knowledge-notice--loading {
+  border-style: dotted;
+  color: var(--color-text-muted);
+}
+
+.knowledge-notice--absence {
+  border-inline-start-width: 4px;
+  border-inline-start-style: dashed;
+}
+
+.knowledge-notice--error {
+  border-inline-start-width: 4px;
+  border-inline-start-style: solid;
+}
+
+.knowledge-notice__lead {
+  margin: 0;
+  font-weight: 600;
+}
+
+.knowledge-notice__caveat,
+.knowledge-notice__detail {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.knowledge-notice__detail {
+  overflow-wrap: anywhere;
+}
+
+/* ==========================================================================
+   Grupperte påstander
+   ========================================================================== */
+
+.claim-groups__notes {
+  margin-block: 0.5rem 1.5rem;
+}
+
+.claim-groups__note {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.claim-group {
+  margin-block: 2rem;
+}
+
+.claim-group__heading {
+  margin: 0;
+  padding-block-end: 0.25rem;
+  border-block-end: 1px solid var(--color-border);
+  font-size: 1.25rem;
+}
+
+.claim-group__heading a {
+  color: inherit;
+}
+
+/* ::first-letter gjelder blokkelementet, ikke den inline lenken i det. */
+.claim-group__heading::first-letter {
+  text-transform: uppercase;
+}

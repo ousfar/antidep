@@ -269,6 +269,12 @@ function isKnowledgeType(value: string): value is KnowledgeType {
 
 // ----------------------------------------------------------------------------
 
+/**
+ * Overskriftsnivåene et kort kan bære. Ikke fritt tall: et nivå utenfor h2-h6
+ * ville gitt et element som ikke er en overskrift.
+ */
+export type ClaimCardHeadingLevel = 2 | 3 | 4 | 5 | 6
+
 export interface ClaimCardProps {
   readonly claim: PublishedClaimRow
   /**
@@ -278,11 +284,22 @@ export interface ClaimCardProps {
    * URL-en eies av rutingen, ikke av kortet.
    */
   readonly evidenceHref: string
+  /**
+   * Nivået påstandsformuleringen får som overskrift.
+   *
+   * Kortet kjenner ikke siden det står på, men dokumentstrukturen er en
+   * tilgjengelighetsegenskap: en overskrift som hopper over et nivå gir feil
+   * disposisjon for skjermlesere (§50, §53). Siden eier hierarkiet og oppgir
+   * derfor nivået. Standardverdien 3 er nivået kortet hadde da det stod alene.
+   */
+  readonly headingLevel?: ClaimCardHeadingLevel
 }
 
-export function ClaimCard({ claim, evidenceHref }: ClaimCardProps) {
+export function ClaimCard({ claim, evidenceHref, headingLevel = 3 }: ClaimCardProps) {
   const headingId = useId()
   const linkId = useId()
+
+  const Heading = `h${headingLevel}` as const
 
   const certainty = describeClaimCertainty(claim)
   const effect = describeClaimEffect(claim, certainty)
@@ -330,9 +347,9 @@ export function ClaimCard({ claim, evidenceHref }: ClaimCardProps) {
           : `Ukjent kunnskapstype («${claim.knowledge_type}»)`}
       </p>
 
-      <h3 className="claim-card__statement" id={headingId}>
+      <Heading className="claim-card__statement" id={headingId}>
         {textOrFault(claim.statement, 'Påstanden mangler formulering.')}
-      </h3>
+      </Heading>
 
       {showDirection ? (
         <p className="claim-card__direction" data-direction={effect.direction.kind}>

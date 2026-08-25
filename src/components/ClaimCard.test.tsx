@@ -853,3 +853,28 @@ describe('en tallfestet effekt overlever ikke «ingen vurderbar evidens»', () =
     expect(detail('Størrelse og sammenligning')).toContain('Gjennomsnittsforskjell 1,7 kg.')
   })
 })
+
+describe('overskriftsnivå', () => {
+  it('er h3 når siden ikke oppgir noe, som da kortet stod alene', () => {
+    renderCard()
+    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent(BASE.statement)
+  })
+
+  it('følger nivået siden oppgir', () => {
+    // Kortet kjenner ikke siden det står på, men dokumentstrukturen er en
+    // tilgjengelighetsegenskap: et hopp i nivå gir feil disposisjon for en
+    // skjermleser (PRODUCT_INFORMATION_ARCHITECTURE.md §50, §53).
+    render(<ClaimCard claim={claim()} evidenceHref={HREF} headingLevel={4} />)
+    expect(screen.getByRole('heading', { level: 4 })).toHaveTextContent(BASE.statement)
+    expect(screen.queryByRole('heading', { level: 3 })).not.toBeInTheDocument()
+  })
+
+  it('lenken til evidensen navngis fortsatt av påstanden, uansett nivå', () => {
+    render(<ClaimCard claim={claim()} evidenceHref={HREF} headingLevel={2} />)
+    expect(
+      screen.getByRole('link', {
+        name: new RegExp(`Hvorfor sier Antidep dette\\?.*${'Testpåstand'}`),
+      }),
+    ).toBeInTheDocument()
+  })
+})

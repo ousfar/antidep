@@ -45,6 +45,26 @@ export type RenderedValue =
   | { readonly kind: 'unrecognised'; readonly text: string }
 
 // ----------------------------------------------------------------------------
+// Sortering
+// ----------------------------------------------------------------------------
+
+// Norsk kollasjon: æ, ø og å står sist og i den rekkefølgen, og «aa» sorteres
+// som «å». En sortering på tegnverdi gir en annen rekkefølge — og en liste en
+// norsk leser leser som usortert, ser ut som en liste sortert etter noe annet,
+// for eksempel etter viktighet (PRODUCT_INFORMATION_ARCHITECTURE.md invariant 14).
+//
+// Sorteringen hører hjemme her og ikke i spørringen. `order by` i PostgreSQL
+// bruker databasens kollasjon, som ikke er norsk i et Supabase-prosjekt, så en
+// visning som *sier* at rekkefølgen er alfabetisk må selv gjøre den alfabetisk.
+// Spørringene sorterer likevel: det gir en stabil rekkefølge mellom kall.
+const COLLATOR = new Intl.Collator('nb')
+
+/** Sammenligner to norske tekster for sortering. Egnet som `Array.sort`-komparator. */
+export function compareNorwegian(a: string, b: string): number {
+  return COLLATOR.compare(a, b)
+}
+
+// ----------------------------------------------------------------------------
 // Tall
 // ----------------------------------------------------------------------------
 
