@@ -32,6 +32,7 @@ export const ROUTE_PATTERNS = {
   drug: '/drugs/:drugSlug',
   topic: '/topics/:topicSlug',
   claimEvidence: '/claims/:claimId/evidence',
+  source: '/sources/:sourceId',
 } as const
 
 /** Forsiden: hvilke virkestoff Antidep har publisert kunnskap om. */
@@ -59,4 +60,24 @@ export function topicPath(topicLabel: string): string {
  */
 export function claimEvidencePath(claimId: Uuid): string {
   return `/claims/${encodeURIComponent(claimId)}/evidence`
+}
+
+/**
+ * Kildesiden: én publikasjon, og alt Antidep bruker den til
+ * (PRODUCT_INFORMATION_ARCHITECTURE.md §42).
+ *
+ * Adressert med `source_id`, av samme grunn som evidensvisningen adresseres med
+ * `claim_id`: uuid-en er kildens stabile identitet
+ * (DATABASE_ARCHITECTURE.md §8), og den endrer seg ikke når raden redigeres.
+ *
+ * En slug avledet av tittelen ble vurdert og valgt bort. Kildetitler er inntil
+ * 600 tegn og står på kildens eget språk, så sluggen ville blitt både lang og
+ * fremmedspråklig — men det avgjørende er at avledningen har nøyaktig den
+ * svakheten §74.7 allerede fører som gjeld for `/drugs/:drugSlug` og
+ * `/topics/:topicSlug`: en adresse avledet av et visningsnavn er ikke en stabil
+ * identitet, den er tapsgivende, og to titler kan kollidere. Å gjenta den på et
+ * tredje objekt ville utvidet gjelden framfor å begrense den.
+ */
+export function sourcePath(sourceId: Uuid): string {
+  return `/sources/${encodeURIComponent(sourceId)}`
 }

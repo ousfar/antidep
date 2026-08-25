@@ -429,6 +429,54 @@ header h1 a:hover {
 }
 
 /* ==========================================================================
+   Feltlisten (`DetailList`)
+
+   Felles form for feltene i en klinisk visning: evidensfunnet og kildesiden
+   bruker den samme, fordi de viser de samme feltene om den samme kilden.
+   ========================================================================== */
+
+.detail-list {
+  margin: 0.75rem 0 0;
+  display: grid;
+  gap: 0.5rem 1rem;
+}
+
+@media (min-width: 34rem) {
+  .detail-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.detail-list__item dt {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.detail-list__item dd {
+  margin: 0;
+  /* Lange kildepekere, DOI-er og URL-er skal bryte i stedet for å skyve siden
+     ut i bredden. Mobil er førsteklasses (§47). */
+  overflow-wrap: anywhere;
+}
+
+.detail-list__note {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+/* Identifikatorene står som liste fordi en kilde kan ha flere, og ingen av dem
+   er definert som primær. Punktmerket er fjernet: listen er en oppregning av
+   verdier i et felt, ikke en punktliste i brødtekst. */
+.identifier-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ==========================================================================
    Evidensvisningen
 
    Ett funn per kort, i den rekkefølgen databasen gir. Rekkefølgen bærer ingen
@@ -455,11 +503,12 @@ header h1 a:hover {
   margin-block: 1rem;
 }
 
-.evidence-finding[data-withdrawn='true'] {
+.evidence-finding[data-withdrawn='true'],
+.source-finding[data-withdrawn='true'] {
   border-style: dashed;
 }
 
-.evidence-finding__withdrawn,
+.extraction-withdrawal,
 .evidence-finding__fault {
   margin: 0 0 0.75rem;
   padding: 0.5rem 0.75rem;
@@ -492,38 +541,6 @@ header h1 a:hover {
   margin: 0.5rem 0 0;
 }
 
-.evidence-finding__details {
-  margin: 0.75rem 0 0;
-  display: grid;
-  gap: 0.5rem 1rem;
-}
-
-@media (min-width: 34rem) {
-  .evidence-finding__details {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-.evidence-finding__detail dt {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.evidence-finding__detail dd {
-  margin: 0;
-  /* Lange kildepekere, DOI-er og URL-er skal bryte i stedet for å skyve siden
-     ut i bredden. Mobil er førsteklasses (§47). */
-  overflow-wrap: anywhere;
-}
-
-.evidence-finding__detail-note {
-  display: block;
-  margin-top: 0.25rem;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-}
-
 .evidence-finding__source {
   margin-top: 1rem;
   padding-top: 0.75rem;
@@ -537,6 +554,11 @@ header h1 a:hover {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-muted);
+}
+
+.evidence-finding__source-link {
+  margin: 0.75rem 0 0;
+  font-size: 0.9375rem;
 }
 
 .evidence-timeline {
@@ -559,6 +581,70 @@ header h1 a:hover {
 
 .evidence-timeline__item dd {
   margin: 0;
+}
+
+/* ==========================================================================
+   Kildesiden
+
+   Publikasjonen øverst, deretter det Antidep bruker den til. Hver bruk er ett
+   påstandskort med kildens egne funn under seg, rykket inn slik at det er
+   synlig at funnene hører til påstanden over og ikke er sidestilt med den.
+   ========================================================================== */
+
+.source-title {
+  /* Kildetitler kan være lange og står på kildens eget språk. */
+  overflow-wrap: anywhere;
+}
+
+.source-usage__notes {
+  margin-block: 0.5rem 1.5rem;
+}
+
+.source-usage__note {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.source-usage {
+  margin-block: 1.5rem;
+}
+
+.source-usage__context {
+  margin: 0 0 0.5rem;
+  font-size: 0.9375rem;
+  color: var(--color-text-muted);
+}
+
+.source-usage__findings {
+  margin-inline-start: 1rem;
+  padding-inline-start: 1rem;
+  border-inline-start: 2px solid var(--color-border);
+}
+
+.source-usage__findings-heading {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.source-finding {
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-block: 0.75rem;
+}
+
+.source-finding__stance {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .evidence-context {

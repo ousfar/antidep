@@ -36,6 +36,7 @@ import { ClaimEvidencePage } from './pages/ClaimEvidencePage'
 import { DrugPage } from './pages/DrugPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { SourcePage } from './pages/SourcePage'
 import { TopicPage } from './pages/TopicPage'
 import { ROUTE_PATTERNS, homePath } from './routes'
 
@@ -90,6 +91,7 @@ export function AppLayout() {
           <Route element={<DrugPage />} path={ROUTE_PATTERNS.drug} />
           <Route element={<TopicPage />} path={ROUTE_PATTERNS.topic} />
           <Route element={<ClaimEvidencePage />} path={ROUTE_PATTERNS.claimEvidence} />
+          <Route element={<SourcePage />} path={ROUTE_PATTERNS.source} />
           <Route element={<NotFoundPage />} path="*" />
         </Routes>
       </main>

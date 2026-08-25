@@ -1,7 +1,7 @@
 // ============================================================================
 // Lesefunksjonene mot kontraktslaget `api`
 //
-// Fem lesefunksjoner over de tre viewene. Ingen skriveveier: `api` er
+// Seks lesefunksjoner over de tre viewene. Ingen skriveveier: `api` er
 // lesemodell, og skriving går gjennom kontrollerte SECURITY DEFINER-funksjoner
 // (DATABASE_ARCHITECTURE.md §43).
 //
@@ -165,6 +165,37 @@ export async function fetchPublishedClaimEvidence(
       .from('published_claim_evidence')
       .select('*')
       .eq('claim_id', claimId)
+      .order('claim_evidence_link_id', { ascending: true }),
+  )
+}
+
+/**
+ * Alle evidensfunn Antidep har publisert som bygger på én bestemt kilde.
+ *
+ * Inngangen til kildesiden (PRODUCT_INFORMATION_ARCHITECTURE.md §42), og den
+ * motsatte veien av `fetchPublishedClaimEvidence()`: den spør «hvilke funn
+ * ligger bak denne påstanden?», denne spør «hvilke påstander hviler på denne
+ * kilden?». `api.published_claim_evidence` er det eneste stedet kildedata
+ * finnes, så filteret på `source_id` er hele oppslaget.
+ *
+ * Settet er komplett på samme måte og av samme grunn: støttende, motstridende,
+ * nøytrale og indirekte funn, og funn med tilbaketrukket ekstraksjon, står side
+ * om side. En kildeside som bare viste de støttende, ville sagt noe annet om
+ * kilden enn det Antidep faktisk har registrert (ANTIDEP_CONSTITUTION.md §9,
+ * §14).
+ *
+ * Sorteringen er lenkens id: stabil mellom kall, uten mening. Rekkefølgen
+ * leseren ser, settes i visningen — se merknaden om sortering øverst.
+ */
+export async function fetchPublishedEvidenceForSource(
+  client: AntidepClient,
+  sourceId: Uuid,
+): Promise<ReadModelResult<PublishedClaimEvidenceRow>> {
+  return toResult(
+    await client
+      .from('published_claim_evidence')
+      .select('*')
+      .eq('source_id', sourceId)
       .order('claim_evidence_link_id', { ascending: true }),
   )
 }

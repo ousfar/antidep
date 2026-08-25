@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { claimEvidencePath, drugPath, homePath, topicPath, ROUTE_PATTERNS } from './routes'
+import {
+  claimEvidencePath,
+  drugPath,
+  homePath,
+  sourcePath,
+  topicPath,
+  ROUTE_PATTERNS,
+} from './routes'
 
 describe('adressene', () => {
   it('bygger nøyaktig de adressene §30 navngir', () => {
@@ -23,6 +30,14 @@ describe('adressene', () => {
     )
   })
 
+  it('adresserer kildesiden med kildens stabile identitet', () => {
+    // source_id og ikke en slug avledet av tittelen: uuid-en er identiteten, og
+    // en tittelslug ville gjentatt sluggjelden fra §74.7 på et tredje objekt.
+    expect(sourcePath('88888888-8888-4888-8888-111111111111')).toBe(
+      '/sources/88888888-8888-4888-8888-111111111111',
+    )
+  })
+
   it('forsiden er roten', () => {
     expect(homePath()).toBe('/')
   })
@@ -32,6 +47,7 @@ describe('adressene', () => {
     expect(ROUTE_PATTERNS.drug).toBe('/drugs/:drugSlug')
     expect(ROUTE_PATTERNS.topic).toBe('/topics/:topicSlug')
     expect(ROUTE_PATTERNS.claimEvidence).toBe('/claims/:claimId/evidence')
+    expect(ROUTE_PATTERNS.source).toBe('/sources/:sourceId')
     expect(ROUTE_PATTERNS.home).toBe(homePath())
   })
 })

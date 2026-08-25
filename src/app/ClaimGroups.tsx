@@ -100,7 +100,12 @@ const ORDER_NOTE: Record<ClaimGroupAxis, string> = {
     'at temaet ikke gjelder for det.',
 }
 
-const COMPARISON_CAVEAT =
+/**
+ * Eksportert fordi kildesiden (§42) har nøyaktig samme problem: den viser
+ * påstander fra flere virkestoff under én overskrift, uten at de er stilt opp
+ * for å sammenlignes. To utgaver av forbeholdet ville drevet fra hverandre.
+ */
+export const COMPARISON_CAVEAT =
   'Påstandene under er ikke en sammenligning. De kan gjelde ulike populasjoner, ulike ' +
   'komparatorer og ulike tidsrammer, og lar seg da ikke stille opp mot hverandre. Hver påstand ' +
   'oppgir sitt eget anvendelsesområde.'

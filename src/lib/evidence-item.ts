@@ -621,6 +621,50 @@ export function describePublicationDate(
 }
 
 // ----------------------------------------------------------------------------
+// Kilden funnet står i
+// ----------------------------------------------------------------------------
+
+/**
+ * Feltene kildeavledningen leser.
+ *
+ * Egen form framfor hele radtypen, av samme grunn som `EvidenceStanceInput`:
+ * avledningen beskriver *kilden*, og skal ikke kunne komme til å lese et felt
+ * som hører til funnet. `PublishedClaimEvidenceRow` oppfyller den strukturelt.
+ */
+export interface SourceDescriptionInput {
+  readonly source_type: string
+  readonly source_status: string
+  readonly source_publication_date: string | null
+  readonly source_publication_date_precision: string | null
+}
+
+/** De tre aksene som beskriver dokumentet, ikke funnet. */
+export interface SourceDescription {
+  readonly sourceType: VocabularyTerm<SourceType>
+  readonly sourceStatus: VocabularyTerm<SourceStatus>
+  readonly publicationDate: PublicationDateState
+}
+
+/**
+ * Kilden, avledet.
+ *
+ * Skilt ut fordi to visninger trenger nøyaktig de samme tre aksene: hvert
+ * evidensfunn viser kilden under seg, og kildesiden har den som emne
+ * (PRODUCT_INFORMATION_ARCHITECTURE.md §42). To avledninger av samme rad ville
+ * kunnet gi to svar på om en status er kjent.
+ */
+export function describeSource(source: SourceDescriptionInput): SourceDescription {
+  return {
+    sourceType: readSourceType(source.source_type),
+    sourceStatus: readSourceStatus(source.source_status),
+    publicationDate: describePublicationDate(
+      source.source_publication_date,
+      source.source_publication_date_precision,
+    ),
+  }
+}
+
+// ----------------------------------------------------------------------------
 // Hele funnet
 // ----------------------------------------------------------------------------
 
@@ -667,12 +711,10 @@ export function describeEvidenceFinding(row: PublishedClaimEvidenceRow): Evidenc
     comparator,
     estimate: describeEvidenceEstimate(row, comparator),
     confidenceInterval: describeEvidenceConfidenceInterval(row),
-    sourceType: readSourceType(row.source_type),
-    sourceStatus: readSourceStatus(row.source_status),
-    publicationDate: describePublicationDate(
-      row.source_publication_date,
-      row.source_publication_date_precision,
-    ),
+    // De tre siste — `sourceType`, `sourceStatus` og `publicationDate` — kommer
+    // fra den delte kildeavledningen, slik at kildesiden og funnet ikke kan få
+    // hvert sitt svar om samme rad.
+    ...describeSource(row),
   }
 }
 

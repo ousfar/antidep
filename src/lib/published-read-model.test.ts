@@ -5,6 +5,7 @@ import {
   fetchPublishedClaims,
   fetchPublishedClaimsForDrug,
   fetchPublishedDrugs,
+  fetchPublishedEvidenceForSource,
 } from './published-read-model'
 import type { AntidepClient } from './supabase'
 import type { PublishedClaimEvidenceRow, PublishedClaimRow, PublishedDrugRow } from '../types/api'
@@ -51,6 +52,7 @@ function fakeClient(outcome: { data: unknown[] | null; error: { message: string 
 
 const DRUG_ID = '11111111-1111-4111-8111-111111111111'
 const CLAIM_ID = '22222222-2222-4222-8222-222222222222'
+const SOURCE_ID = '88888888-8888-4888-8888-111111111111'
 
 describe('tomt er en egen tilstand', () => {
   it('en tom projeksjon er empty, ikke ok med null rader', () => {
@@ -196,6 +198,54 @@ describe('fetchPublishedClaimEvidence', () => {
 
     const filtered = queries[0]?.filters.map(([column]) => column) ?? []
     expect(filtered).toEqual(['claim_id'])
+  })
+})
+
+describe('fetchPublishedEvidenceForSource', () => {
+  it('henter alle funn fra kilden, på tvers av påstandene', async () => {
+    const { client, queries } = fakeClient({ data: [{ source_id: SOURCE_ID }], error: null })
+    await fetchPublishedEvidenceForSource(client, SOURCE_ID)
+
+    expect(queries).toEqual([
+      {
+        view: 'published_claim_evidence',
+        columns: '*',
+        filters: [['source_id', SOURCE_ID]],
+        orders: [['claim_evidence_link_id', { ascending: true }]],
+      },
+    ])
+  })
+
+  it('filtrerer bare på kilden, ikke på påstand eller relasjon', async () => {
+    // Et filter på `claim_id` ville gjort kildesiden til en evidensvisning, og
+    // et filter på relasjonen ville skjult at kilden også motsier noe (§9).
+    const { client, queries } = fakeClient({ data: [], error: null })
+    await fetchPublishedEvidenceForSource(client, SOURCE_ID)
+
+    expect(queries[0]?.filters.map(([column]) => column)).toEqual(['source_id'])
+  })
+
+  it('sorterer ikke på noe som ville vektet funnene', async () => {
+    const { client, queries } = fakeClient({ data: [], error: null })
+    await fetchPublishedEvidenceForSource(client, SOURCE_ID)
+
+    const columns = queries[0]?.orders.map(([column]) => column) ?? []
+    expect(columns).not.toContain('relationship_type')
+    expect(columns).not.toContain('directness')
+    expect(columns).not.toContain('extraction_withdrawn')
+  })
+
+  it('et tomt svar er en egen tilstand, ikke en tom liste', async () => {
+    const { client } = fakeClient({ data: [], error: null })
+    expect(await fetchPublishedEvidenceForSource(client, SOURCE_ID)).toEqual({ status: 'empty' })
+  })
+
+  it('en feil blir aldri til tomhet', async () => {
+    const { client } = fakeClient({ data: null, error: { message: 'avvist' } })
+    expect(await fetchPublishedEvidenceForSource(client, SOURCE_ID)).toEqual({
+      status: 'error',
+      message: 'avvist',
+    })
   })
 })
 

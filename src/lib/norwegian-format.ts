@@ -44,6 +44,19 @@ export type RenderedValue =
    */
   | { readonly kind: 'unrecognised'; readonly text: string }
 
+/**
+ * Én gjengitt verdi som tekst, med det som ikke lot seg tolke merket.
+ *
+ * Samler den ene setningen som ellers ville stått i hver visning som viser en
+ * `RenderedValue`. Verdien som ikke lot seg tolke skrives ut som den står, og
+ * merkes: et felt som forsvinner fordi formateringen feilet, ser ut som fravær
+ * av data (ANTIDEP_CONSTITUTION.md §17). `what` navngir hva verdien skulle vært
+ * — «dato», «tall», «varighet» — slik at merknaden sier hva som er galt.
+ */
+export function renderedText(value: RenderedValue, what: string): string {
+  return value.kind === 'formatted' ? value.text : `${value.text} (ikke tolkbar som ${what})`
+}
+
 // ----------------------------------------------------------------------------
 // Sortering
 // ----------------------------------------------------------------------------
