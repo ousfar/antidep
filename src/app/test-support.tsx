@@ -124,10 +124,16 @@ const DRUG_A = '11111111-1111-4111-8111-111111111111'
 const DRUG_B = '11111111-1111-4111-8111-222222222222'
 const TOPIC_WEIGHT = '44444444-4444-4444-8444-111111111111'
 const CLAIM_A = '22222222-2222-4222-8222-111111111111'
+const CLAIM_B = '22222222-2222-4222-8222-222222222222'
+const CLAIM_C = '22222222-2222-4222-8222-333333333333'
+const REVISION_A = '33333333-3333-4333-8333-111111111111'
+const SOURCE_A = '88888888-8888-4888-8888-111111111111'
 
 export const TEST_DRUG_IDS = { a: DRUG_A, b: DRUG_B } as const
 export const TEST_TOPIC_IDS = { weight: TOPIC_WEIGHT } as const
-export const TEST_CLAIM_IDS = { a: CLAIM_A } as const
+export const TEST_CLAIM_IDS = { a: CLAIM_A, b: CLAIM_B, c: CLAIM_C } as const
+export const TEST_REVISION_IDS = { a: REVISION_A } as const
+export const TEST_SOURCE_IDS = { a: SOURCE_A } as const
 
 export function drugRow(overrides: Partial<PublishedDrugRow> = {}): PublishedDrugRow {
   return {
@@ -143,7 +149,7 @@ export function drugRow(overrides: Partial<PublishedDrugRow> = {}): PublishedDru
 export function claimRow(overrides: Partial<PublishedClaimRow> = {}): PublishedClaimRow {
   return {
     claim_id: CLAIM_A,
-    claim_revision_id: '33333333-3333-4333-8333-111111111111',
+    claim_revision_id: REVISION_A,
     revision_number: 1,
     knowledge_type: 'evidence_synthesis',
 
@@ -200,7 +206,7 @@ export function evidenceRow(
 ): PublishedClaimEvidenceRow {
   return {
     claim_id: CLAIM_A,
-    claim_revision_id: '33333333-3333-4333-8333-111111111111',
+    claim_revision_id: REVISION_A,
     claim_evidence_link_id: '55555555-5555-4555-8555-111111111111',
 
     relationship_type: 'supports',
@@ -255,7 +261,7 @@ export function evidenceRow(
     source_version_external_version: null,
     source_version_content_hash: null,
 
-    source_id: '88888888-8888-4888-8888-111111111111',
+    source_id: SOURCE_A,
     source_type: 'journal_article',
     source_title: 'Testkilde A: vektendring ved åtte uker',
     source_authors_or_issuer: 'Testforfatter m.fl.',

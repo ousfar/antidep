@@ -1,6 +1,13 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { TEST_CLAIM_IDS, claimRow, drugRow, evidenceRow, renderRoute } from './test-support'
+import {
+  TEST_CLAIM_IDS,
+  TEST_SOURCE_IDS,
+  claimRow,
+  drugRow,
+  evidenceRow,
+  renderRoute,
+} from './test-support'
 
 describe('skallet', () => {
   it('viser produktnavnet i en toppbanner, som vei tilbake til forsiden', () => {
@@ -65,6 +72,16 @@ describe('rutingen', () => {
     })
     expect(
       await screen.findByRole('heading', { level: 3, name: 'Evidensgrunnlaget' }),
+    ).toBeInTheDocument()
+  })
+
+  it('kildeadressen treffer kildesiden', async () => {
+    // Den andre halvdelen av §42: fra ett funn til alt Antidep bruker kilden til.
+    renderRoute(`/sources/${TEST_SOURCE_IDS.a}`, {
+      api: { published_claims: [claimRow()], published_claim_evidence: [evidenceRow()] },
+    })
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'Publikasjonen' }),
     ).toBeInTheDocument()
   })
 

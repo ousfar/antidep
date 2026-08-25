@@ -74,12 +74,12 @@ import {
   KnowledgeError,
   KnowledgeLoading,
 } from '../../components/KnowledgeNotice'
-import { formatTimestampAsDate } from '../../lib/norwegian-format'
+import { formatTimestampAsDate, renderedText } from '../../lib/norwegian-format'
 import {
   fetchPublishedClaimById,
   fetchPublishedClaimEvidence,
 } from '../../lib/published-read-model'
-import { drugPath, topicPath } from '../routes'
+import { drugPath, sourcePath, topicPath } from '../routes'
 import { useReadModel, type ReadModelState } from '../use-read-model'
 import { usePageTitle } from '../use-page-title'
 import type { PublishedClaimEvidenceRow, PublishedClaimRow, Uuid } from '../../types/api'
@@ -180,7 +180,12 @@ function EvidenceList({ claim }: { readonly claim: PublishedClaimRow }) {
         <>
           <p className="evidence-list__note">{ORDER_NOTE}</p>
           {state.rows.map((row) => (
-            <EvidenceFinding key={row.claim_evidence_link_id} finding={row} headingLevel={4} />
+            <EvidenceFinding
+              key={row.claim_evidence_link_id}
+              finding={row}
+              sourceHref={sourcePath(row.source_id)}
+              headingLevel={4}
+            />
           ))}
         </>
       )
@@ -196,8 +201,7 @@ function timestampText(raw: string | null): string {
     // «Ukjent» er ikke «ikke gjort», og ikke en fersk dato (§58).
     return 'Ukjent'
   }
-  const rendered = formatTimestampAsDate(raw)
-  return rendered.kind === 'formatted' ? rendered.text : `${rendered.text} (ikke tolkbar som dato)`
+  return renderedText(formatTimestampAsDate(raw), 'dato')
 }
 
 /**

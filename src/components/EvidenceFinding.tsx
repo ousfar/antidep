@@ -34,8 +34,14 @@
 //    publiseringsgaten kontrollerer status ved publisering, ikke etterpå.
 // ============================================================================
 
-import { useId, type ReactNode } from 'react'
-import { MEASURE_LABELS, UNIT_LABELS } from './vocabulary-labels'
+import { useId } from 'react'
+import { Detail, DetailList, DetailNote } from './DetailList'
+import {
+  ExtractionWithdrawalNote,
+  SourceExtractionDetails,
+  SourcePublicationDetails,
+} from './SourceDetails'
+import { MEASURE_LABELS, UNIT_LABELS, stanceText, termText } from './vocabulary-labels'
 import {
   describeEvidenceFinding,
   type AbsentAvailability,
@@ -45,37 +51,18 @@ import {
   type EvidenceStance,
   type EvidenceTimepoint,
   type EvidenceValueState,
-  type PublicationDateState,
-  type VocabularyTerm,
 } from '../lib/evidence-item'
-import {
-  formatDateAtPrecision,
-  formatIntervalText,
-  formatNumber,
-  formatTimestampAsDate,
-  type RenderedValue,
-} from '../lib/norwegian-format'
+import { formatIntervalText, formatNumber, renderedText } from '../lib/norwegian-format'
 import type {
   EvidenceDirectness,
-  EvidenceRelationshipType,
   PublishedClaimEvidenceRow,
   ReportedDirection,
-  SourceStatus,
-  SourceType,
   StudyDesign,
 } from '../types/api'
 
 // ----------------------------------------------------------------------------
 // Vokabularene, oversatt
 // ----------------------------------------------------------------------------
-
-const RELATIONSHIP_LABELS: Record<EvidenceRelationshipType, string> = {
-  supports: 'Støtter påstanden',
-  partially_supports: 'Støtter deler av påstanden',
-  contradicts: 'Motsier påstanden',
-  neutral_contextual: 'Verken for eller mot påstanden',
-  indirect: 'Bare indirekte bedømbart mot påstanden',
-}
 
 const DIRECTNESS_LABELS: Record<EvidenceDirectness, string> = {
   direct: 'Treffer påstandens populasjon, endepunkt, komparator og tidsrom direkte',
@@ -84,27 +71,6 @@ const DIRECTNESS_LABELS: Record<EvidenceDirectness, string> = {
 
 const STUDY_DESIGN_LABELS: Record<StudyDesign, string> = {
   randomized_controlled_trial: 'Randomisert kontrollert studie',
-}
-
-const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
-  journal_article: 'Fagfellevurdert artikkel',
-  clinical_guideline: 'Klinisk retningslinje',
-  summary_of_product_characteristics: 'Preparatomtale (SPC)',
-  regulatory_communication: 'Regulatorisk melding',
-  public_dataset: 'Offentlig datasett',
-}
-
-/**
- * Kildestatusene, formulert som utsagn om dokumentet. `active` skrives ut som
- * alle de andre: en status som bare vises når den er avvikende, gjør fravær av
- * merking til en påstand ingen har tatt stilling til.
- */
-const SOURCE_STATUS_LABELS: Record<SourceStatus, string> = {
-  active: 'I bruk',
-  outdated: 'Utdatert, uten at en bestemt etterfølger er registrert',
-  superseded: 'Erstattet av en nyere kilde',
-  retracted: 'Trukket tilbake av tidsskrift eller utgiver',
-  withdrawn: 'Tatt ut av bruk av utgiveren',
 }
 
 /**
@@ -151,17 +117,6 @@ const UNCERTAIN_EXTRACTION_NOTE =
 // Fellesformer
 // ----------------------------------------------------------------------------
 
-/**
- * Én formatert databaseverdi som tekst.
- *
- * En verdi som ikke lot seg tolke, bærer databaseverdien uendret
- * (`norwegian-format.ts`), og den merkes framfor å bli borte: et felt som
- * forsvinner fordi formateringen feilet, ser ut som fravær av data.
- */
-function renderedText(value: RenderedValue, what: string): string {
-  return value.kind === 'formatted' ? value.text : `${value.text} (ikke tolkbar som ${what})`
-}
-
 /** Ett felt med sin status, oversatt. `render` gjelder bare den rapporterte verdien. */
 function valueText<Value>(
   state: EvidenceValueState<Value>,
@@ -179,38 +134,9 @@ function valueText<Value>(
   }
 }
 
-/** En vokabularverdi, oversatt — eller sagt at den er ukjent, aldri gjettet. */
-function termText<Term extends string>(
-  term: VocabularyTerm<Term>,
-  labels: Record<Term, string>,
-  what: string,
-): string {
-  return term.kind === 'known' ? labels[term.value] : `Ukjent ${what} («${term.raw}»)`
-}
-
-interface DetailProps {
-  readonly label: string
-  readonly children: ReactNode
-}
-
-function Detail({ label, children }: DetailProps) {
-  return (
-    <div className="evidence-finding__detail">
-      <dt>{label}</dt>
-      <dd>{children}</dd>
-    </div>
-  )
-}
-
 // ----------------------------------------------------------------------------
 // Feltene
 // ----------------------------------------------------------------------------
-
-function stanceText(stance: EvidenceStance): string {
-  return stance.kind === 'known'
-    ? RELATIONSHIP_LABELS[stance.relationship]
-    : 'Antideps vurdering av dette funnet er ikke tolkbar'
-}
 
 /**
  * Hvorfor en relasjon ikke lot seg tolke.
@@ -273,30 +199,18 @@ function estimateText(estimate: EvidenceEstimateState): string {
   }
 }
 
-function publicationDateText(date: PublicationDateState): string {
-  switch (date.kind) {
-    case 'dated':
-      // Presisjonen bestemmer hvor mye av datoen som skrives ut. En dato som
-      // bare er kjent til året, skal ikke vises som 1. januar (§6).
-      return renderedText(formatDateAtPrecision(date.date, date.precision), 'dato')
-    case 'undated':
-      return 'Ingen publiseringsdato er registrert i Antidep'
-    case 'unknown':
-      return `Publiseringsdatoen er ikke tolkbar uten et kjent presisjonsnivå (dato «${
-        date.rawDate ?? '—'
-      }», presisjon «${date.rawPrecision ?? '—'}»).`
-  }
-}
-
-/** Identifikatorene, som sortert liste. Ingen er definert som primær. */
-function identifierText(values: readonly string[] | null): string | null {
-  return values === null || values.length === 0 ? null : values.join(', ')
-}
-
 // ----------------------------------------------------------------------------
 
 export interface EvidenceFindingProps {
   readonly finding: PublishedClaimEvidenceRow
+  /**
+   * Veien til kildesiden: én publikasjon, og alt Antidep bruker den til (§42).
+   * Påkrevd, ikke valgfri, av samme grunn som `evidenceHref` på `ClaimCard`:
+   * de to visningene skal kunne lenke til hverandre, og en valgfri lenke kan
+   * falle bort ved en forglemmelse. URL-en eies av rutingen, ikke av
+   * komponenten.
+   */
+  readonly sourceHref: string
   /**
    * Nivået kildetittelen får som overskrift. Siden eier hierarkiet, slik den
    * gjør for `ClaimCard`: en overskrift som hopper over et nivå gir feil
@@ -305,22 +219,16 @@ export interface EvidenceFindingProps {
   readonly headingLevel: 3 | 4 | 5
 }
 
-export function EvidenceFinding({ finding, headingLevel }: EvidenceFindingProps) {
+export function EvidenceFinding({ finding, sourceHref, headingLevel }: EvidenceFindingProps) {
   const stanceId = useId()
   const headingId = useId()
+  const sourceLinkId = useId()
 
   const Heading = `h${headingLevel}` as const
   const SourceHeading = `h${(headingLevel + 1) as 4 | 5 | 6}` as const
 
   const derived = describeEvidenceFinding(finding)
   const stanceFault = stanceFaultText(derived.stance)
-  const dois = identifierText(finding.source_dois)
-  const pmids = identifierText(finding.source_pmids)
-  const withdrawnAt =
-    finding.extraction_withdrawn_at === null
-      ? null
-      : renderedText(formatTimestampAsDate(finding.extraction_withdrawn_at), 'dato')
-
   return (
     <article
       className="evidence-finding"
@@ -331,16 +239,7 @@ export function EvidenceFinding({ finding, headingLevel }: EvidenceFindingProps)
       data-relationship={derived.stance.kind === 'known' ? derived.stance.relationship : 'unknown'}
       data-withdrawn={finding.extraction_withdrawn ? 'true' : undefined}
     >
-      {finding.extraction_withdrawn ? (
-        <p className="evidence-finding__withdrawn" role="note">
-          Antidep har trukket tilbake denne ekstraksjonen
-          {withdrawnAt === null ? '' : ` ${withdrawnAt}`}. Funnet står ikke lenger som gyldig
-          evidens, men vises fordi påstanden over det fortsatt er publisert.
-          {finding.extraction_withdrawal_rationale === null
-            ? ''
-            : ` Begrunnelse: ${finding.extraction_withdrawal_rationale}`}
-        </p>
-      ) : null}
+      <ExtractionWithdrawalNote extraction={finding} />
 
       <p className="evidence-finding__stance" id={stanceId}>
         {stanceText(derived.stance)}
@@ -358,7 +257,7 @@ export function EvidenceFinding({ finding, headingLevel }: EvidenceFindingProps)
         </p>
       )}
 
-      <dl className="evidence-finding__details">
+      <DetailList>
         <Detail label="Direkthet">
           {derived.stance.kind === 'known'
             ? DIRECTNESS_LABELS[derived.stance.directness]
@@ -371,7 +270,7 @@ export function EvidenceFinding({ finding, headingLevel }: EvidenceFindingProps)
 
         <Detail label="Populasjon">
           {valueText(derived.population, (label) => label)}
-          <span className="evidence-finding__detail-note">{finding.population_detail}</span>
+          <DetailNote>{finding.population_detail}</DetailNote>
         </Detail>
 
         <Detail label="Utvalgsstørrelse">
@@ -381,20 +280,20 @@ export function EvidenceFinding({ finding, headingLevel }: EvidenceFindingProps)
         <Detail label="Intervensjon">
           {finding.intervention_drug_name}
           {finding.intervention_detail === null ? null : (
-            <span className="evidence-finding__detail-note">{finding.intervention_detail}</span>
+            <DetailNote>{finding.intervention_detail}</DetailNote>
           )}
         </Detail>
 
         <Detail label="Komparator">
           {comparatorText(derived.comparator)}
           {finding.comparator_detail === null ? null : (
-            <span className="evidence-finding__detail-note">{finding.comparator_detail}</span>
+            <DetailNote>{finding.comparator_detail}</DetailNote>
           )}
         </Detail>
 
         <Detail label="Endepunkt">
           {finding.outcome_label}
-          <span className="evidence-finding__detail-note">{finding.outcome_detail}</span>
+          <DetailNote>{finding.outcome_detail}</DetailNote>
         </Detail>
 
         <Detail label="Måletidspunkt">{valueText(derived.timepoint, timepointText)}</Detail>
@@ -414,32 +313,26 @@ export function EvidenceFinding({ finding, headingLevel }: EvidenceFindingProps)
         <Detail label="Begrensninger">
           {finding.limitations_text ?? 'Ingen begrensninger er registrert for dette funnet.'}
         </Detail>
-      </dl>
+      </DetailList>
 
       <section className="evidence-finding__source">
         <SourceHeading className="evidence-finding__source-heading">Kilde</SourceHeading>
-        <dl className="evidence-finding__details">
-          <Detail label="Dokumenttype">
-            {termText(derived.sourceType, SOURCE_TYPE_LABELS, 'dokumenttype')}
-          </Detail>
-          <Detail label="Forfattere eller utgiver">{finding.source_authors_or_issuer}</Detail>
-          <Detail label="Tidsskrift eller utgiver">
-            {finding.source_publisher_or_journal ?? 'Ikke registrert i Antidep'}
-          </Detail>
-          <Detail label="Publisert">{publicationDateText(derived.publicationDate)}</Detail>
-          <Detail label="Kildestatus">
-            {termText(derived.sourceStatus, SOURCE_STATUS_LABELS, 'kildestatus')}
-            {finding.source_status_note === null ? null : (
-              <span className="evidence-finding__detail-note">{finding.source_status_note}</span>
-            )}
-          </Detail>
-          <Detail label="DOI">{dois ?? 'Ingen DOI er registrert i Antidep'}</Detail>
-          <Detail label="PMID">{pmids ?? 'Ingen PMID er registrert i Antidep'}</Detail>
-          {/* §16 i konstitusjonen: uten pekeren er en kontroll mot originalen
-              upraktisk, og etterprøvbarheten er poenget med hele visningen. */}
-          <Detail label="Sted i kilden">{finding.source_locator}</Detail>
-          <Detail label="Kildeversjon">{sourceVersionText(finding)}</Detail>
-        </dl>
+        <DetailList>
+          {/* Publikasjonen selv, i den samme formen kildesiden viser den. Én
+              utgave, ikke to: samme rad, samme regler (§65 «Duplicated truth»). */}
+          <SourcePublicationDetails source={finding} />
+          {/* De to feltene som hører til *funnet* og ikke til kilden: hvor i
+              kilden funnet står, og hvilken hentet versjon det ble ekstrahert
+              fra. */}
+          <SourceExtractionDetails extraction={finding} />
+        </DetailList>
+        {/* Veien til den andre visningen. §42 skiller dem: her står kilden under
+            ett funn, der står den med alt Antidep bruker den til. */}
+        <p className="evidence-finding__source-link">
+          <a href={sourceHref} id={sourceLinkId} aria-labelledby={`${sourceLinkId} ${headingId}`}>
+            Alt Antidep bruker denne kilden til
+          </a>
+        </p>
       </section>
     </article>
   )
@@ -463,30 +356,4 @@ function comparatorText(comparator: ReturnType<typeof describeEvidenceFinding>['
     case 'unknown':
       return `Komparatoren er ikke tolkbar («${comparator.rawComparatorKind}»)`
   }
-}
-
-/**
- * Den hentede kildeversjonen funnet ble ekstrahert fra.
- *
- * `null` betyr at ingen versjon er registrert — ikke at kilden er uendret siden
- * ekstraksjonen. For en levende kilde er hentetidspunktet det `source_locator`
- * faktisk peker inn i.
- */
-function sourceVersionText(finding: PublishedClaimEvidenceRow): string {
-  if (finding.source_version_id === null) {
-    return 'Ingen kildeversjon er registrert. Det betyr ikke at kilden er uendret siden ekstraksjonen.'
-  }
-  const parts: string[] = []
-  if (finding.source_version_retrieved_at !== null) {
-    parts.push(
-      `Hentet ${renderedText(formatTimestampAsDate(finding.source_version_retrieved_at), 'dato')}`,
-    )
-  }
-  if (finding.source_version_external_version !== null) {
-    parts.push(`Versjon ${finding.source_version_external_version}`)
-  }
-  if (finding.source_version_retrieved_from !== null) {
-    parts.push(`Fra ${finding.source_version_retrieved_from}`)
-  }
-  return parts.length === 0 ? 'Registrert, uten nærmere opplysninger.' : parts.join('. ')
 }

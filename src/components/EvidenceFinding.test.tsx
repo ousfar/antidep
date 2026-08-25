@@ -15,7 +15,11 @@ import type { PublishedClaimEvidenceRow } from '../types/api'
 
 function renderFinding(overrides: Partial<PublishedClaimEvidenceRow> = {}) {
   const { container } = render(
-    <EvidenceFinding finding={evidenceRow(overrides)} headingLevel={4} />,
+    <EvidenceFinding
+      finding={evidenceRow(overrides)}
+      sourceHref="/sources/test"
+      headingLevel={4}
+    />,
   )
   const article = within(container).getByRole('article')
   return { container, article }
@@ -269,13 +273,28 @@ describe('kilden', () => {
 
   it('viser alle registrerte identifikatorer, ikke bare den første', () => {
     const { article } = renderFinding({ source_dois: ['10.0000/a', '10.0000/b'] })
-    expect(detail(article, 'DOI')).toBe('10.0000/a, 10.0000/b')
+    expect(within(article).getByRole('link', { name: '10.0000/a' })).toHaveAttribute(
+      'href',
+      'https://doi.org/10.0000/a',
+    )
+    expect(within(article).getByRole('link', { name: '10.0000/b' })).toHaveAttribute(
+      'href',
+      'https://doi.org/10.0000/b',
+    )
   })
 
   it('sier at ingen identifikator er registrert i Antidep', () => {
     // Ikke det samme som at kilden mangler en.
     const { article } = renderFinding({ source_dois: null })
     expect(detail(article, 'DOI')).toContain('registrert i Antidep')
+  })
+
+  it('lenker til kildesiden, som er den andre halvdelen av §42', () => {
+    const { article } = renderFinding()
+    const link = within(article).getByRole('link', {
+      name: 'Alt Antidep bruker denne kilden til Testkilde A: vektendring ved åtte uker',
+    })
+    expect(link).toHaveAttribute('href', '/sources/test')
   })
 })
 

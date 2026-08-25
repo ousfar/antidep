@@ -3,9 +3,10 @@
 //
 // Ingen server-state-avhengighet. §7 i MVP_IMPLEMENTATION_PLAN.md lister
 // server-state som en aktuell kategori, men ber om at et bibliotek ikke innføres
-// før behovet er demonstrert. Flaten har i dag tre lesespørringer, ingen
-// mutasjoner, ingen invalidering og ingen bakgrunnsoppfriskning; det behovet er
-// ikke demonstrert. Se §74.14.
+// før behovet er demonstrert. Flaten har i dag seks lesespørringer — like mange
+// som `published-read-model.ts` har lesefunksjoner — ingen mutasjoner, ingen
+// invalidering og ingen bakgrunnsoppfriskning; det behovet er ikke demonstrert.
+// Se §74.14.
 //
 // ----------------------------------------------------------------------------
 // Fire tilstander, og «laster» er en av dem
