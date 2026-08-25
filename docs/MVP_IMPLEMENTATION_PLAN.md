@@ -1322,7 +1322,8 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       feat: add published read model client                   (#22)  merget   ingen migrasjon
       feat: add claim card and certainty display              (#23)  merget   ingen migrasjon
       feat: add routing and first clinician pages             (#24)  merget   ingen migrasjon
-      feat: add the claim evidence view                       (#25)  åpen     ingen migrasjon
+      feat: add the claim evidence view                       (#25)  merget   ingen migrasjon
+      feat: add the source view                               (#26)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1345,7 +1346,7 @@ med alt Antidep bruker den til (§74.16). **PR I er dermed ferdig, og med den Sl
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #24. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #25. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
 Konvensjonen har sviktet fire ganger på rad, og er derfor ikke lenger bare en konvensjon:
