@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  fetchPublishedClaimById,
   fetchPublishedClaimEvidence,
   fetchPublishedClaims,
   fetchPublishedClaimsForDrug,
@@ -122,6 +123,43 @@ describe('fetchPublishedClaimsForDrug', () => {
         ],
       },
     ])
+  })
+})
+
+describe('fetchPublishedClaimById', () => {
+  it('filtrerer på den stabile identiteten, ikke på revisjonen', async () => {
+    // Identiteten overlever en ny publisering (ANTIDEP_CONSTITUTION.md §7), så
+    // en delt lenke fortsetter å peke på påstanden. Et filter på
+    // claim_revision_id ville frosset lenken til én revisjon.
+    const { client, queries } = fakeClient({ data: [{ claim_id: CLAIM_ID }], error: null })
+    await fetchPublishedClaimById(client, CLAIM_ID)
+
+    expect(queries).toEqual([
+      {
+        view: 'published_claims',
+        columns: '*',
+        filters: [['claim_id', CLAIM_ID]],
+        orders: [],
+      },
+    ])
+  })
+
+  it('en tom projeksjon er empty, ikke en påstand med tomme felter', async () => {
+    await expect(
+      fetchPublishedClaimById(fakeClient({ data: [], error: null }).client, CLAIM_ID),
+    ).resolves.toEqual({ status: 'empty' })
+  })
+
+  it('gir hele settet videre, slik at to rader er synlige for kalleren', async () => {
+    // `published_claims` har én rad per publisert påstand. To rader er et
+    // kontraktsbrudd, og lesefunksjonen skal ikke velge én av dem: kalleren må
+    // kunne se at det er flere.
+    const { client } = fakeClient({
+      data: [{ claim_id: CLAIM_ID }, { claim_id: CLAIM_ID }],
+      error: null,
+    })
+    const result = await fetchPublishedClaimById(client, CLAIM_ID)
+    expect(result.status === 'ok' ? result.rows : []).toHaveLength(2)
   })
 })
 

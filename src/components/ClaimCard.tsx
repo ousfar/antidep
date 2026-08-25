@@ -69,31 +69,17 @@ import {
   type ClaimMagnitudeState,
 } from '../lib/claim-effect'
 import { formatIntervalText, formatNumber, formatTimestampAsDate } from '../lib/norwegian-format'
+import { KNOWLEDGE_TYPE_LABELS, MEASURE_LABELS, UNIT_LABELS } from './vocabulary-labels'
 import { KNOWLEDGE_TYPES } from '../types/api'
-import type { EffectMeasure, EstimateUnit, KnowledgeType, PublishedClaimRow } from '../types/api'
+import type { KnowledgeType, PublishedClaimRow } from '../types/api'
 
 // ----------------------------------------------------------------------------
 // Vokabularene, oversatt
+//
+// Oversettelsene ligger i `vocabulary-labels.ts`, fordi evidensvisningen bruker
+// de samme for kildenes egne tall. Et effektmål betyr det samme uansett hvilken
+// rad det står i; to oversettelser ville drevet fra hverandre.
 // ----------------------------------------------------------------------------
-
-const KNOWLEDGE_TYPE_LABELS: Record<KnowledgeType, string> = {
-  deterministic_fact: 'Deterministisk faktum',
-  evidence_synthesis: 'Evidensbasert syntese',
-  clinical_recommendation: 'Klinisk anbefaling',
-}
-
-const MEASURE_LABELS: Record<EffectMeasure, string> = {
-  mean_change: 'Gjennomsnittlig endring',
-  mean_difference: 'Gjennomsnittsforskjell',
-  standardised_mean_difference: 'Standardisert gjennomsnittsforskjell (SMD)',
-  risk_ratio: 'Relativ risiko (RR)',
-  odds_ratio: 'Oddsratio (OR)',
-}
-
-const UNIT_LABELS: Record<EstimateUnit, string> = {
-  kg: 'kg',
-  percent: '%',
-}
 
 /**
  * Pilen er et supplement til teksten, aldri bæreren av den (§20). Bare de to

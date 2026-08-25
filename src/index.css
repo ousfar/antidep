@@ -427,3 +427,136 @@ header h1 a:hover {
 .claim-group__heading::first-letter {
   text-transform: uppercase;
 }
+
+/* ==========================================================================
+   Evidensvisningen
+
+   Ett funn per kort, i den rekkefølgen databasen gir. Rekkefølgen bærer ingen
+   vekting (§9, §20), så ingenting her skiller et støttende funn visuelt fra et
+   motstridende: relasjonen står som tekst, og `data-relationship` finnes for at
+   en senere designbeslutning skal ha noe å feste seg i — ikke for at farge skal
+   bære betydningen (§20).
+
+   To tilstander får en egen drakt, og begge er utsagn om at noe *ikke* er som
+   normalt: en tilbaketrukket ekstraksjon og en relasjon som ikke lot seg tolke.
+   Begge er markert med en strek og med tekst, aldri med farge alene.
+   ========================================================================== */
+
+.evidence-list__note {
+  margin-block: 0.5rem 1.5rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.evidence-finding {
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-block: 1rem;
+}
+
+.evidence-finding[data-withdrawn='true'] {
+  border-style: dashed;
+}
+
+.evidence-finding__withdrawn,
+.evidence-finding__fault {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-inline-start: 4px solid var(--color-text);
+  border-radius: 0.25rem;
+  font-size: 0.9375rem;
+}
+
+.evidence-finding__fault {
+  margin-block: 0.75rem 0;
+}
+
+.evidence-finding__stance {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.evidence-finding__source-title {
+  margin: 0.25rem 0 0;
+  font-size: 1.0625rem;
+  line-height: 1.4;
+}
+
+.evidence-finding__relevance {
+  margin: 0.5rem 0 0;
+}
+
+.evidence-finding__details {
+  margin: 0.75rem 0 0;
+  display: grid;
+  gap: 0.5rem 1rem;
+}
+
+@media (min-width: 34rem) {
+  .evidence-finding__details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.evidence-finding__detail dt {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.evidence-finding__detail dd {
+  margin: 0;
+  /* Lange kildepekere, DOI-er og URL-er skal bryte i stedet for å skyve siden
+     ut i bredden. Mobil er førsteklasses (§47). */
+  overflow-wrap: anywhere;
+}
+
+.evidence-finding__detail-note {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.evidence-finding__source {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.evidence-finding__source-heading {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.evidence-timeline {
+  margin: 0.5rem 0 0;
+  display: grid;
+  gap: 0.5rem 1rem;
+}
+
+@media (min-width: 34rem) {
+  .evidence-timeline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.evidence-timeline__item dt {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.evidence-timeline__item dd {
+  margin: 0;
+}

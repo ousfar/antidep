@@ -66,6 +66,11 @@
 // migrert. Den siste er registrert som gjeld i MVP_IMPLEMENTATION_PLAN.md §74.7.
 // Databasen tillater den fortsatt; presentasjonslaget nekter å tolke den. De to
 // er forskjellige lag, og dette laget lukker ikke det andre.
+//
+// Migrasjon 003 håndhever de samme reglene på evidensfunnene, og de betyr det
+// samme der: et effektmål er det samme uansett hvilken rad det står i.
+// `evidence-item.ts` gjenbruker derfor avledningene her framfor å få sin egen
+// utgave av dem — se `describeMeasureUnit()`, som er skilt ut nettopp for det.
 // ============================================================================
 
 import type { ClaimCertainty } from './claim-certainty'
@@ -166,6 +171,41 @@ const DIMENSIONLESS_MEASURES: readonly EffectMeasure[] = [
 /** Om et effektmål måler innenfor én arm framfor mellom to. */
 export function isWithinArmMeasure(measure: EffectMeasure): boolean {
   return WITHIN_ARM_MEASURES.includes(measure)
+}
+
+/**
+ * Om et effektmål og en enhet er et forenlig par.
+ *
+ * Skilt ut fordi regelen ikke hører til påstandsraden: migrasjon 003 håndhever
+ * nøyaktig det samme paret på evidensfunnene, og et effektmål betyr det samme
+ * uansett hvilken rad det står i. `evidence-item.ts` bruker den der en verdi
+ * mangler og størrelsesavledningen under derfor ikke kan kjøres, slik at de to
+ * lagene ikke får hver sin utgave av enhetsregelen.
+ */
+export type MeasureUnitPairing =
+  | { readonly kind: 'ok'; readonly unit: EstimateUnit | null }
+  | {
+      readonly kind: 'unknown'
+      readonly reason: 'unrecognised_unit' | 'missing_unit' | 'unit_on_dimensionless_measure'
+    }
+
+export function describeMeasureUnit(
+  measure: EffectMeasure,
+  unit: string | null,
+): MeasureUnitPairing {
+  const dimensionless = DIMENSIONLESS_MEASURES.includes(measure)
+  if (unit === null) {
+    // Et dimensjonsløst mål *skal* stå uten enhet; et dimensjonalt mål uten
+    // enhet er klinisk tvetydig — 1,7 kan være kilogram eller prosent.
+    return dimensionless ? { kind: 'ok', unit: null } : { kind: 'unknown', reason: 'missing_unit' }
+  }
+  if (dimensionless) {
+    return { kind: 'unknown', reason: 'unit_on_dimensionless_measure' }
+  }
+  if (!isEstimateUnit(unit)) {
+    return { kind: 'unknown', reason: 'unrecognised_unit' }
+  }
+  return { kind: 'ok', unit }
 }
 
 /**
@@ -363,15 +403,9 @@ export function describeClaimMagnitude(
     return { kind: 'unknown', reason: 'value_without_measure', ...raw }
   }
 
-  const dimensionless = DIMENSIONLESS_MEASURES.includes(measure)
-  if (unit === null) {
-    if (!dimensionless) {
-      return { kind: 'unknown', reason: 'missing_unit', ...raw }
-    }
-  } else if (dimensionless) {
-    return { kind: 'unknown', reason: 'unit_on_dimensionless_measure', ...raw }
-  } else if (!isEstimateUnit(unit)) {
-    return { kind: 'unknown', reason: 'unrecognised_unit', ...raw }
+  const pairing = describeMeasureUnit(measure, unit)
+  if (pairing.kind === 'unknown') {
+    return { kind: 'unknown', reason: pairing.reason, ...raw }
   }
 
   // Til slutt paret: tallet er velformet i seg selv, men betyr det målet sier
@@ -387,7 +421,7 @@ export function describeClaimMagnitude(
     return { kind: 'unknown', reason: 'within_arm_measure_with_comparator', ...raw }
   }
 
-  return { kind: 'quantified', measure, value, unit: unit === null ? null : unit }
+  return { kind: 'quantified', measure, value, unit: pairing.unit }
 }
 
 /**
