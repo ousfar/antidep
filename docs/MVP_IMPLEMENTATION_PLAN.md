@@ -2188,7 +2188,7 @@ ny lesefunksjon (`fetchPublishedClaimById()`) og de delte vokabularetikettene
 kalles den.** Ruten `/claims/:claimId/evidence` og `claimEvidencePath()` kom i #24; adressen
 er uendret.
 
-**Seks beslutninger, i den rekkefølgen de betyr noe klinisk:**
+**Sju beslutninger, i den rekkefølgen de betyr noe klinisk:**
 
 1. **Påstanden står øverst, og det er det samme kortet.** §41 begynner med påstanden, og uten
    den er et evidensgrunnlag ikke etterprøvbart: leseren har ingenting å prøve funnene mot
@@ -2253,14 +2253,31 @@ er uendret.
    migrasjonene, ikke på TypeScript-unionene, slik at den også fanger at databasen skulle slå
    dem sammen.
 
-5. **En publisert påstand uten evidens er et brudd, ikke et fravær.** Publiseringsgaten G3
+5. **Evidensen er festet til den revisjonen som faktisk står på skjermen.** Begge viewene
+   følger `current_published_revision_id`, og de to spørringene er uavhengige. Publiseres en ny
+   revisjon mellom dem, svarer `published_claims` med revisjon N og `published_claim_evidence`
+   med funnene til revisjon N+1 — og siden ville vist et evidensgrunnlag under en formulering det
+   aldri var lenket til. Det er nøyaktig det §4 forbyr: en kilde som omhandler samme tema uten å
+   underbygge formuleringen, er ikke støtte. Vinduet er lite, og feilen ser ut som et gyldig svar
+   — samme klasse som det foreldede svaret `useReadModel()` gjør strukturelt umulig (§74.14
+   punkt 4). Hver evidensrad bærer sin `claim_revision_id`, og settet vises bare når alle hører
+   til den viste revisjonen; ellers sier siden at påstanden ble publisert på nytt mens siden
+   lastet. Ingen delvis visning: et blandet sett er verre enn ingen. Kontrollen er en
+   sammenligning og ikke et filter i spørringen, med hensikt — et `eq('claim_revision_id', …)`
+   ville gjort skiftet til et tomt svar, og et tomt svar betyr allerede noe helt annet her (se
+   punktet under). De to årsakene må ikke dele ordlyd. Funnet kom fra den eksterne reviewen på
+   denne PR-en; det er sjette PR på rad der en gjennomgang finner noe mutasjonstesting ikke
+   kunne, og av samme grunn som før: mutasjonene traff implementasjonen, ikke forutsetningen om
+   at de to spørringene ser samme revisjon.
+
+6. **En publisert påstand uten evidens er et brudd, ikke et fravær.** Publiseringsgaten G3
    nekter å publisere en revisjon uten minst én evidenslenke (§4), så tilstanden skal ikke
    kunne finnes. Den vises derfor som en feil med `role="alert"` og med beskjed om å behandle
    påstanden som ubekreftet — ikke som en rolig opplysning om at evidens mangler. Det samme
    gjelder to publiserte påstander på samme identitet: `api.published_claims` har én rad per
    påstand, så to rader er ikke en rekkefølge å velge i, og ingen av dem vises.
 
-6. **En tilbaketrukket ekstraksjon merkes, den skjules ikke — og reviewkontrakten utvides
+7. **En tilbaketrukket ekstraksjon merkes, den skjules ikke — og reviewkontrakten utvides
    ikke.** Kortet sier hvor mange evidenslenker som er trukket tilbake; her står det hvilke,
    med tidspunkt og begrunnelse, og funnet blir stående fordi påstanden over det fortsatt er
    publisert (§14). Av reviewhistorikken vises fortsatt bare tidsstempler — ingen
@@ -2309,7 +2326,7 @@ registrert som, og rettingen er en annen.
 
 **Hva som ble verifisert.** `npm run lint`, `npm run format:check`, `npm run typecheck`,
 `npm run test` og `npm run build` er kjørt og passerer, sammen med `./scripts/verify-counts.sh`.
-Vitest-suiten er utvidet fra 408 til 553 tester. Mutasjonstesting er kjørt etter mønsteret i
+Vitest-suiten er utvidet fra 408 til 556 tester. Mutasjonstesting er kjørt etter mønsteret i
 §74.13 og §74.14: rundt åtti mutasjoner er innført én om gangen over avledningen, komponenten,
 siden, de delte reglene og vokabularvaktpostene, og alle fanges nå. Fem av dem overlevde først,
 og alle fem var reelle hull i testene framfor i koden:

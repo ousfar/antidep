@@ -106,6 +106,34 @@ const ORDER_NOTE =
 // Evidensen
 // ----------------------------------------------------------------------------
 
+/**
+ * Evidensgrunnlaget hører til én revisjon, ikke til påstandens identitet.
+ *
+ * Begge viewene følger `current_published_revision_id`, og de to spørringene er
+ * uavhengige. Publiseres en ny revisjon mellom dem, svarer `published_claims`
+ * med revisjon N og `published_claim_evidence` med funnene til revisjon N+1 —
+ * og siden ville vist et evidensgrunnlag under en formulering det aldri var
+ * lenket til. Det er nøyaktig det `ANTIDEP_CONSTITUTION.md` §4 forbyr: en kilde
+ * som omhandler samme tema uten å underbygge formuleringen, er ikke støtte.
+ *
+ * Vinduet er lite, og feilen ser ut som et gyldig svar — samme klasse som det
+ * foreldede svaret `useReadModel()` gjør strukturelt umulig (§74.14 punkt 4).
+ * Den fanges derfor på radene selv: hver evidensrad bærer sin
+ * `claim_revision_id`, og settet vises bare når alle hører til den revisjonen
+ * som faktisk står på skjermen.
+ *
+ * Kontrollen er en sammenligning og ikke et filter i spørringen, med hensikt.
+ * Et `eq('claim_revision_id', …)` ville gjort skiftet til et tomt svar, og et
+ * tomt svar betyr allerede noe helt annet her: at publiseringsgaten G3 er brutt.
+ * De to årsakene må ikke dele ordlyd.
+ */
+function evidenceBelongsToDisplayedRevision(
+  rows: readonly PublishedClaimEvidenceRow[],
+  claim: PublishedClaimRow,
+): boolean {
+  return rows.every((row) => row.claim_revision_id === claim.claim_revision_id)
+}
+
 function EvidenceList({ claim }: { readonly claim: PublishedClaimRow }) {
   const query = useCallback(
     (client: Parameters<typeof fetchPublishedClaimEvidence>[0]) =>
@@ -132,6 +160,22 @@ function EvidenceList({ claim }: { readonly claim: PublishedClaimRow }) {
         </div>
       )
     case 'ok':
+      if (!evidenceBelongsToDisplayedRevision(state.rows, claim)) {
+        // Ingen delvis visning: et blandet sett ville vært verre enn ingen, og
+        // å vise de nye funnene under den gamle formuleringen er selve feilen.
+        return (
+          <div className="knowledge-notice knowledge-notice--error" role="alert">
+            <p className="knowledge-notice__lead">
+              Påstanden ble publisert på nytt mens siden lastet. Evidensgrunnlaget Antidep hentet,
+              hører til en annen revisjon enn påstanden over, og vises derfor ikke: funnene ville
+              stått som grunnlag for en formulering de ikke er lenket til.
+            </p>
+            <p className="knowledge-notice__detail">
+              Last siden på nytt for å se den gjeldende revisjonen med sitt eget evidensgrunnlag.
+            </p>
+          </div>
+        )
+      }
       return (
         <>
           <p className="evidence-list__note">{ORDER_NOTE}</p>

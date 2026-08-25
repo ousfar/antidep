@@ -147,6 +147,48 @@ describe('evidensen', () => {
     expect(shown[1]).toHaveTextContent('Støtter påstanden')
   })
 
+  it('viser ikke evidens som hører til en annen revisjon enn påstanden', async () => {
+    // Begge viewene følger publiseringspekeren, og de to spørringene er
+    // uavhengige: publiseres en ny revisjon mellom dem, hører funnene til en
+    // annen formulering enn den som står på skjermen. Å vise dem ville gjort
+    // funn til grunnlag for en påstand de ikke er lenket til (§4).
+    renderEvidence({
+      published_claims: [claimRow({ claim_revision_id: 'revisjon-1' })],
+      published_claim_evidence: [evidenceRow({ claim_revision_id: 'revisjon-2' })],
+    })
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/publisert på nytt mens siden lastet/i)
+    // Funnet vises ikke — heller ikke delvis.
+    expect(screen.queryByRole('heading', { level: 4, name: /Testkilde/ })).toBeNull()
+  })
+
+  it('skiller revisjonsskiftet fra en påstand uten evidens', async () => {
+    // De to årsakene deler ikke ordlyd: den ene er et kappløp, den andre et
+    // brudd på publiseringsgaten G3.
+    renderEvidence({
+      published_claims: [claimRow({ claim_revision_id: 'revisjon-1' })],
+      published_claim_evidence: [evidenceRow({ claim_revision_id: 'revisjon-2' })],
+    })
+    const alert = await screen.findByRole('alert')
+    expect(alert).not.toHaveTextContent(/uten evidensgrunnlag/i)
+  })
+
+  it('avviser hele settet når bare én rad hører til en annen revisjon', async () => {
+    // Et blandet sett er verre enn ingen: leseren kan ikke se hvilke funn som
+    // hører til formuleringen over.
+    renderEvidence({
+      published_claims: [claimRow({ claim_revision_id: 'revisjon-1' })],
+      published_claim_evidence: [
+        evidenceRow({ claim_evidence_link_id: 'a', claim_revision_id: 'revisjon-1' }),
+        evidenceRow({ claim_evidence_link_id: 'b', claim_revision_id: 'revisjon-2' }),
+      ],
+    })
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /publisert på nytt mens siden lastet/i,
+    )
+    expect(screen.queryByRole('heading', { level: 4, name: /Testkilde/ })).toBeNull()
+  })
+
   it('sier at rekkefølgen ikke er en rangering, og at antallet ikke er sikkerhet', async () => {
     renderEvidence(WELL_FORMED)
     await findings()
