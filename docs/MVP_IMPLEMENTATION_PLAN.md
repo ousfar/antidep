@@ -1309,6 +1309,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       db: expose publication and review timestamps in api     (#21)  merget   migrasjon 007a
       feat: add published read model client                   (#22)  merget   ingen migrasjon
       feat: add claim card and certainty display              (#23)  merget   ingen migrasjon
+      feat: add routing and first clinician pages             (#24)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
