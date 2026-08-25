@@ -2469,11 +2469,29 @@ og den første som joiner det i klienten; slug-posten er presisert med at kildev
 ikke gjentok avledningen på et tredje objekt; og kolonnekontrollen av api-kontrakten står
 fortsatt igjen, nå med to sider som leser det samme brede viewet.
 
+**Interne rutelenker navigerer i klienten.** Lenken fra hvert evidensfunn til kildesiden var
+først en vanlig `<a>`, etter mønster av `ClaimCard`. Det gir en full dokumentnavigering: siden
+lastes på nytt, og `useFocusMainOnNavigation()` hopper med vilje over fokusflyttingen ved første
+render, så leseren havner øverst i et nytt dokument framfor i hovedområdet. På evidenssiden stod
+lenken dessuten rett ved lenkene til virkestoffet og temaet, som er `Link` — å navigere ulikt fra
+samme avsnitt er en forskjell uten begrunnelse. Skillet som faktisk gjelder, er hva verdien *er*:
+`ClaimCard` kan ikke bruke `Link`, fordi dens `evidenceHref` er et anker på samme side
+(`#evidensgrunnlaget`) når kortet står på evidensvisningen, mens kildelenken alltid er en rute.
+Adressene lages fortsatt bare i `routes.ts`, så §74.13 punkt 4 står uendret.
+
+**Og det er sjuende PR på rad der en gjennomgang finner noe mutasjonstesting ikke kunne** — av
+nøyaktig samme grunn som de seks før: mutasjonene traff implementasjonen, ikke forutsetningen. Det
+fantes en mutasjon som fjernet lenken, og den ble fanget; men ingen test spurte *hvordan* lenken
+navigerer, fordi `Link` og `<a>` gir nøyaktig samme DOM. Testen som nå holder regelen, klikker
+lenken og krever at kildesiden faktisk rendres — med en vanlig `<a>` står ruteren stille, og
+evidenssiden blir værende.
+
+
 **Hva som ble verifisert.** `npm run lint`, `npm run format:check`, `npm run typecheck`,
 `npm run test` og `npm run build` er kjørt og passerer, sammen med `./scripts/verify-counts.sh`.
-Vitest-suiten er utvidet fra 556 til 626 tester over 26 filer. Mutasjonstesting er kjørt etter
-mønsteret i §74.13 til §74.15: 59 mutasjoner er innført én om gangen over avledningen, de delte
-komponentene, siden, lesefunksjonen og adressene, og alle fanges.
+Vitest-suiten er utvidet fra 556 til 627 tester over 26 filer. Mutasjonstesting er kjørt etter
+mønsteret i §74.13 til §74.15: 60 mutasjoner er innført én om gangen over avledningen, de delte
+komponentene, siden, lesefunksjonen, adressene og navigeringsmåten, og alle fanges.
 
 To ting om harnessen er verdt å ta med videre, fordi begge gjør en mutasjonskjøring stille
 verdiløs. En avbrutt kjøring kan etterlate filen mutert, og da måler neste kjøring mot en **rød

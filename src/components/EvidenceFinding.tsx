@@ -32,9 +32,28 @@
 // 5. En kilde som ikke lenger er i normal bruk sier det. En tilbaketrukket eller
 //    erstattet kilde kan bli det etter at påstanden ble publisert, og
 //    publiseringsgaten kontrollerer status ved publisering, ikke etterpå.
+//
+// ----------------------------------------------------------------------------
+// Hvorfor denne komponenten kjenner ruteren, når `ClaimCard` ikke gjør det
+//
+// Lenken til kildesiden er alltid en rute, og den rendres med ruterens `Link`.
+// En vanlig `<a>` ville gitt en full dokumentnavigering: siden lastes på nytt,
+// og `useFocusMainOnNavigation()` i `App.tsx` hopper med vilje over
+// fokusflyttingen ved første render — så leseren havner øverst i et nytt
+// dokument framfor i hovedområdet. På evidenssiden står lenken dessuten ved
+// siden av lenkene til virkestoffet og temaet, som er `Link`; å navigere ulikt
+// fra samme avsnitt er en forskjell uten begrunnelse.
+//
+// `ClaimCard` kan derimot *ikke* bruke `Link`, og det er ikke en forglemmelse:
+// dens `evidenceHref` er et anker på samme side (`#evidensgrunnlaget`) når
+// kortet står på evidensvisningen. Skillet er hva verdien er, ikke hvor
+// komponenten ligger. Adressene lages fortsatt bare i `routes.ts`.
+//
+// Funnet av en automatisk review på PR-en som innførte lenken.
 // ============================================================================
 
 import { useId } from 'react'
+import { Link } from 'react-router'
 import { Detail, DetailList, DetailNote } from './DetailList'
 import {
   ExtractionWithdrawalNote,
@@ -207,8 +226,12 @@ export interface EvidenceFindingProps {
    * Veien til kildesiden: én publikasjon, og alt Antidep bruker den til (§42).
    * Påkrevd, ikke valgfri, av samme grunn som `evidenceHref` på `ClaimCard`:
    * de to visningene skal kunne lenke til hverandre, og en valgfri lenke kan
-   * falle bort ved en forglemmelse. URL-en eies av rutingen, ikke av
-   * komponenten.
+   * falle bort ved en forglemmelse. URL-en eies fortsatt av rutingen — strengen
+   * lages i `routes.ts`, ikke her (§74.13 punkt 4).
+   *
+   * Til forskjell fra `evidenceHref` er dette *alltid* en rute, aldri et anker
+   * på samme side, og den rendres derfor med ruterens `Link`. Se merknaden om
+   * navigeringsmåte øverst.
    */
   readonly sourceHref: string
   /**
@@ -329,9 +352,9 @@ export function EvidenceFinding({ finding, sourceHref, headingLevel }: EvidenceF
         {/* Veien til den andre visningen. §42 skiller dem: her står kilden under
             ett funn, der står den med alt Antidep bruker den til. */}
         <p className="evidence-finding__source-link">
-          <a href={sourceHref} id={sourceLinkId} aria-labelledby={`${sourceLinkId} ${headingId}`}>
+          <Link to={sourceHref} id={sourceLinkId} aria-labelledby={`${sourceLinkId} ${headingId}`}>
             Alt Antidep bruker denne kilden til
-          </a>
+          </Link>
         </p>
       </section>
     </article>

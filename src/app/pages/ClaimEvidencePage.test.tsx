@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { TEST_CLAIM_IDS, claimRow, evidenceRow, renderRoute, type FakeApi } from '../test-support'
 
@@ -314,6 +314,25 @@ describe('tidspunktene', () => {
     expect(main).not.toHaveTextContent(/godkjent av/i)
     expect(main).not.toHaveTextContent(/redaktør/i)
     expect(main).not.toHaveTextContent(/changes_requested|source_verified/i)
+  })
+})
+
+describe('veien til kildesiden', () => {
+  it('navigerer i klienten framfor å laste dokumentet på nytt', async () => {
+    // DOM-en alene skiller ikke `Link` fra `<a>`: begge blir en anker-tag med
+    // samme href. Forskjellen er navigeringen, så testen klikker og krever at
+    // kildesiden faktisk rendres. Med en vanlig `<a>` ville jsdom forsøkt en
+    // dokumentnavigering, ruteren stått stille, og evidenssiden blitt værende —
+    // og i nettleseren ville leseren havnet øverst i et nytt dokument framfor i
+    // hovedområdet, fordi fokusflyttingen hopper over første render.
+    renderEvidence(WELL_FORMED)
+    const link = await screen.findByRole('link', {
+      name: /Alt Antidep bruker denne kilden til/,
+    })
+    fireEvent.click(link)
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'Publikasjonen' }),
+    ).toBeInTheDocument()
   })
 })
 

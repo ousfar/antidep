@@ -1,4 +1,5 @@
 import { render, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { EvidenceFinding } from './EvidenceFinding'
 import { evidenceRow } from '../app/test-support'
@@ -14,12 +15,16 @@ import type { PublishedClaimEvidenceRow } from '../types/api'
 // ============================================================================
 
 function renderFinding(overrides: Partial<PublishedClaimEvidenceRow> = {}) {
+  // Ruteren må være til stede: lenken til kildesiden er en rute og rendres med
+  // `Link`, slik at den ikke gir en full dokumentnavigering (se komponenten).
   const { container } = render(
-    <EvidenceFinding
-      finding={evidenceRow(overrides)}
-      sourceHref="/sources/test"
-      headingLevel={4}
-    />,
+    <MemoryRouter>
+      <EvidenceFinding
+        finding={evidenceRow(overrides)}
+        sourceHref="/sources/test"
+        headingLevel={4}
+      />
+    </MemoryRouter>,
   )
   const article = within(container).getByRole('article')
   return { container, article }
