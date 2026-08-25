@@ -228,9 +228,17 @@ export type AbsentAvailability = (typeof ABSENT_AVAILABILITIES)[number]
  *                                merket som noe kilden ikke oppgir.
  *   `incomplete_value`           et felt som består av flere ledd har bare noen
  *                                av dem. Halve verdien er ikke en verdi.
+ *   `implausible_value`          verdien står, men kan ikke være det kolonnen
+ *                                sier at den er — en utvalgsstørrelse på null,
+ *                                et intervall med grensene i feil rekkefølge.
+ *                                Vises ikke: den ville sett ut som et tall.
  */
 export type AvailabilityFault =
-  'unrecognised_availability' | 'missing_value' | 'unexpected_value' | 'incomplete_value'
+  | 'unrecognised_availability'
+  | 'missing_value'
+  | 'unexpected_value'
+  | 'incomplete_value'
+  | 'implausible_value'
 
 export type EvidenceValueState<Value> =
   /**
@@ -271,14 +279,16 @@ function classifyAvailability(availability: string): AvailabilityClass | null {
 /**
  * Ett felt, med sin status.
  *
- * `complete` finnes for feltene som består av flere ledd — et tidsrom, et
- * konfidensintervall. Databasen parer leddene, så et enslig ledd er et brudd og
- * må ikke bli halve verdien.
+ * Bare det ene leddet statusen faktisk gjelder. Feltene som består av flere ledd
+ * — et tidsrom, et konfidensintervall — bygger den sammensatte verdien etterpå,
+ * ut fra denne, slik at den er ferdig kontrollert i det den finnes. Alternativet,
+ * en `complete`-tilbakekalling her, ville gitt kallerne en verditype med ledd som
+ * i praksis aldri er tomme — altså grener ingen test kan nå, og en uprøvbar vakt
+ * ser ut som et vern uten å være det.
  */
 function describeEvidenceValue<Value>(
   availability: string,
   value: Value | null,
-  complete: (value: Value) => boolean = () => true,
 ): EvidenceValueState<Value> {
   const classified = classifyAvailability(availability)
   if (classified === null) {
@@ -292,10 +302,15 @@ function describeEvidenceValue<Value>(
   if (value === null) {
     return { kind: 'unknown', reason: 'missing_value', rawAvailability: availability }
   }
-  if (!complete(value)) {
-    return { kind: 'unknown', reason: 'incomplete_value', rawAvailability: availability }
-  }
   return { kind: 'reported', value, uncertainExtraction: classified.uncertainExtraction }
+}
+
+/** Et brudd på ett felt, med statusen som ble brutt. */
+function availabilityFault(
+  availability: string,
+  reason: AvailabilityFault,
+): EvidenceValueState<never> {
+  return { kind: 'unknown', reason, rawAvailability: availability }
 }
 
 // ----------------------------------------------------------------------------
@@ -337,17 +352,20 @@ export interface EvidenceSampleSizeInput {
 export function describeEvidenceSampleSize(
   row: EvidenceSampleSizeInput,
 ): EvidenceValueState<number> {
-  return describeEvidenceValue(
-    row.sample_size_availability,
-    row.sample_size,
-    (size) => Number.isInteger(size) && size > 0,
-  )
+  const state = describeEvidenceValue(row.sample_size_availability, row.sample_size)
+  if (state.kind === 'reported' && !(Number.isInteger(state.value) && state.value > 0)) {
+    return availabilityFault(row.sample_size_availability, 'implausible_value')
+  }
+  return state
 }
 
-/** Måletidspunktet, som det paret databasen lagrer. */
+/**
+ * Måletidspunktet, som det paret databasen lagrer. Begge ledd, aldri ett: et
+ * enslig ledd blir et brudd i avledningen framfor halve verdien her.
+ */
 export interface EvidenceTimepoint {
   readonly min: string
-  readonly max: string | null
+  readonly max: string
 }
 
 export interface EvidenceTimepointInput {
@@ -359,16 +377,34 @@ export interface EvidenceTimepointInput {
 export function describeEvidenceTimepoint(
   row: EvidenceTimepointInput,
 ): EvidenceValueState<EvidenceTimepoint> {
-  const value =
-    row.timepoint_min === null ? null : { min: row.timepoint_min, max: row.timepoint_max }
-  return describeEvidenceValue(row.timepoint_availability, value, (t) => t.max !== null)
+  // Statusen gjelder `timepoint_min` (migrasjon 003), så tilstedeværelsen leses
+  // av den. Den øvre grensen er paret med den, og et enslig ledd er et brudd.
+  const state = describeEvidenceValue(row.timepoint_availability, row.timepoint_min)
+  if (state.kind !== 'reported') {
+    return state
+  }
+  if (row.timepoint_max === null) {
+    return availabilityFault(row.timepoint_availability, 'incomplete_value')
+  }
+  return { ...state, value: { min: state.value, max: row.timepoint_max } }
 }
 
-/** Konfidensintervallet, med nivået det gjelder på. Uten nivå er intervallet ikke tolkbart. */
+/**
+ * Konfidensintervallet, med nivået det gjelder på. Alle tre ledd, aldri færre:
+ * «0,9 til 2,5» betyr forskjellige ting på 90 % og på 99 %, så et intervall uten
+ * nivå er ikke et intervall.
+ */
 export interface EvidenceConfidenceInterval {
   readonly lower: number
-  readonly upper: number | null
-  readonly levelPercent: number | null
+  readonly upper: number
+  readonly levelPercent: number
+}
+
+export interface EvidenceConfidenceIntervalInput {
+  readonly confidence_interval_availability: string
+  readonly ci_lower: number | null
+  readonly ci_upper: number | null
+  readonly ci_level_percent: number | null
 }
 
 /**
@@ -378,25 +414,26 @@ export interface EvidenceConfidenceInterval {
  * grunnlag, ikke et presist estimat. Det er samme regel som at et tall på
  * påstandskortet aldri står uten komparatoren sin.
  */
-export interface EvidenceConfidenceIntervalInput {
-  readonly confidence_interval_availability: string
-  readonly ci_lower: number | null
-  readonly ci_upper: number | null
-  readonly ci_level_percent: number | null
-}
-
 export function describeEvidenceConfidenceInterval(
   row: EvidenceConfidenceIntervalInput,
 ): EvidenceValueState<EvidenceConfidenceInterval> {
-  const value =
-    row.ci_lower === null
-      ? null
-      : { lower: row.ci_lower, upper: row.ci_upper, levelPercent: row.ci_level_percent }
-  return describeEvidenceValue(
-    row.confidence_interval_availability,
-    value,
-    (ci) => ci.upper !== null && ci.levelPercent !== null && ci.upper >= ci.lower,
-  )
+  const availability = row.confidence_interval_availability
+  // Statusen gjelder `ci_lower` (migrasjon 003); de to andre leddene er paret
+  // med den.
+  const state = describeEvidenceValue(availability, row.ci_lower)
+  if (state.kind !== 'reported') {
+    return state
+  }
+  if (row.ci_upper === null || row.ci_level_percent === null) {
+    return availabilityFault(availability, 'incomplete_value')
+  }
+  if (row.ci_upper < state.value) {
+    return availabilityFault(availability, 'implausible_value')
+  }
+  return {
+    ...state,
+    value: { lower: state.value, upper: row.ci_upper, levelPercent: row.ci_level_percent },
+  }
 }
 
 // ----------------------------------------------------------------------------

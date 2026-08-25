@@ -170,12 +170,23 @@ describe('formatDateAtPrecision', () => {
     })
   })
 
-  it.each(['2019-03', '19-03-01', '2019/03/01', '', 'i fjor'])(
-    '«%s» er ikke en dato, og gjengis rått',
-    (raw) => {
-      expect(formatDateAtPrecision(raw, 'day')).toEqual({ kind: 'unrecognised', text: raw })
-    },
-  )
+  // Ytterpunktene, ikke bare midten: uten separatorer, med ensifrede ledd, med
+  // feil separator, avkortet, med et tidsledd på slutten, tom. En løsere form
+  // på mønsteret ville gjort «20190301» og «2019-3-1» til gyldige datoer, og et
+  // uforankret mønster ville tatt imot et `timestamptz` og stilltiende kuttet
+  // klokkeslettet — altså vist en dato som ikke er den kolonnen bærer.
+  it.each([
+    '2019-03',
+    '19-03-01',
+    '2019/03/01',
+    '20190301',
+    '2019-3-1',
+    '2019-03-01T00:00:00Z',
+    '',
+    'i fjor',
+  ])('«%s» er ikke en dato, og gjengis rått', (raw) => {
+    expect(formatDateAtPrecision(raw, 'day')).toEqual({ kind: 'unrecognised', text: raw })
+  })
 
   it.each(['2019-13-01', '2019-00-01', '2019-03-00', '2019-03-32'])(
     '«%s» har et ledd utenfor kalenderen, og gjengis rått',

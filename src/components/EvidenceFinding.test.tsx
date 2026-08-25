@@ -131,6 +131,15 @@ describe('et fravær sier alltid hvorfor', () => {
     expect(detail(article, 'Populasjon')).toContain('lar seg ikke lese entydig ut')
   })
 
+  it('en utvalgsstørrelse på null vises ikke som et tall', () => {
+    // Den ville sett ut som et resultat — «ingen deltakere» — framfor som den
+    // ødelagte raden den er. Migrasjon 003 forbyr verdien; visningen nekter å
+    // gjengi den (ANTIDEP_CONSTITUTION.md §17).
+    const { article } = renderFinding({ sample_size: 0 })
+    expect(detail(article, 'Utvalgsstørrelse')).not.toContain('0')
+    expect(detail(article, 'Utvalgsstørrelse')).toContain('kan ikke være det den er registrert som')
+  })
+
   it('merker en usikker ekstraksjon framfor å vise verdien som sikker', () => {
     const { article } = renderFinding({ sample_size_availability: 'uncertain_extraction' })
     expect(detail(article, 'Utvalgsstørrelse')).toContain('240')

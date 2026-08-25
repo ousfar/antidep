@@ -34,7 +34,7 @@
 //    publiseringsgaten kontrollerer status ved publisering, ikke etterpå.
 // ============================================================================
 
-import { useId } from 'react'
+import { useId, type ReactNode } from 'react'
 import { MEASURE_LABELS, UNIT_LABELS } from './vocabulary-labels'
 import {
   describeEvidenceFinding,
@@ -139,6 +139,9 @@ const AVAILABILITY_FAULT_LABELS: Record<AvailabilityFault, string> = {
     'Registreringen sier at kilden ikke oppgir en verdi, samtidig som det står en verdi. ' +
     'Verdien vises ikke',
   incomplete_value: 'Verdien er bare delvis registrert, og halve verdien er ikke en verdi',
+  implausible_value:
+    'Verdien kan ikke være det den er registrert som, og vises derfor ikke. Vist som tall ville ' +
+    'den sett ut som et resultat',
 }
 
 const UNCERTAIN_EXTRACTION_NOTE =
@@ -187,7 +190,7 @@ function termText<Term extends string>(
 
 interface DetailProps {
   readonly label: string
-  readonly children: React.ReactNode
+  readonly children: ReactNode
 }
 
 function Detail({ label, children }: DetailProps) {
@@ -232,20 +235,21 @@ function stanceFaultText(stance: EvidenceStance): string | null {
 }
 
 function timepointText(timepoint: EvidenceTimepoint): string {
+  // Begge ledd finnes: avledningen bygger paret først når begge står, så det er
+  // ingen gren her for et enslig ledd — og en gren ingen test kan nå, ser ut som
+  // et vern uten å være det.
   const from = renderedText(formatIntervalText(timepoint.min), 'varighet')
-  // `max` er alltid utfylt her: paret kontrolleres i avledningen, og et enslig
-  // ledd blir `incomplete_value` framfor halve verdien.
-  const to =
-    timepoint.max === null ? from : renderedText(formatIntervalText(timepoint.max), 'varighet')
+  const to = renderedText(formatIntervalText(timepoint.max), 'varighet')
   return from === to ? from : `${from} til ${to}`
 }
 
 function confidenceIntervalText(ci: EvidenceConfidenceInterval): string {
+  // Alle tre ledd finnes, av samme grunn som over: nivået hører til intervallet,
+  // og et intervall uten nivå slipper aldri gjennom avledningen.
   const lower = renderedText(formatNumber(ci.lower), 'tall')
-  const upper = ci.upper === null ? lower : renderedText(formatNumber(ci.upper), 'tall')
-  const level =
-    ci.levelPercent === null ? '' : `${renderedText(formatNumber(ci.levelPercent), 'tall')} % KI: `
-  return `${level}${lower} til ${upper}`
+  const upper = renderedText(formatNumber(ci.upper), 'tall')
+  const level = renderedText(formatNumber(ci.levelPercent), 'tall')
+  return `${level} % KI: ${lower} til ${upper}`
 }
 
 function estimateText(estimate: EvidenceEstimateState): string {

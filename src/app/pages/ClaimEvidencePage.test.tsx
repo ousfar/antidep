@@ -23,6 +23,20 @@ function section(heading: string): HTMLElement {
   return element
 }
 
+/** Teksten i tidspunktlistens `<dd>` for én `<dt>`. */
+function timestamp(label: string): string {
+  const terms = [...section('Tidspunkter').querySelectorAll('dt')]
+  const term = terms.find((dt) => dt.textContent === label)
+  if (term === undefined) {
+    throw new Error(
+      `fant ingen tidspunkt «${label}». Tidspunktene som finnes: ${terms
+        .map((dt) => dt.textContent)
+        .join(', ')}`,
+    )
+  }
+  return term.nextElementSibling?.textContent ?? ''
+}
+
 /**
  * Evidensfunnene, i den rekkefølgen de står i evidensseksjonen.
  *
@@ -77,6 +91,22 @@ describe('påstanden står øverst', () => {
   })
 })
 
+describe('veien tilbake til konteksten', () => {
+  it('lenker til virkestoffet og til det kliniske temaet', async () => {
+    // En delt lenke lander her uten historikk å gå tilbake i (§55, §56).
+    renderEvidence(WELL_FORMED)
+    await screen.findByRole('heading', { level: 4, name: /Testpåstand/ })
+    expect(screen.getByRole('link', { name: 'virkestoff a' })).toHaveAttribute(
+      'href',
+      '/drugs/virkestoff-a',
+    )
+    expect(screen.getByRole('link', { name: 'vektendring' })).toHaveAttribute(
+      'href',
+      '/topics/vektendring',
+    )
+  })
+})
+
 describe('evidensen', () => {
   it('henter evidensen på samme identitet som påstanden', async () => {
     const { queries } = renderEvidence(WELL_FORMED)
@@ -122,7 +152,12 @@ describe('evidensen', () => {
     await findings()
     const main = screen.getByRole('main')
     expect(main).toHaveTextContent(/verken en rangering/i)
-    expect(main).toHaveTextContent(/Antall funn er heller ikke et mål på sikkerhet/i)
+    // Hele setningen, ikke bare innledningen: en halesetning som forsvinner er
+    // nettopp den mutasjonen en avkortet påstand ikke fanger. Uten den siste
+    // halvdelen sier merknaden ikke hvor sikkerheten faktisk står.
+    expect(main).toHaveTextContent(
+      /Antall funn er heller ikke et mål på sikkerhet — sikkerheten i kunnskapsgrunnlaget er en egen vurdering, og den står på påstanden over\./i,
+    )
   })
 
   it('sier at dette er hele grunnlaget bak den publiserte revisjonen', async () => {
@@ -190,9 +225,23 @@ describe('fraværstilstandene', () => {
 
 describe('tidspunktene', () => {
   it('viser publiseringstidspunktet, som kortet med vilje utelater', async () => {
-    renderEvidence(WELL_FORMED)
+    // Egne datoer per felt, og en assertion på nettopp det feltet: med felles
+    // datoer ville påstanden vært stille sann, fordi en annen rad i samme liste
+    // bar samme tekst.
+    renderEvidence({
+      published_claims: [
+        claimRow({
+          published_at: '2026-08-01T12:00:00Z',
+          last_reviewed_at: '2026-07-02T09:00:00Z',
+          last_assessed_at: '2026-06-03T09:00:00Z',
+        }),
+      ],
+      published_claim_evidence: [evidenceRow()],
+    })
     await findings()
-    expect(section('Tidspunkter')).toHaveTextContent('20. august 2026')
+    expect(timestamp('Publisert')).toBe('1. august 2026')
+    expect(timestamp('Sist faglig vurdert')).toBe('2. juli 2026')
+    expect(timestamp('Sist evidensvurdert')).toBe('3. juni 2026')
   })
 
   it('«ukjent» er ikke «ikke vurdert» og ikke en fersk dato', async () => {
@@ -201,7 +250,8 @@ describe('tidspunktene', () => {
       published_claim_evidence: [evidenceRow()],
     })
     await findings()
-    expect(section('Tidspunkter')).toHaveTextContent('Ukjent')
+    expect(timestamp('Publisert')).toBe('Ukjent')
+    expect(timestamp('Sist faglig vurdert')).toBe('Ukjent')
   })
 
   it('sier hvilken revisjon evidensgrunnlaget hører til', async () => {
@@ -210,7 +260,7 @@ describe('tidspunktene', () => {
       published_claim_evidence: [evidenceRow()],
     })
     await findings()
-    expect(screen.getByRole('main')).toHaveTextContent('Revisjon 3 av påstanden')
+    expect(timestamp('Publisert revisjon')).toBe('Revisjon 3')
   })
 
   it('nevner ingen aktør og ingen beslutningstype fra reviewhistorikken', async () => {

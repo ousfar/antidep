@@ -170,7 +170,7 @@ describe('utvalgsstørrelsen', () => {
     // nettopp den lesningen §17 forbyr.
     expect(
       describeEvidenceSampleSize({ sample_size_availability: 'reported_value', sample_size: size }),
-    ).toMatchObject({ reason: 'incomplete_value' })
+    ).toMatchObject({ reason: 'implausible_value' })
   })
 })
 
@@ -242,6 +242,8 @@ describe('konfidensintervallet', () => {
   })
 
   it('et intervall med grensene i feil rekkefølge er ikke tolkbart', () => {
+    // Et brudd på verdien, ikke på paret: begge ledd står, men de kan ikke være
+    // et intervall. Skilt fra `incomplete_value` fordi rettingen er en annen.
     expect(
       describeEvidenceConfidenceInterval({
         confidence_interval_availability: 'reported_value',
@@ -249,7 +251,7 @@ describe('konfidensintervallet', () => {
         ci_upper: 0.9,
         ci_level_percent: 95,
       }),
-    ).toMatchObject({ reason: 'incomplete_value' })
+    ).toMatchObject({ reason: 'implausible_value' })
   })
 
   it('et manglende intervall betyr upresist grunnlag, ikke et presist estimat', () => {

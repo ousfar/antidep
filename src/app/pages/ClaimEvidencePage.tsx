@@ -66,7 +66,7 @@
 // ============================================================================
 
 import { useCallback } from 'react'
-import { useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { ClaimCard } from '../../components/ClaimCard'
 import { EvidenceFinding } from '../../components/EvidenceFinding'
 import {
@@ -79,6 +79,7 @@ import {
   fetchPublishedClaimById,
   fetchPublishedClaimEvidence,
 } from '../../lib/published-read-model'
+import { drugPath, topicPath } from '../routes'
 import { useReadModel, type ReadModelState } from '../use-read-model'
 import { usePageTitle } from '../use-page-title'
 import type { PublishedClaimEvidenceRow, PublishedClaimRow, Uuid } from '../../types/api'
@@ -184,10 +185,10 @@ function EvidenceTimeline({ claim }: { readonly claim: PublishedClaimRow }) {
         <dd>{timestampText(claim.published_at)}</dd>
       </div>
       <div className="evidence-timeline__item">
-        <dt>Revisjon</dt>
         {/* Evidensgrunnlaget hører til revisjonen, ikke til identiteten:
             en ny publisering kan ha et annet grunnlag (§7). */}
-        <dd>Revisjon {claim.revision_number} av påstanden</dd>
+        <dt>Publisert revisjon</dt>
+        <dd>Revisjon {claim.revision_number}</dd>
       </div>
     </dl>
   )
@@ -232,6 +233,16 @@ function ClaimEvidenceBody({
       }
       return (
         <>
+          {/* Veien tilbake til konteksten påstanden hører til. En delt lenke
+              lander her uten historikk å gå tilbake i, og §56 krever at
+              tilbakenavigasjonen bevarer konteksten. Adressene bygges av
+              `routes.ts`, som ellers på flaten. */}
+          <p className="evidence-context">
+            Påstanden hører til virkestoffet{' '}
+            <Link to={drugPath(claim.drug_name)}>{claim.drug_name}</Link> og det kliniske temaet{' '}
+            <Link to={topicPath(claim.topic_label)}>{claim.topic_label}</Link>.
+          </p>
+
           <section aria-labelledby="paastanden">
             <h3 id="paastanden">Påstanden</h3>
             {/* Samme kort som på legemiddel- og temasiden, med de samme reglene
