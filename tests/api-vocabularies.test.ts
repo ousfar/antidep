@@ -10,11 +10,16 @@ import {
   CERTAINTY_LEVELS,
   CLAIM_DIRECTIONS,
   COMPARATOR_KINDS,
+  DATE_PRECISIONS,
   EFFECT_MEASURES,
   ESTIMATE_UNITS,
+  EVIDENCE_DIRECTNESS_VALUES,
   EVIDENCE_RELATIONSHIP_TYPES,
   KNOWLEDGE_TYPES,
+  REPORTED_DIRECTIONS,
   SOURCE_STATUSES,
+  SOURCE_TYPES,
+  STUDY_DESIGNS,
   VALUE_AVAILABILITIES,
   type EffectMeasure,
 } from '../src/types/api'
@@ -124,12 +129,32 @@ describe('de lukkede vokabularene er nøyaktig enum-ene i migrasjonene', () => {
     ['knowledge.effect_measure', EFFECT_MEASURES],
     ['knowledge.estimate_unit', ESTIMATE_UNITS],
     ['knowledge.claim_evidence_relationship', EVIDENCE_RELATIONSHIP_TYPES],
+    ['knowledge.evidence_directness', EVIDENCE_DIRECTNESS_VALUES],
     ['knowledge.value_availability', VALUE_AVAILABILITIES],
+    ['knowledge.effect_direction', REPORTED_DIRECTIONS],
+    ['knowledge.study_design', STUDY_DESIGNS],
+    ['knowledge.source_type', SOURCE_TYPES],
     ['knowledge.source_status', SOURCE_STATUSES],
+    ['knowledge.date_precision', DATE_PRECISIONS],
   ] as [string, readonly string[]][])('%s', (name, declared) => {
     // Som sett, ikke som liste: rekkefølgen i TypeScript er en presentasjons-
     // detalj, mens medlemskapet er påstanden om databasen.
     expect(new Set(declared)).toEqual(new Set(enumValues(name)))
+  })
+
+  it('kildens retningsvokabular er ikke påstandens', () => {
+    // De to ser like ut og er det ikke: `knowledge.effect_direction` har den
+    // fjerde verdien `not_stated`. Å behandle dem som samme vokabular ville
+    // latt «kilden oppgir ingen retning» og «Antidep konkluderer med ingen klar
+    // forskjell» bytte plass — to helt forskjellige epistemiske utsagn
+    // (ANTIDEP_CONSTITUTION.md §5). Kontrollen er mot migrasjonene, ikke mot
+    // TypeScript-unionene, slik at den også fanger at *databasen* skulle slå
+    // dem sammen.
+    const reported = new Set(enumValues('knowledge.effect_direction'))
+    const claim = new Set(enumValues('knowledge.claim_direction'))
+    expect(reported).not.toEqual(claim)
+    expect(reported.has('not_stated')).toBe(true)
+    expect(claim.has('not_stated')).toBe(false)
   })
 
   it('finner faktisk enum-ene den leter etter', () => {

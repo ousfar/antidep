@@ -26,26 +26,33 @@
 //   Lukket union der klienten forgrener på verdien, og der en uventet verdi
 //   som faller i feil gren ville vært klinisk feil — kunnskapstype (§5),
 //   sikkerhetsgrad (§6, §17), påstandens retning (§17), komparator og
-//   effektmål (§4, §6), relasjon til evidensen (§9), hvorfor en verdi mangler
-//   (§17) og kildestatus (§14).
+//   effektmål (§4, §6), relasjon til evidensen og dens direkthet (§9), hvorfor
+//   en verdi mangler (§17), retningen kilden selv rapporterer (§5),
+//   studiedesign og dokumenttype (§4) og kildestatus (§14). Presisjonen på en
+//   publiseringsdato hører også hit: en `year`-presis dato vist som en hel dato
+//   er falsk presisjon (§6).
 //
 //   Dokumentert `string` ellers. Å promotere et vokabular til union hører til
 //   den PR-en som faktisk forgrener på det.
 //
-// En lukket union alene fanger ingenting i kjøretid. Vokabularene med en
-// kjøretidskontroll er de `claim-certainty.ts` og `claim-effect.ts` faktisk
-// forgrener på: kunnskapstype, sikkerhetsgrad, retning, komparator, effektmål
-// og enhet. En ukjent verdi blir der en eksplisitt ukjent tilstand framfor å
-// falle i en godartet gren. `relationship_type`, `*_availability` og
-// `source_status` står fortsatt uten kontroll, fordi ingenting forgrener på dem
-// ennå; gjeldsposten er registrert i MVP_IMPLEMENTATION_PLAN.md §74.7. Den
-// PR-en som forgrener på et av dem, skal legge til kontrollen samtidig.
+// En lukket union alene fanger ingenting i kjøretid, og det er kjøretids-
+// kontrollen som gjør en ukjent verdi til en eksplisitt ukjent tilstand framfor
+// en godartet gren. Kontrollene ligger i avledningene:
+//
+//   claim-certainty.ts   kunnskapstype, sikkerhetsgrad
+//   claim-effect.ts      påstandens retning, komparator, effektmål, enhet
+//   evidence-item.ts     relasjonstype, direkthet, `*_availability`,
+//                        rapportert retning, studiedesign, dokumenttype,
+//                        kildestatus, datopresisjon
+//
+// Alle vokabularene som i dag er lukkede unioner her, har dermed en
+// kjøretidskontroll. Et nytt vokabular skal ikke promoteres til union uten at
+// den PR-en som forgrener på det, legger til kontrollen samtidig.
 //
 // Et vokabular er det samme uansett hvilken rad det står i, så komparator,
-// effektmål og enhet er lukket på evidensradene også. Men kontrollen kjøres der
-// avledningen kjøres, og i dag leses bare påstandsradene: en evidensrad har
-// ingen kjøretidskontroll ennå. Avledningene tar imot `string | null` nettopp
-// for at evidensvisningen skal kunne gjenbruke dem uten å endre dem.
+// effektmål og enhet er lukket på evidensradene også. Avledningene i
+// `claim-effect.ts` tar imot `string | null` nettopp for at `evidence-item.ts`
+// skal kunne gjenbruke dem uten å endre dem.
 //
 // `tests/api-vocabularies.test.ts` kontrollerer at hver lukket union her er
 // nøyaktig den enum-en migrasjonene definerer.
@@ -146,6 +153,66 @@ export const SOURCE_STATUSES = [
   'withdrawn',
 ] as const
 export type SourceStatus = (typeof SOURCE_STATUSES)[number]
+
+/**
+ * Om et evidensfunn treffer påstandens populasjon, endepunkt, komparator og
+ * tidsrom direkte, eller bare indirekte. Egen akse fra `relationship_type`, slik
+ * at et indirekte funn som *motsier* påstanden kan uttrykkes (migrasjon 004).
+ */
+export const EVIDENCE_DIRECTNESS_VALUES = ['direct', 'indirect'] as const
+export type EvidenceDirectness = (typeof EVIDENCE_DIRECTNESS_VALUES)[number]
+
+/**
+ * Studiedesignet for det konkrete evidensfunnet, ikke for dokumentet. Én kilde
+ * kan rapportere ulike design for ulike utfall, så designet hører til funnet
+ * (migrasjon 003).
+ */
+export const STUDY_DESIGNS = ['randomized_controlled_trial'] as const
+export type StudyDesign = (typeof STUDY_DESIGNS)[number]
+
+/**
+ * Hva slags dokument kilden er. Egen akse fra studiedesign: en retningslinje og
+ * en preparatomtale leses ikke som en primærstudie, og forskjellen er klinisk
+ * (migrasjon 003).
+ */
+export const SOURCE_TYPES = [
+  'journal_article',
+  'clinical_guideline',
+  'summary_of_product_characteristics',
+  'regulatory_communication',
+  'public_dataset',
+] as const
+export type SourceType = (typeof SOURCE_TYPES)[number]
+
+/**
+ * Hvor presist en publiseringsdato faktisk er kjent. Datoen lagres avkortet til
+ * presisjonsnivået, så en klient som viser hele datoen for en `year`-presis dato
+ * viser falsk presisjon (§6).
+ */
+export const DATE_PRECISIONS = ['year', 'month', 'day'] as const
+export type DatePrecision = (typeof DATE_PRECISIONS)[number]
+
+/**
+ * Retningen én kilde selv rapporterer for utfallet.
+ *
+ * Ikke det samme vokabularet som påstandens `direction`, og de to må ikke slås
+ * sammen: dette har den fjerde verdien `not_stated`, og en påstand er Antideps
+ * syntese på tvers av grunnlaget — en annen epistemisk status (§5). Slått
+ * sammen ville «kilden oppgir ingen retning» og «Antidep konkluderer med ingen
+ * klar forskjell» kunne bytte plass.
+ *
+ * `no_clear_difference` er også her et resultat, ikke et fravær av data: kilden
+ * har sett etter en forskjell og ikke funnet en klar en. Kolonnen er NOT NULL
+ * nettopp for at nullfunnet ikke skal kunne kollapse til NULL sammen med «ikke
+ * rapportert» og «ikke målt» (§6).
+ */
+export const REPORTED_DIRECTIONS = [
+  'increase',
+  'decrease',
+  'no_clear_difference',
+  'not_stated',
+] as const
+export type ReportedDirection = (typeof REPORTED_DIRECTIONS)[number]
 
 /**
  * Retningen en påstand selv konkluderer med.
@@ -322,11 +389,12 @@ export type PublishedClaimEvidenceRow = {
 
   relationship_type: EvidenceRelationshipType
   /** Egen akse fra `relationship_type`: `direct` eller `indirect`. */
-  directness: string
+  directness: EvidenceDirectness
   relevance_note: string
 
   evidence_item_id: Uuid
-  study_design: string
+  /** Designet for dette funnet, ikke for dokumentet det står i. */
+  study_design: StudyDesign
 
   population_id: Uuid | null
   population_label: string | null
@@ -354,11 +422,9 @@ export type PublishedClaimEvidenceRow = {
    * Retningen kilden selv rapporterer, fra `knowledge.effect_direction` — et
    * annet vokabular enn påstandens `direction`, med den fjerde verdien
    * `not_stated`. Antideps egen vurdering av funnet ligger i
-   * `relationship_type`. Dokumentert `string` fordi ingenting forgrener på den
-   * ennå; den PR-en som gjør det, skal lukke vokabularet og legge til
-   * kjøretidskontrollen samtidig.
+   * `relationship_type`.
    */
-  reported_direction: string
+  reported_direction: ReportedDirection
   effect_measure: EffectMeasure | null
   estimate: number | null
   estimate_unit: EstimateUnit | null
@@ -389,12 +455,17 @@ export type PublishedClaimEvidenceRow = {
   source_version_content_hash: string | null
 
   source_id: Uuid
-  source_type: string
+  source_type: SourceType
   source_title: string
   source_authors_or_issuer: string
   source_publisher_or_journal: string | null
+  /**
+   * Alltid avkortet til presisjonen under. `null` hvis og bare hvis presisjonen
+   * er `null` (migrasjon 003), og betyr at ingen dato er registrert.
+   */
   source_publication_date: DateText | null
-  source_publication_date_precision: string | null
+  /** Hvor mye av datoen over som faktisk er kjent. Uten den er datoen falsk presisjon. */
+  source_publication_date_precision: DatePrecision | null
   source_status: SourceStatus
   source_status_note: string | null
   /** Sorterte arrays: kildemodellen tillater flere, og ingen er definert som primær. */

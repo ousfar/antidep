@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { claimRow, drugRow, renderRoute } from './test-support'
+import { TEST_CLAIM_IDS, claimRow, drugRow, evidenceRow, renderRoute } from './test-support'
 
 describe('skallet', () => {
   it('viser produktnavnet i en toppbanner, som vei tilbake til forsiden', () => {
@@ -57,13 +57,15 @@ describe('rutingen', () => {
     ).toBeInTheDocument()
   })
 
-  it('evidensadressen finnes, og siden sier at visningen ikke er bygget', () => {
-    // Kortet krever `evidenceHref`, så lenken finnes fra første kort. Uten en
-    // rute ville den sagt «siden finnes ikke», som ikke er sant: adressen er
-    // riktig, innholdet er ikke bygget.
-    renderRoute('/claims/11111111-1111-4111-8111-111111111111/evidence')
-    expect(screen.getByRole('main')).toHaveTextContent(/Evidensvisningen er ikke bygget ennå/i)
-    expect(screen.getByRole('main')).toHaveTextContent('11111111-1111-4111-8111-111111111111')
+  it('evidensadressen treffer evidensvisningen', async () => {
+    // Adressen bygges av `claimEvidencePath()` og er den eneste veien til
+    // «Hvorfor sier Antidep dette?» fra hvert kort.
+    renderRoute(`/claims/${TEST_CLAIM_IDS.a}/evidence`, {
+      api: { published_claims: [claimRow()], published_claim_evidence: [evidenceRow()] },
+    })
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'Evidensgrunnlaget' }),
+    ).toBeInTheDocument()
   })
 
   it('setter dokumenttittelen per adresse', async () => {

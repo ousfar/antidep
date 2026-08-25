@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   compareNorwegian,
+  formatDateAtPrecision,
   formatIntervalText,
   formatNumber,
   formatTimestampAsDate,
@@ -129,4 +130,69 @@ describe('compareNorwegian', () => {
   it('er en ordinær alfabetisk sortering ellers', () => {
     expect(['sertralin', 'mirtazapin'].sort(compareNorwegian)).toEqual(['mirtazapin', 'sertralin'])
   })
+})
+
+describe('formatDateAtPrecision', () => {
+  it('skriver bare året når bare året er kjent', () => {
+    // Datoen lagres avkortet til presisjonsnivået (migrasjon 003). «1. januar
+    // 2019» ville vært falsk presisjon (ANTIDEP_CONSTITUTION.md §6), og den er
+    // ikke synlig som feil: den ser ut som en helt vanlig dato.
+    expect(formatDateAtPrecision('2019-01-01', 'year')).toEqual({
+      kind: 'formatted',
+      text: '2019',
+    })
+  })
+
+  it('skriver måned og år når dagen ikke er kjent', () => {
+    expect(formatDateAtPrecision('2019-03-01', 'month')).toEqual({
+      kind: 'formatted',
+      text: 'mars 2019',
+    })
+  })
+
+  it('skriver hele datoen når dagen er kjent', () => {
+    expect(formatDateAtPrecision('2019-03-17', 'day')).toEqual({
+      kind: 'formatted',
+      text: '17. mars 2019',
+    })
+  })
+
+  it('tolker datoen uten sone, så dagen ikke kan forskyves', () => {
+    // En `Date` ville lagt en sone på en datotekst uten sone, og en omregning
+    // kunne flyttet dagen over et døgnskille.
+    expect(formatDateAtPrecision('2019-01-01', 'day')).toEqual({
+      kind: 'formatted',
+      text: '1. januar 2019',
+    })
+    expect(formatDateAtPrecision('2019-12-31', 'day')).toEqual({
+      kind: 'formatted',
+      text: '31. desember 2019',
+    })
+  })
+
+  // Ytterpunktene, ikke bare midten: uten separatorer, med ensifrede ledd, med
+  // feil separator, avkortet, med et tidsledd på slutten, tom. En løsere form
+  // på mønsteret ville gjort «20190301» og «2019-3-1» til gyldige datoer, og et
+  // uforankret mønster ville tatt imot et `timestamptz` og stilltiende kuttet
+  // klokkeslettet — altså vist en dato som ikke er den kolonnen bærer.
+  it.each([
+    '2019-03',
+    '19-03-01',
+    '2019/03/01',
+    '20190301',
+    '2019-3-1',
+    '2019-03-01T00:00:00Z',
+    '',
+    'i fjor',
+  ])('«%s» er ikke en dato, og gjengis rått', (raw) => {
+    expect(formatDateAtPrecision(raw, 'day')).toEqual({ kind: 'unrecognised', text: raw })
+  })
+
+  it.each(['2019-13-01', '2019-00-01', '2019-03-00', '2019-03-32'])(
+    '«%s» har et ledd utenfor kalenderen, og gjengis rått',
+    (raw) => {
+      // En dato som ikke lar seg tolke skal ikke se ut som en tolket dato.
+      expect(formatDateAtPrecision(raw, 'day')).toEqual({ kind: 'unrecognised', text: raw })
+    },
+  )
 })

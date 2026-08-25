@@ -1241,11 +1241,11 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ---
 
-## 74. Status etter rutingen og de første sidene
+## 74. Status etter evidensvisningen
 
-**Oppdatert:** 25. august 2026 (etter `feat: add routing and first clinician pages`, den første
-navigerbare klinikerflaten; forrige oppdatering etter `feat: add claim card and certainty
-display`, presentasjonsenheten for én publisert påstand)
+**Oppdatert:** 25. august 2026 (etter `feat: add the claim evidence view`, «Hvorfor sier Antidep
+dette?»; forrige oppdatering etter `feat: add routing and first clinician pages`, den første
+navigerbare klinikerflaten)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1286,10 +1286,22 @@ sier ingenting om status.
 `First admin workflow` og `First published Claim` står som `[!]` — blokkert og avhengig
 av en beslutning, ikke av kode. Se §74.4.
 
-**Slice 2 (§30) er ikke ferdig.** Rutingen, legemiddelsidene og temasiden finnes, men
-definition of done krever at klinikeren også kan se *hva evidensen er* og *hvilken kilde
-som støtter eller motsier* påstanden. Evidensvisningen og kildedetaljen er ikke bygget, og
-er en egen PR (§51). Se §74.14.
+**Slice 2 (§30) er innfridd i definition of done, men har ett leveransepunkt igjen.** Alle
+fem punktene i definition of done er nå dekket: klinikeren kan finne påstanden og se hva
+Antidep hevder, hva det gjelder, hvor sikker kunnskapen er, hva evidensen er og hvilken
+kilde som støtter eller motsier den — uten admin-tilgang. Det siste kom med
+evidensvisningen (§74.15), som viser hele kilderaden på hvert funn: dokumenttype, tittel,
+forfattere, tidsskrift, publiseringsdato med sin presisjon, kildestatus, DOI, PMID, sted i
+kilden og kildeversjon.
+
+Leveranselisten i §30 nevner i tillegg «kildedetalj», og
+`PRODUCT_INFORMATION_ARCHITECTURE.md` §42 er eksplisitt på at en `Source`-visning — én side
+per kilde, med alt Antidep bruker den til — er en *annen* visning enn claim-evidensvisningen.
+Den er ikke bygget, og er den neste PR-en. Markeringen står derfor fortsatt på `[~]`, ikke
+fordi definition of done mangler noe, men fordi leveranselisten gjør det.
+
+**Produktinvariant 9 er innfridd.** «Hvorfor sier Antidep dette?» går nå fra hvert
+påstandskort til en visning som faktisk svarer.
 
 ### 74.2 Faktisk PR-rekkefølge
 
@@ -1309,7 +1321,8 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       db: expose publication and review timestamps in api     (#21)  merget   migrasjon 007a
       feat: add published read model client                   (#22)  merget   ingen migrasjon
       feat: add claim card and certainty display              (#23)  merget   ingen migrasjon
-      feat: add routing and first clinician pages             (#24)  åpen     ingen migrasjon
+      feat: add routing and first clinician pages             (#24)  merget   ingen migrasjon
+      feat: add the claim evidence view                       (#25)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1325,12 +1338,13 @@ visning og etablerte den typede leseveien fra `api` inn i appen (§74.12). Andre
 `feat: add claim card and certainty display`, er den første klinikerflaten: presentasjons-
 enheten for én publisert påstand, uten ruting og uten datahenting (§74.13). Tredje del,
 `feat: add routing and first clinician pages`, er den første navigerbare flaten: adressene,
-forsiden, legemiddelsidene og temasiden, med datahenting (§74.14). Det som gjenstår av PR I,
-står sist i §74.14.
+forsiden, legemiddelsidene og temasiden, med datahenting (§74.14). Fjerde del,
+`feat: add the claim evidence view`, er evidensdrilldownen bak «Hvorfor sier Antidep dette?»
+(§74.15). Det som gjenstår av PR I, står sist i §74.15.
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #23. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #24. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
 Konvensjonen har sviktet fire ganger på rad, og er derfor ikke lenger bare en konvensjon:
@@ -1471,8 +1485,8 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Fysisk sletting av en rolletildeling er selv uauditert | En rolletildeling kan fjernes fysisk uten at det står hvem som fjernet den. Auditradene for tildelingen og avslutningen består — det er nettopp derfor `object_id` ikke har fremmednøkkel — men slettingen selv etterlater ingen rad. En trigger kan ikke navngi den som sletter, fordi `DELETE` ikke bærer en aktør, og `audit.events.actor_id` er med hensikt `NOT NULL` | Admin-flyten (§48). Der går slettingen gjennom en kontrollert funksjon som kjenner aktøren, og `DATABASE_ARCHITECTURE.md` §36 sitt krav om «særskilt audit» ved fysisk sletting kan innfris |
 | Endringer på `provenance.actors` auditeres ikke | Aktørraden er festepunktet for all attribusjon, og visningsnavn, beskrivelse og tilbaketrekking kan endres uten spor. Identiteten er riktignok frosset av `provenance.freeze_actor_identity()`, så det som kan endres er presentasjon og livssyklus, ikke hvem aktøren er | Samme trigger som over, og av samme grunn: tabellen har ingen kolonne som sier hvem som endret raden, så en trigger har ingen aktør å registrere |
 | `audit.events.request_or_run_id` har ingen produsent | Auditrader kan ikke grupperes etter forespørselen eller agentkjøringen de hørte til, så en operasjon som består av flere skrivinger framstår som uavhengige hendelser | `provenance.agent_runs`, eller det første admin-RPC-laget som har en forespørselsidentitet å sende med |
-| `api`-kontrakten i TypeScript er ikke maskinelt kontrollert mot databasens kolonner | Radtypene og `Database`-typen i `src/types/` er håndskrevne påstander om `api`. En kolonne som skifter navn, blir nullbar eller endrer type gjør dem usanne uten at noe feiler. Vokabularhalvdelen er lukket: `tests/api-vocabularies.test.ts` leser migrasjonene og krever at hver lukket union er nøyaktig sin enum (§74.13). Kolonnenavn, nullbarhet og kolonnetyper står igjen | En kontroll i CI som sammenligner `information_schema.columns` for `api` mot typene — databasejobben har allerede en kjørende stack — eller den første migrasjonen som endrer et api-view |
-| Ingen regel binder et kontrastivt effektmål til en komparator | `knowledge.claim_revisions` tillater fortsatt `magnitude_measure = 'mean_difference'` sammen med `comparator_kind = 'none'`, og en redaktør kan skrive kombinasjonen. Presentasjonslaget nekter nå å tolke den (§74.13), men det er et forsvar i visningen, ikke en invariant: dataene er like ugyldige, og enhver annen leser av `api` ser dem rå | Migrasjonen som legger til betingelsen, eller admin-flyten (§29), som er første sted en redaktør kan skrive kombinasjonen. Regelen må ta stilling til `mean_change`, som er en endring fra behandlingsstart og korrekt har `none` |
+| `api`-kontrakten i TypeScript er ikke maskinelt kontrollert mot databasens kolonner | Radtypene og `Database`-typen i `src/types/` er håndskrevne påstander om `api`. En kolonne som skifter navn, blir nullbar eller endrer type gjør dem usanne uten at noe feiler. Vokabularhalvdelen er lukket: `tests/api-vocabularies.test.ts` leser migrasjonene og krever at hver av de åtte lukkede unionene er nøyaktig sin enum (§74.13, §74.15). Kolonnenavn, nullbarhet og kolonnetyper står igjen, og innsatsen er høyere etter evidensvisningen: den leser over femti kolonner fra `api.published_claim_evidence`, langt flere enn noe annet i appen, og hver av dem er en uprøvd påstand | En kontroll i CI som sammenligner `information_schema.columns` for `api` mot typene — databasejobben har allerede en kjørende stack — eller den første migrasjonen som endrer et api-view |
+| Ingen regel binder et kontrastivt effektmål til en komparator | `knowledge.claim_revisions` tillater fortsatt `magnitude_measure = 'mean_difference'` sammen med `comparator_kind = 'none'`, og en redaktør kan skrive kombinasjonen. Migrasjon 003 tillater nøyaktig det samme paret på `knowledge.evidence_items`, så gjelden gjelder begge tabellene. Presentasjonslaget nekter nå å tolke den på begge (§74.13, §74.15) gjennom én felles avledning, men det er et forsvar i visningen, ikke en invariant: dataene er like ugyldige, og enhver annen leser av `api` ser dem rå | Migrasjonen som legger til betingelsen, eller admin-flyten (§29), som er første sted en redaktør kan skrive kombinasjonen. Regelen må ta stilling til `mean_change`, som er en endring fra behandlingsstart og korrekt har `none` |
 | Ingen regel binder en tallfestet effekt til at evidensen er graderbar | En revisjon kan bære `magnitude_value` samtidig som vurderingen er `no_assessable_evidence` — som ifølge migrasjon 004 betyr at det ikke finnes tilstrekkelig grunnlag til å gjøre en vurdering i det hele tatt. Kolonnekommentaren på `magnitude_value` sier selv at en påstand som er mer presis enn evidensen under den, er et brudd på `ANTIDEP_CONSTITUTION.md` §4 og §6, men ingen `CHECK` håndhever det på tvers av de to tabellene. Presentasjonslaget skjuler tallet (§74.13); databasen tillater det | Samme migrasjon som over, eller admin-flyten. Regelen krysser `knowledge.claim_revisions` og `knowledge.evidence_assessments`, så den må enten være en trigger eller en betingelse i publiseringsgaten |
 | Modellen kan ikke avgjøre om en effektstørrelses fortegn stemmer med påstandens retning | `direction = 'increase'` med `magnitude_value = -0,4` ser motstridende ut, men er det ikke nødvendigvis: fortegnet hører til skalaen `magnitude_unit` måler på, og modellen registrerer ikke om den skalaens positive retning peker samme vei som temaet påstanden handler om. «Økning i vekttap» med en negativ vektforskjell er konsistent. Kontrollen er derfor bevisst ikke innført — den ville gitt falske utslag på gyldige data | Det første objektet som registrerer polariteten til et utfall i forhold til sitt `ClinicalConcept`. Uten det kan verken UI eller en databaseregel bedømme fortegnet |
 | Adressen til et katalogobjekt er avledet av visningsnavnet, ikke lagret | `/drugs/sertralin` og `/topics/vektendring` bygges ved å slå opp sluggen mot de kanoniske navnene i det publiserte settet (`src/lib/slug.ts`). En slug avledet av et visningsnavn er ikke en stabil identitet: endres navnet i katalogen, endres adressen, og en delt lenke slutter å virke (§55). Avledningen er dessuten tapsgivende, så to navn kan kollidere — oppslaget svarer da `ambiguous` framfor å velge, men adressen er ikke lenger entydig | En slug-kolonne i katalogen etter mønster av `provenance.actors.actor_key`, i den migrasjonen som først trenger en permanent lenke — eller det første katalogobjektet som faktisk kan skifte navn. Spørsmålet ble utsatt i §74.5 punkt 2 «til en klient faktisk trenger en menneskelesbar nøkkel i URL-er»; det behovet har nå meldt seg, og utsettelsen er derfor gjeld og ikke lenger et åpent valg |
@@ -2159,6 +2173,193 @@ kildedetaljen (§30). Evidensvisningen er en egen PR (§51), og kildesiden er en
 enn evidensvisningen (§42). Viewene svarer fortsatt `[]`, så begge må bygges mot den tomme
 projeksjonen på samme måte som sidene her. Det som gjenstår for at slice 2 skal være ferdig,
 er dermed nøyaktig de to punktene i definition of done som handler om evidens og kilde.
+
+### 74.15 Hva evidensvisningen innførte
+
+`feat: add the claim evidence view` er fjerde del av PR I (§30, §68) og svaret bak «Hvorfor
+sier Antidep dette?» (`PRODUCT_INFORMATION_ARCHITECTURE.md` §15). Den oppretter ingen
+migrasjon og legger ingen ny avhengighet til. Den består av avledningen av ett evidensfunn
+(`src/lib/evidence-item.ts`), presentasjonen av det (`src/components/EvidenceFinding.tsx`),
+selve siden (`src/app/pages/ClaimEvidencePage.tsx`, som til nå har vært en plassholder), en
+ny lesefunksjon (`fetchPublishedClaimById()`) og de delte vokabularetikettene
+(`src/components/vocabulary-labels.ts`).
+
+**`fetchPublishedClaimEvidence()` ble skrevet og testet i #22 og har aldri vært kalt. Nå
+kalles den.** Ruten `/claims/:claimId/evidence` og `claimEvidencePath()` kom i #24; adressen
+er uendret.
+
+**Sju beslutninger, i den rekkefølgen de betyr noe klinisk:**
+
+1. **Påstanden står øverst, og det er det samme kortet.** §41 begynner med påstanden, og uten
+   den er et evidensgrunnlag ikke etterprøvbart: leseren har ingenting å prøve funnene mot
+   (`ANTIDEP_CONSTITUTION.md` §4). Evidensradene bærer verken `statement`, `certainty_level`,
+   `uncertainty_summary` eller `topic_label`, så påstanden hentes med `fetchPublishedClaimById()`
+   — filtrert på `claim_id`, som overlever en ny publisering (§7). `ClaimCard` gjenbrukes
+   framfor å få en egen utgave her: kortet bærer regler om scope, størrelse, komparator og
+   sikkerhet som en parallell presentasjon ville måttet gjenta og deretter drive fra
+   (§65 «Duplicated truth»). Kortets `evidenceHref` er påkrevd og forblir det; på denne
+   siden *er* veien videre seksjonen lenger nede, så verdien er et anker og ikke en rute. Å
+   gjøre lenken valgfri ville latt et kort et annet sted miste den ved en forglemmelse.
+
+2. **Rekkefølgen er ikke en vekting, og antallet er ikke sikkerhet.** Evidensen kommer sortert
+   på `claim_evidence_link_id` — stabilt mellom kall, uten mening (§74.12 punkt 4) — og
+   visningen sorterer ikke om. Den grupperer heller ikke støttende og motstridende i egne
+   bolker slik §41 foreslår, av to grunner: en rekkefølge etter `relationship_type` ville satt
+   støttende funn først og gjort presentasjonsrekkefølgen til en vekting av evidensen
+   (`ANTIDEP_CONSTITUTION.md` §9, §20), og en egen bolk for motstridende evidens som står tom,
+   leses som «det finnes ingen motstridende evidens» — en påstand om forskningen, ikke om
+   Antideps innhold. Hvert funn bærer i stedet relasjonen sin som tekst, øverst og i sitt eget
+   tilgjengelige navn, slik at leseren ser den uten å utlede den av plasseringen. Antallet funn
+   skrives ikke ut som et tall å veie: «tre støtter, ett motsier» er stemmetelling, og GRADE
+   avviser den eksplisitt — sikkerheten i kunnskapsgrunnlaget er en egen vurdering, og den står
+   på påstanden (§6). Merknaden over listen sier alle tre delene: at dette er hele grunnlaget
+   bak den publiserte revisjonen, at rekkefølgen ikke er en rangering, og at antallet ikke er
+   sikkerhet. Skulle en senere PR likevel gruppere, er det en designbeslutning som må skrives
+   ned og begrunnes — ikke en sortering som sniker seg inn.
+
+3. **Et fravær sier alltid hvorfor, og et konfidensintervall står aldri uten sin status.** Seks
+   kolonner bærer en `*_availability`, og de finnes nettopp for at en tom verdi aldri skal kunne
+   leses som en nullverdi (§17, `DATABASE_ARCHITECTURE.md` §19.1). Avledningen deler vokabularet
+   i de to halvdelene migrasjon 003 faktisk skiller på — `reported_value`/`uncertain_extraction`
+   mot de fire fraværene — og alt annet blir et synlig kontraktsbrudd framfor å havne i «ikke
+   rapportert». Listene er skrevet ut og ikke avledet av hverandre, slik at en ny enum-verdi
+   tvinger fram en beslutning. De fire grunnene holdes fra hverandre i teksten, fordi de er
+   egenskaper ved forskjellige ting: studien, publikasjonen, funnet og ekstraksjonen.
+   Presisjonsfeltet er alltid til stede, også når intervallet mangler — samme regel som at
+   tallet og komparatoren på kortet er ett felt: et manglende intervall betyr upresist grunnlag,
+   ikke et presist estimat. Og et intervall uten nivå vises ikke som et intervall, fordi «0,9
+   til 2,5» betyr forskjellige ting på 90 % og på 99 %.
+
+4. **Fem vokabularer lukket, og alle åtte har nå kjøretidskontroll.** §74.12 punkt 3 sa at den
+   PR-en som forgrener på et vokabular, legger til kontrollen samtidig. Evidensvisningen
+   forgrener på åtte:
+
+   | Vokabular | Hva en feil gren ville gjort |
+   |---|---|
+   | `relationship_type` | presentert et motstridende funn som støtte (§9) |
+   | `directness` | skjult at et funn bare treffer påstanden indirekte |
+   | `*_availability` | gjort et registrert fravær til en nullverdi (§17) |
+   | `reported_direction` | latt kildens egen retning bli Antideps konklusjon (§5) |
+   | `study_design` | gitt et ukjent design en randomisert studies vekt |
+   | `source_type` | lest en preparatomtale som en primærstudie |
+   | `source_status` | vist en tilbaketrukket kilde som normal (§14) |
+   | `date_precision` | vist «2019» som «1. januar 2019», altså falsk presisjon (§6) |
+
+   `reported_direction` er en felle, og den er navngitt i koden: den er **ikke** påstandens
+   `direction`. Vokabularet har en fjerde verdi, `not_stated`, og å slå de to sammen ville latt
+   «kilden oppgir ingen retning» og «Antidep konkluderer med ingen klar forskjell» bytte plass.
+   `tests/api-vocabularies.test.ts` kontrollerer nå alle åtte mot migrasjonene, og har i tillegg
+   en vaktpost som krever at de to retningsvokabularene *forblir forskjellige* — målt på
+   migrasjonene, ikke på TypeScript-unionene, slik at den også fanger at databasen skulle slå
+   dem sammen.
+
+5. **Evidensen er festet til den revisjonen som faktisk står på skjermen.** Begge viewene
+   følger `current_published_revision_id`, og de to spørringene er uavhengige. Publiseres en ny
+   revisjon mellom dem, svarer `published_claims` med revisjon N og `published_claim_evidence`
+   med funnene til revisjon N+1 — og siden ville vist et evidensgrunnlag under en formulering det
+   aldri var lenket til. Det er nøyaktig det §4 forbyr: en kilde som omhandler samme tema uten å
+   underbygge formuleringen, er ikke støtte. Vinduet er lite, og feilen ser ut som et gyldig svar
+   — samme klasse som det foreldede svaret `useReadModel()` gjør strukturelt umulig (§74.14
+   punkt 4). Hver evidensrad bærer sin `claim_revision_id`, og settet vises bare når alle hører
+   til den viste revisjonen; ellers sier siden at påstanden ble publisert på nytt mens siden
+   lastet. Ingen delvis visning: et blandet sett er verre enn ingen. Kontrollen er en
+   sammenligning og ikke et filter i spørringen, med hensikt — et `eq('claim_revision_id', …)`
+   ville gjort skiftet til et tomt svar, og et tomt svar betyr allerede noe helt annet her (se
+   punktet under). De to årsakene må ikke dele ordlyd. Funnet kom fra den eksterne reviewen på
+   denne PR-en; det er sjette PR på rad der en gjennomgang finner noe mutasjonstesting ikke
+   kunne, og av samme grunn som før: mutasjonene traff implementasjonen, ikke forutsetningen om
+   at de to spørringene ser samme revisjon.
+
+6. **En publisert påstand uten evidens er et brudd, ikke et fravær.** Publiseringsgaten G3
+   nekter å publisere en revisjon uten minst én evidenslenke (§4), så tilstanden skal ikke
+   kunne finnes. Den vises derfor som en feil med `role="alert"` og med beskjed om å behandle
+   påstanden som ubekreftet — ikke som en rolig opplysning om at evidens mangler. Det samme
+   gjelder to publiserte påstander på samme identitet: `api.published_claims` har én rad per
+   påstand, så to rader er ikke en rekkefølge å velge i, og ingen av dem vises.
+
+7. **En tilbaketrukket ekstraksjon merkes, den skjules ikke — og reviewkontrakten utvides
+   ikke.** Kortet sier hvor mange evidenslenker som er trukket tilbake; her står det hvilke,
+   med tidspunkt og begrunnelse, og funnet blir stående fordi påstanden over det fortsatt er
+   publisert (§14). Av reviewhistorikken vises fortsatt bare tidsstempler — ingen
+   aktøridentitet, ingen beslutningstype, ingen begrunnelse (§58, §74.11). De fire
+   tidsbegrepene holdes adskilt (`DATABASE_ARCHITECTURE.md` §7.3), og
+   publiseringstidspunktet, som kortet med vilje utelater, står her.
+
+**Én delt regel, ikke to utgaver.** `describeMeasureUnit()` er skilt ut av
+`describeClaimMagnitude()` fordi migrasjon 003 håndhever nøyaktig samme enhetsregel på
+evidensfunnene som migrasjon 004 gjør på påstandsrevisjonene. Estimatavledningen kaller
+`describeClaimComparator()` og `describeClaimMagnitude()` direkte når statusen sier at et tall
+står der, med intervensjonen som subjekt slik virkestoffet er påstandens. Da gjelder også
+forsvaret mot et kontrastivt effektmål uten komparator på evidensradene, uten en andre utgave
+av regelen. Effektmåletikettene ligger nå i `vocabulary-labels.ts`, av samme grunn: en
+oddsratio er en oddsratio uansett hvilken rad den står i.
+
+**Veien tilbake.** Siden lenker til virkestoffet og til det kliniske temaet påstanden hører
+til. En delt lenke lander her uten historikk å gå tilbake i, og §55 og §56 krever at
+dypelenken virker og at tilbakenavigasjonen bevarer konteksten. Adressene bygges av
+`routes.ts`, som ellers på flaten.
+
+**Det som ikke vises, og hvorfor.** §41 avslutter med «Full referanseliste». Den er utelatt som
+egen seksjon: hvert funn bærer hele kilderaden allerede, og en liste i tillegg ville vært de
+samme dataene to ganger på én side. Behovet §41 peker på — én visning per kilde, med alt
+Antidep bruker den til — er `Source`-visningen i §42, og den er en egen PR. Identifikatorene
+vises som tekst og ikke som lenke til originalen; en `href` bygget av en streng fra databasen
+er en annen beslutning enn å vise strengen, og den hører hjemme sammen med `Source`-visningen.
+
+**Gjeld: ingen nye poster, to eksisterende presisert.** Regelen om at et kontrastivt effektmål
+krever en komparator, mangler også på `knowledge.evidence_items` — samme gjeld, én tabell til.
+Og kontrollen av `api`-kontrakten mot databasens *kolonner* står fortsatt igjen; innsatsen er
+høyere nå, fordi evidensvisningen leser over femti kolonner fra ett view. Vokabularhalvdelen er
+til gjengjeld helt lukket: alle åtte lukkede unioner har både en kontroll mot migrasjonene og en
+kjøretidskontroll.
+
+**Ingen uprøvbare vakter.** To tidlige utforminger her hadde grener ingen test kunne nå: en
+`complete`-tilbakekalling i den generiske feltavledningen ga kallerne en tidsromtype og en
+intervalltype med ledd som i praksis aldri var tomme, og visningen måtte likevel forgrene på dem.
+Avledningen bygger nå den sammensatte verdien først etter at leddene er kontrollert, så typen
+selv sier at begge ledd finnes, og visningen har ingen gren igjen å skrive. Det er samme
+opprydding som `baselineReadingIsLicensed()` i §74.13 og de to fjernede grenene i §74.14: en
+uprøvbar vakt ser ut som et vern uten å være det. `implausible_value` kom til i samme runde, som
+et eget bruddskille fra `incomplete_value` — en utvalgsstørrelse på null og et intervall med
+grensene i feil rekkefølge er ikke halve verdier, de er verdier som ikke kan være det de er
+registrert som, og rettingen er en annen.
+
+**Hva som ble verifisert.** `npm run lint`, `npm run format:check`, `npm run typecheck`,
+`npm run test` og `npm run build` er kjørt og passerer, sammen med `./scripts/verify-counts.sh`.
+Vitest-suiten er utvidet fra 408 til 556 tester. Mutasjonstesting er kjørt etter mønsteret i
+§74.13 og §74.14: rundt åtti mutasjoner er innført én om gangen over avledningen, komponenten,
+siden, de delte reglene og vokabularvaktpostene, og alle fanges nå. Fem av dem overlevde først,
+og alle fem var reelle hull i testene framfor i koden:
+
+- Datomønsteret var ikke prøvd på ytterpunktene. En løsere form gjorde «20190301» og «2019-3-1»
+  til gyldige datoer uten at noe feilet.
+- Mønsteret var heller ikke prøvd uforankret i slutten, og et uforankret mønster ville tatt imot
+  et `timestamptz` og stilltiende kuttet klokkeslettet — altså vist en dato som ikke er den
+  kolonnen bærer.
+- Påstanden om merknaden over evidenslisten var avkortet, slik at **halesetningen** — den som
+  sier hvor sikkerheten faktisk står — stod uprøvd.
+- En assertion på publiseringstidspunktet var **stille sann**, fordi en annen rad i samme
+  tidspunktliste bar nøyaktig samme dato. Fiksturen har nå én dato per felt, og assertionen
+  leser det feltet den handler om.
+- Teksten for en verdi som ikke kan være det den er registrert som, ble aldri rendret av noen
+  test. En utvalgsstørrelse på null kunne dermed vært vist som «0» — nettopp den lesningen §17
+  forbyr — uten at noe feilet.
+
+Flaten er kjørt i Chromium på 1280 px og på en ekte 390 px mobilviewport gjennom
+devtools-protokollen, med tre funn — ett velformet, ett tilbaketrukket med tilbaketrukket kilde,
+ett uten estimat — uten horisontal overflyt (`scrollWidth` lik `clientWidth` på begge bredder) og
+uten konsollmeldinger utover en manglende favicon på forhåndsvisningssiden. Overskriftshierarkiet
+er kontrollert i nettleseren: h1 produkt, h2 side, h3 seksjon, h4 påstand og funn, h5 kilde.
+
+**En anbefaling til neste PR som rører verktøykjeden.** Skjermdumpskriptet og
+mutasjonstestharnessen er nå skrevet fra bunnen av tre ganger — i #23, i #24 og her — fordi de
+lever i scratchpad og ikke i repoet. Ingen av dem inneholder klinisk innhold. De hører hjemme i
+`scripts/`, men ikke i en ren funksjonalitets-PR (§51), så de er bevisst ikke lagt til her.
+
+**Hva som gjenstår av PR I.** `Source`-visningen (§42): én side per kilde, som beskriver
+publikasjonen og lenker til de påstandene Antidep bruker den til. Viewene svarer fortsatt `[]`,
+så den må bygges mot den tomme projeksjonen på samme måte som sidene her. Det er det siste
+punktet i leveranselisten i §30.
 
 ---
 

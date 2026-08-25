@@ -24,7 +24,7 @@ import { MemoryRouter } from 'react-router'
 import { AppLayout } from './App'
 import { AntidepClientProvider, type AntidepClientAvailability } from './antidep-client'
 import type { AntidepClient } from '../lib/supabase'
-import type { PublishedClaimRow, PublishedDrugRow } from '../types/api'
+import type { PublishedClaimEvidenceRow, PublishedClaimRow, PublishedDrugRow } from '../types/api'
 
 /** Hva ett view svarer: rader, en feil, eller aldri (for ventetilstanden). */
 export type FakeOutcome<Row> =
@@ -33,6 +33,7 @@ export type FakeOutcome<Row> =
 export interface FakeApi {
   readonly published_drugs?: FakeOutcome<PublishedDrugRow>
   readonly published_claims?: FakeOutcome<PublishedClaimRow>
+  readonly published_claim_evidence?: FakeOutcome<PublishedClaimEvidenceRow>
 }
 
 interface RecordedQuery {
@@ -122,9 +123,11 @@ export function renderRoute(path: string, options: RenderRouteOptions = {}) {
 const DRUG_A = '11111111-1111-4111-8111-111111111111'
 const DRUG_B = '11111111-1111-4111-8111-222222222222'
 const TOPIC_WEIGHT = '44444444-4444-4444-8444-111111111111'
+const CLAIM_A = '22222222-2222-4222-8222-111111111111'
 
 export const TEST_DRUG_IDS = { a: DRUG_A, b: DRUG_B } as const
 export const TEST_TOPIC_IDS = { weight: TOPIC_WEIGHT } as const
+export const TEST_CLAIM_IDS = { a: CLAIM_A } as const
 
 export function drugRow(overrides: Partial<PublishedDrugRow> = {}): PublishedDrugRow {
   return {
@@ -139,7 +142,7 @@ export function drugRow(overrides: Partial<PublishedDrugRow> = {}): PublishedDru
 
 export function claimRow(overrides: Partial<PublishedClaimRow> = {}): PublishedClaimRow {
   return {
-    claim_id: '22222222-2222-4222-8222-111111111111',
+    claim_id: CLAIM_A,
     claim_revision_id: '33333333-3333-4333-8333-111111111111',
     revision_number: 1,
     knowledge_type: 'evidence_synthesis',
@@ -180,6 +183,89 @@ export function claimRow(overrides: Partial<PublishedClaimRow> = {}): PublishedC
     revision_created_at: '2026-08-19T10:00:00Z',
     published_at: '2026-08-20T12:00:00Z',
     last_reviewed_at: '2026-08-21T09:15:00Z',
+    ...overrides,
+  }
+}
+
+/**
+ * Én evidenslenke, i den formen `api.published_claim_evidence` gir den.
+ *
+ * Grunnformen er den enkleste raden som er gyldig etter migrasjon 003: et
+ * rapportert funn med et tolkbart estimat, et konfidensintervall og en kilde
+ * uten avvikende status. Testene overstyrer nøyaktig det de handler om, slik at
+ * en rad som mangler noe, mangler det med hensikt.
+ */
+export function evidenceRow(
+  overrides: Partial<PublishedClaimEvidenceRow> = {},
+): PublishedClaimEvidenceRow {
+  return {
+    claim_id: CLAIM_A,
+    claim_revision_id: '33333333-3333-4333-8333-111111111111',
+    claim_evidence_link_id: '55555555-5555-4555-8555-111111111111',
+
+    relationship_type: 'supports',
+    directness: 'direct',
+    relevance_note: 'Testnotat: funnet måler samme endepunkt i samme populasjon.',
+
+    evidence_item_id: '66666666-6666-4666-8666-111111111111',
+    study_design: 'randomized_controlled_trial',
+
+    population_id: '77777777-7777-4777-8777-111111111111',
+    population_label: 'voksne med depresjon',
+    population_detail: 'Voksne 18–65 år i poliklinisk behandling.',
+    population_availability: 'reported_value',
+    sample_size: 240,
+    sample_size_availability: 'reported_value',
+
+    intervention_drug_id: DRUG_A,
+    intervention_drug_name: 'virkestoff a',
+    intervention_detail: null,
+    comparator_kind: 'placebo',
+    comparator_drug_id: null,
+    comparator_drug_name: null,
+    comparator_detail: null,
+
+    outcome_concept_id: TOPIC_WEIGHT,
+    outcome_label: 'vektendring',
+    outcome_detail: 'Endring i kroppsvekt fra baseline.',
+    timepoint_min: '56 days',
+    timepoint_max: '56 days',
+    timepoint_availability: 'reported_value',
+
+    reported_direction: 'increase',
+    effect_measure: 'mean_difference',
+    estimate: 1.7,
+    estimate_unit: 'kg',
+    estimate_availability: 'reported_value',
+    ci_lower: 0.9,
+    ci_upper: 2.5,
+    ci_level_percent: 95,
+    confidence_interval_availability: 'reported_value',
+
+    limitations_text: null,
+    source_locator: 'Tabell 2, side 114',
+
+    extraction_withdrawn: false,
+    extraction_withdrawn_at: null,
+    extraction_withdrawal_rationale: null,
+
+    source_version_id: null,
+    source_version_retrieved_at: null,
+    source_version_retrieved_from: null,
+    source_version_external_version: null,
+    source_version_content_hash: null,
+
+    source_id: '88888888-8888-4888-8888-111111111111',
+    source_type: 'journal_article',
+    source_title: 'Testkilde A: vektendring ved åtte uker',
+    source_authors_or_issuer: 'Testforfatter m.fl.',
+    source_publisher_or_journal: 'Testtidsskrift',
+    source_publication_date: '2019-03-01',
+    source_publication_date_precision: 'month',
+    source_status: 'active',
+    source_status_note: null,
+    source_dois: ['10.0000/test.a'],
+    source_pmids: null,
     ...overrides,
   }
 }

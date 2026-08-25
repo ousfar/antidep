@@ -1,8 +1,8 @@
 // ============================================================================
 // Lesefunksjonene mot kontraktslaget `api`
 //
-// Tre spørringer, én per view. Ingen skriveveier: `api` er lesemodell, og
-// skriving går gjennom kontrollerte SECURITY DEFINER-funksjoner
+// Fem lesefunksjoner over de tre viewene. Ingen skriveveier: `api` er
+// lesemodell, og skriving går gjennom kontrollerte SECURITY DEFINER-funksjoner
 // (DATABASE_ARCHITECTURE.md §43).
 //
 // ----------------------------------------------------------------------------
@@ -122,6 +122,32 @@ export async function fetchPublishedClaimsForDrug(
       .order('topic_label', { ascending: true })
       .order('statement', { ascending: true }),
   )
+}
+
+/**
+ * Én publisert påstand, slått opp på sin stabile identitet.
+ *
+ * Finnes fordi evidensvisningen skal ha påstanden øverst
+ * (PRODUCT_INFORMATION_ARCHITECTURE.md §41), og evidensradene ikke bærer den:
+ * `statement`, `certainty_level`, `uncertainty_summary` og `topic_label` står
+ * bare i `published_claims`. Uten oppslaget måtte evidensvisningen enten
+ * gjengitt påstanden fra evidensfunnene — altså gjettet — eller latt være å
+ * vise den, og et evidensgrunnlag uten påstanden over seg er ikke etterprøvbart
+ * (ANTIDEP_CONSTITUTION.md §4).
+ *
+ * Filteret er `claim_id` og ikke revisjonen: identiteten er stabil på tvers av
+ * revisjoner (§7), så en delt lenke fortsetter å peke på påstanden også etter en
+ * ny publisering. Hvilken revisjon som står publisert, er noe viewet avgjør.
+ *
+ * Ingen sortering: `published_claims` har én rad per publisert påstand, så et
+ * svar med mer enn én rad er et kontraktsbrudd og ikke en rekkefølge. Kalleren
+ * ser det, fordi `ok` bærer hele settet.
+ */
+export async function fetchPublishedClaimById(
+  client: AntidepClient,
+  claimId: Uuid,
+): Promise<ReadModelResult<PublishedClaimRow>> {
+  return toResult(await client.from('published_claims').select('*').eq('claim_id', claimId))
 }
 
 /**

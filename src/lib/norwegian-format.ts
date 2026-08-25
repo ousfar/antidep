@@ -191,3 +191,60 @@ export function formatIntervalText(raw: string): RenderedValue {
 
   return { kind: 'formatted', text: parts.join(' ') }
 }
+
+// ----------------------------------------------------------------------------
+// Datoer med oppgitt presisjon
+// ----------------------------------------------------------------------------
+
+// En publiseringsdato lagres avkortet til presisjonsnivået den faktisk er kjent
+// på (migrasjon 003), og bibliografiske kilder oppgir ofte bare år. «1. januar
+// 2019» for en dato som bare er kjent til året, er falsk presisjon
+// (ANTIDEP_CONSTITUTION.md §6) — og den er ikke synlig som feil, fordi den ser
+// ut som en helt vanlig dato. Presisjonen må derfor følge datoen helt fram til
+// teksten.
+//
+// Datoen tolkes med et mønster framfor med `Date`. PostgREST serialiserer
+// `date` som `YYYY-MM-DD` uten sone, og en `Date` ville lagt en sone på den; en
+// omregning til Europe/Oslo kunne da flyttet dagen. Her er det ingen sone å
+// regne feil.
+const DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/
+
+const MONTH_FORMAT = new Intl.DateTimeFormat('nb-NO', { month: 'long', timeZone: 'UTC' })
+
+/** Presisjonsnivåene `knowledge.date_precision` uttrykker. */
+export type FormattedDatePrecision = 'year' | 'month' | 'day'
+
+/**
+ * En `date` fra `api`, skrevet ut med nøyaktig den presisjonen den har.
+ *
+ * Vokabularkontrollen på presisjonen ligger ikke her, men i `evidence-item.ts`:
+ * en ukjent presisjonsverdi skal bli en eksplisitt ukjent tilstand hos kalleren,
+ * ikke et valg mellom tre formater her.
+ */
+export function formatDateAtPrecision(
+  raw: string,
+  precision: FormattedDatePrecision,
+): RenderedValue {
+  const parts = DATE_TEXT.exec(raw.trim())
+  const [year, month, day] = [parts?.[1], parts?.[2], parts?.[3]]
+  if (year === undefined || month === undefined || day === undefined) {
+    return { kind: 'unrecognised', text: raw }
+  }
+
+  const monthNumber = Number(month)
+  const dayNumber = Number(day)
+  // Et ugyldig ledd gjengis rått framfor å bli til «måned 13»: en dato som ikke
+  // lar seg tolke skal ikke se ut som en tolket dato.
+  if (monthNumber < 1 || monthNumber > 12 || dayNumber < 1 || dayNumber > 31) {
+    return { kind: 'unrecognised', text: raw }
+  }
+
+  if (precision === 'year') {
+    return { kind: 'formatted', text: year }
+  }
+  const monthName = MONTH_FORMAT.format(Date.UTC(2000, monthNumber - 1, 1))
+  if (precision === 'month') {
+    return { kind: 'formatted', text: `${monthName} ${year}` }
+  }
+  return { kind: 'formatted', text: `${String(dayNumber)}. ${monthName} ${year}` }
+}
