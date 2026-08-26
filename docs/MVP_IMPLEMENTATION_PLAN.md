@@ -2722,8 +2722,9 @@ planen og i `supabase/README.md` siden migrasjon 007 som noe migrasjonene *lå i
 oppdatering til oppdatering. Dette er sjuende gang en påstand i planen har vært arvet framfor
 kontrollert (§74.4, §74.8), og den skiller seg fra de seks foregående på ett punkt: de var
 tall, som `scripts/verify-counts.sh` etter hvert kunne fange. Denne er en påstand om et system
-utenfor repoet, og ingen vaktpost i CI kan nå den. Det er ikke et argument for å la den stå
-ukontrollert — det er grunnen til at den må føres med sin kilde og ikke som et faktum.
+utenfor repoet, og ingen vaktpost i CI rapporterer schematilstanden der. Det er ikke et
+argument for å la den stå ukontrollert — det er grunnen til at den må føres med sin kilde og
+ikke som et faktum.
 
 **Konsekvenser, i den rekkefølgen de betyr noe:**
 
@@ -2741,6 +2742,20 @@ ukontrollert — det er grunnen til at den må føres med sin kilde og ikke som 
 4. **Ingenting av klinikerflaten peker på det hostede prosjektet ennå, og det er ikke et nytt
    tap.** Ingenting er publisert (§74.4), så en fullt migrert database der ville vist et tomt
    publisert sett — nøyaktig det appen viser i dag.
+
+**Det finnes en Supabase-GitHub-integrasjon på repoet, og den har vært stille hele veien.**
+Hver pull request får en `Supabase Preview`-kontroll. På PR-en som skrev dette avsnittet er
+utfallet `skipped`, med begrunnelsen «This git branch is not associated with any Supabase
+Branch». Kontrollen peker på prosjektet `gxorhbwndpopartjuwbj`, som dermed er det hostede
+prosjektet integrasjonen er koblet til. Det er første gang den identiteten står noe sted i
+repoet — den finnes ellers bare i CI-overflaten — og den trengs av den som skal kjøre
+`supabase link`. To ting kontrollen *ikke* sier, og som ikke må leses inn i den: en preview
+branch er en egen database, så et `skipped`-utfall sier ingenting om hva produksjonsdatabasen
+inneholder; og at integrasjonen er installert, betyr ikke at noen migrasjon noen gang er kjørt
+gjennom den. Supabase Branching er likevel en tredje mulig vei ut for migrasjonene, ved siden
+av `supabase db push` og dashboardet, og må vurderes sammen med dem — men den kjører
+migrasjonene mot *preview*-databaser og ikke mot produksjon, så den løser ikke oppgaven under
+alene.
 
 **Å kjøre migrasjonene mot det hostede prosjektet er en egen oppgave, og den er ikke gjort.**
 `supabase link` etterfulgt av `supabase db push` er verktøyet. Oppgaven skal planlegges og
