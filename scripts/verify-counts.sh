@@ -119,7 +119,44 @@ else
     "antall migrasjoner med enum-typer utover de $antall_paastatt planen lister"
 fi
 
-# 5. Statusen på PR-radene i §74.2.
+# 5. Den eksponerte schemalisten i §74.5 punkt 3.
+#
+# Punktet hevder en konkret konfigurasjonsverdi, og verdien ligger i repoet.
+# Uten denne kontrollen kunne `[api].schemas` endres i supabase/config.toml
+# uten at påstanden fulgte med — samme driftsmodus som tallene over, og med en
+# sikkerhetskonsekvens: et kanonisk schema lagt til der ville gjort planens
+# «bare kontraktslaget er eksponert» usann i stillhet.
+#
+# Bare `config.toml` kontrolleres. Hva det hostede prosjektet faktisk eksponerer,
+# er ikke kildekode og kan ikke nås herfra (§74.18) — den påstanden føres med sin
+# kilde i planen framfor å bli hevdet som et faktum.
+#
+# Mellomrom fjernes på begge sider, slik at kontrollen gjelder verdien og ikke
+# formateringen: `["api","graphql_public"]` og `["api", "graphql_public"]` er
+# samme liste.
+uten_mellomrom() { tr -d ' '; }
+
+paastatt_schemas=$(
+  printf '%s' "$plan_flat" \
+    | grep -oE 'Verdien er nå `\[[^]]*\]`' \
+    | head -1 | sed -E 's/^Verdien er nå `//; s/`$//' | uten_mellomrom
+)
+antall_schemalinjer=$(grep -cE '^schemas *= *\[' supabase/config.toml)
+
+if [ "$antall_schemalinjer" -ne 1 ]; then
+  # Null linjer ville gjort «faktisk» til den tomme strengen, og to ville gjort
+  # det uklart hvilken som gjelder. Begge deler skal si fra, ikke sammenlignes.
+  printf '  FEIL     %-26s fant %s linjer «schemas = [...]» i supabase/config.toml, forventet 1\n' \
+    "eksponerte schemaer" "$antall_schemalinjer"
+  feil=1
+else
+  sjekk "eksponerte schemaer" \
+    "$paastatt_schemas" \
+    "$(grep -E '^schemas *= *\[' supabase/config.toml | sed -E 's/^schemas *= *//' | uten_mellomrom)" \
+    "[api].schemas i supabase/config.toml"
+fi
+
+# 6. Statusen på PR-radene i §74.2.
 #
 # Konvensjonen er at statuskolonnen beskriver tilstanden da raden ble skrevet:
 # den nyeste raden står som «åpen» til neste PR retter den. Konvensjonen virker
@@ -189,6 +226,10 @@ Minst én påstand stemmer ikke med kilden.
 Kilden vinner: rett tallet i dokumentet, ikke i koden. Står det «fant ingen
 påstand», er setningen omformulert slik at vakten ikke finner den lenger —
 rett da enten setningen eller mønsteret her, framfor å fjerne kontrollen.
+
+Står det «eksponerte schemaer», er §74.5 punkt 3 og supabase/config.toml ute av
+synk. Kilden er config.toml: rett punktet i planen, med mindre schemalisten
+selv er feil — da er det en sikkerhetsendring og ikke en tekstrettelse.
 
 Står det «foreldet PR-status», er §74.2 ikke ført videre: statuskolonnen på
 raden over den nyeste beskriver fortsatt tilstanden da raden ble skrevet. Rett

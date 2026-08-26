@@ -108,6 +108,22 @@ endringer i Supabase Dashboard skal ikke være kilden til produksjonsschema
 (`docs/MVP_IMPLEMENTATION_PLAN.md` §54). Eksponerte schemaer i det hostede prosjektet må
 holdes i synk med `[api].schemas` her.
 
+**Det hostede prosjektet er tomt.** Migrasjonene under er aldri kjørt mot det: dashboardets
+liste over eksponerbare schemaer inneholdt 26. august 2026 nøyaktig `graphql_public` og
+`public`, og ingen av Antideps schemaer. Synkingen over er derfor ikke mulig ennå — `api`
+dukker opp i listen først når migrasjonene er kjørt. Å kjøre dem (`supabase link` +
+`supabase db push`) er en egen oppgave som skal planlegges, ikke bare utføres; bakgrunnen og
+konsekvensene står i `docs/MVP_IMPLEMENTATION_PLAN.md` §74.18.
+
+**Kjør aldri `supabase config push` mot det hostede prosjektet.** Kommandoen pusher hele
+`config.toml`, og filen her er i praksis `supabase init`-standardene for en lokal stack:
+`auth.site_url` er `http://127.0.0.1:3000`, `auth.additional_redirect_urls` peker samme sted,
+`auth.minimum_password_length` er `6`, og `db.network_restrictions.allowed_cidrs` er
+`0.0.0.0/0`. Et push ville satt produksjonens site URL til localhost, slettet de reelle
+redirect-URL-ene, senket passordkravet og åpnet nettverksgrensen. Enkeltinnstillinger settes i
+dashboardet. Å gjøre `config.toml` til reell kilde for det hostede prosjektet er en egen,
+bevisst oppgave der hver seksjon først må settes til produksjonsverdier.
+
 Supabase-forutsetningene i `docs/MVP_IMPLEMENTATION_PLAN.md` §8 ble kontrollert mot
 plattformdokumentasjonen 18. august 2026, før migrasjon 001 ble skrevet.
 
