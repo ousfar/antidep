@@ -1331,6 +1331,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       feat: add the source view                               (#26)  merget   ingen migrasjon
       db: register the named qualified editor                 (#27)  merget   migrasjon 005a
       docs: correct the record of the hosted Supabase project (#28)  merget   ingen migrasjon
+      test: verify the api column contract                        (#29)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1353,7 +1354,7 @@ med alt Antidep bruker den til (§74.16). **PR I er dermed ferdig, og med den Sl
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #27. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #28. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
 Konvensjonen har sviktet fire ganger på rad, og er derfor ikke lenger bare en konvensjon:
