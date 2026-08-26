@@ -1243,9 +1243,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ## 74. Status etter kildevisningen
 
-**Oppdatert:** 26. august 2026 (etter `db: register the named qualified editor`, migrasjon 005a,
-som registrerer den navngitte kvalifiserte redaktøren som aktør; forrige oppdatering etter
-`feat: add the source view`, kildedetaljen som avslutter Slice 2)
+**Oppdatert:** 26. august 2026 (etter `docs: correct the record of the hosted Supabase
+project`, som retter en påstand om det hostede prosjektet som har vært arvet siden migrasjon
+007 — se §74.18; forrige oppdatering etter `db: register the named qualified editor`,
+migrasjon 005a, som registrerer den navngitte kvalifiserte redaktøren som aktør)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1328,7 +1329,8 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       feat: add routing and first clinician pages             (#24)  merget   ingen migrasjon
       feat: add the claim evidence view                       (#25)  merget   ingen migrasjon
       feat: add the source view                               (#26)  merget   ingen migrasjon
-      db: register the named qualified editor                 (#27)  åpen     migrasjon 005a
+      db: register the named qualified editor                 (#27)  merget   migrasjon 005a
+      docs: correct the record of the hosted Supabase project (#28)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1351,7 +1353,7 @@ med alt Antidep bruker den til (§74.16). **PR I er dermed ferdig, og med den Sl
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #26. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #27. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
 Konvensjonen har sviktet fire ganger på rad, og er derfor ikke lenger bare en konvensjon:
@@ -1464,6 +1466,14 @@ hele tatt. Med en tom tabell feiler begge, på hver sin måte. Dette er sjette g
 eller en påstand i planen har vært arvet framfor kontrollert (§74.8), og den ble funnet ved å
 lese gaten framfor hand-offen.
 
+**Den første av de fire er delvis gjort, og resten av den er blokkert av en beslutning som
+ikke er tatt.** Prosjekteieren har opprettet redaktørens brukerkonto i autentiseringslaget i
+det hostede Supabase-prosjektet. Selve rollegranten — migrasjonen som kobler kontoen til
+aktørraden og tildeler `reviewer` — er ikke skrevet, fordi den ikke kan skrives før det er
+avgjort hva den skal gjøre i miljøer der kontoen ikke finnes. `workflow.user_roles.user_id` er
+`NOT NULL` med fremmednøkkel til `auth.users`, og CI starter en fersk lokal stack uten den
+kontoen. Valget, med prisen på hver vei, står i §74.18.
+
 ### 74.5 Beslutninger tatt før migrasjon 007 eksponerte verdier utad
 
 Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
@@ -1490,8 +1500,20 @@ Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
    en klient faktisk trenger en menneskelesbar nøkkel i URL-er.
 3. **`public` er fjernet fra `[api].schemas`.** Verdien er nå
    `["api", "graphql_public"]`. Schemaet inneholdt ingen Antidep-objekter — §5 er opt-in,
-   og en tom eksponering er fortsatt en eksponering. `api` står først og er dermed
-   standardprofilen i PostgREST. Endringen må synkes manuelt mot det hostede prosjektet.
+   og en tom eksponering er fortsatt en eksponering. Verdien kontrolleres nå mot
+   `supabase/config.toml` av `scripts/verify-counts.sh`, av samme grunn som tallene over: en
+   påstand om en konfigurasjonsverdi driver, hvis ingenting sammenligner den med verdien.
+
+   **`api` står først i `config.toml` og er dermed standardprofilen i PostgREST — men appen
+   hviler ikke på det.** `src/lib/supabase.ts` setter `db: { schema: 'api' }`, så supabase-js
+   sender `Accept-Profile: api` på hver forespørsel og er uavhengig av standardprofilen.
+   Rekkefølgen gjelder dessuten bare `config.toml`: i dashboardet er eksponerte schemaer en
+   avhukingsmeny uten rekkefølge, så setningen beskriver den lokale stacken og ikke det
+   hostede prosjektet.
+
+   **«Endringen må synkes manuelt mot det hostede prosjektet» stod her uten forbehold, og
+   var utilstrekkelig.** Det finnes ikke noe `api`-schema å eksponere der: migrasjonene er
+   aldri kjørt mot det hostede prosjektet, og databasen der er tom. Se §74.18.
 
 ### 74.6 Invariant etablert i migrasjon 006
 
@@ -2676,6 +2698,158 @@ mot den.
 `reviewer`-rolle, ekstraksjonsverifikasjonene, claim-verifikasjonene og godkjenningen. Neste
 vertikale slice er §31 (sammenligning). Den mest verdifulle strukturelle oppryddingen er
 fortsatt kolonnekontrollen av api-kontrakten (§74.7).
+
+### 74.18 Det hostede Supabase-prosjektet er tomt
+
+**Funnet.** Prosjekteieren åpnet Supabase-dashboardet (Integrations → Data API → Settings →
+«Exposed schemas») for å gjøre den manuelle synkingen §74.5 punkt 3 ber om. Nedtrekkslisten
+der viser de schemaene som faktisk finnes i databasen, og den inneholdt nøyaktig to:
+`graphql_public` og `public`. Ingen av Antideps schemaer var der — verken kontraktslaget `api`
+eller de kanoniske `catalog`, `knowledge`, `workflow`, `provenance` og `audit`.
+**Migrasjonene har aldri vært kjørt mot det hostede prosjektet.** Databasen der er tom.
+
+**Hva som er kontrollert, og av hvem.** Observasjonen kommer fra prosjekteieren i dashboardet.
+Ingen med databasetilgang har bekreftet den, og denne sesjonen kan ikke: Supabase-MCP-serveren
+krever en autorisasjon som ikke finnes her, og Docker-registryene svarer 403 gjennom
+egress-proxyen, så `npx supabase start` kan ikke hente imagene. Påstanden føres derfor med sin
+kilde, framfor som et faktum repoet har målt. Det som *er* kontrollert mot kilden her, er de to
+tingene funnet gjør noe med: `supabase/config.toml` beskriver en lokal stack og ikke et hostet
+prosjekt, og `src/lib/supabase.ts` binder klienten til `api` med `db: { schema: 'api' }`.
+
+**Hvorfor den motsatte påstanden overlevde.** «Det hostede prosjektet» har vært omtalt i denne
+planen og i `supabase/README.md` siden migrasjon 007 som noe migrasjonene *lå i* og som
+`[api].schemas` skulle synkes *mot*. Ingen kontrollerte det; formuleringen ble ført videre fra
+oppdatering til oppdatering. Dette er sjuende gang en påstand i planen har vært arvet framfor
+kontrollert (§74.4, §74.8), og den skiller seg fra de seks foregående på ett punkt: de var
+tall, som `scripts/verify-counts.sh` etter hvert kunne fange. Denne er en påstand om et system
+utenfor repoet, og ingen vaktpost i CI rapporterer schematilstanden der. Det er ikke et
+argument for å la den stå ukontrollert — det er grunnen til at den må føres med sin kilde og
+ikke som et faktum.
+
+**Konsekvenser, i den rekkefølgen de betyr noe:**
+
+1. **`public` er skrudd av i det hostede prosjektet, og det var trygt.** Schemaet inneholder
+   ingen Antidep-objekter — `020_data_api_boundary_test.sql` håndhever det for migrasjonene —
+   og i det hostede prosjektet er det tomt uansett. Eksponeringen var derfor tom i begge
+   miljøer, og §5 er opt-in.
+2. **`api` kan ikke eksponeres ennå.** Schemaet dukker opp i avhukingsmenyen først når
+   migrasjonene er kjørt. Synkingen §74.5 punkt 3 ber om, er dermed ikke utsatt av
+   forsømmelse: den er ikke mulig ennå.
+3. **Rekkefølgen i den listen finnes ikke som begrep, og betyr uansett ingenting for appen.**
+   Dashboardets eksponerte schemaer er en avhukingsmeny, ikke en sortert liste. `api` står
+   først i `config.toml`, men klienten sender `Accept-Profile: api` uansett (§74.5 punkt 3),
+   så standardprofilen er ikke noe appen hviler på.
+4. **Ingenting av klinikerflaten peker på det hostede prosjektet ennå, og det er ikke et nytt
+   tap.** Ingenting er publisert (§74.4), så en fullt migrert database der ville vist et tomt
+   publisert sett — nøyaktig det appen viser i dag.
+
+**Det finnes en Supabase-GitHub-integrasjon på repoet, og den har vært stille hele veien.**
+Hver pull request får en `Supabase Preview`-kontroll. På PR-en som skrev dette avsnittet er
+utfallet `skipped`, med begrunnelsen «This git branch is not associated with any Supabase
+Branch». Kontrollen peker på prosjektet `gxorhbwndpopartjuwbj`, som dermed er det hostede
+prosjektet integrasjonen er koblet til. Det er første gang den identiteten står noe sted i
+repoet — den finnes ellers bare i CI-overflaten — og den trengs av den som skal kjøre
+`supabase link`. To ting kontrollen *ikke* sier, og som ikke må leses inn i den: en preview
+branch er en egen database, så et `skipped`-utfall sier ingenting om hva produksjonsdatabasen
+inneholder; og at integrasjonen er installert, betyr ikke at noen migrasjon noen gang er kjørt
+gjennom den. Supabase Branching er likevel en tredje mulig vei ut for migrasjonene, ved siden
+av `supabase db push` og dashboardet, og må vurderes sammen med dem — men den kjører
+migrasjonene mot *preview*-databaser og ikke mot produksjon, så den løser ikke oppgaven under
+alene.
+
+**Å kjøre migrasjonene mot det hostede prosjektet er en egen oppgave, og den er ikke gjort.**
+`supabase link` etterfulgt av `supabase db push` er verktøyet. Oppgaven skal planlegges og
+ikke bare utføres: den må ta stilling til §54 — migrasjonene er kilden, ikke dashboardet — og
+til advarselen under, som gjelder nabokommandoen. Den hører hjemme hos prosjekteieren og ikke
+i en agentsesjon uten tilgang til prosjektet.
+
+**Aldri `supabase config push` mot dette prosjektet.** Kommandoen finnes i den pinnede CLI-en
+og ser ut som riktig vei, siden den ville gjort `config.toml` til kilden slik §54 ber om. Den
+pusher hele filen, og `config.toml` her er i praksis `supabase init`-standardene for en lokal
+stack:
+
+| Nøkkel | Verdi i `config.toml` | Hva et push ville gjort i produksjon |
+|---|---|---|
+| `auth.site_url` | `http://127.0.0.1:3000` | satt produksjonens site URL til localhost |
+| `auth.additional_redirect_urls` | `["https://127.0.0.1:3000"]` | slettet de reelle redirect-URL-ene |
+| `auth.minimum_password_length` | `6` | senket passordkravet |
+| `db.network_restrictions.allowed_cidrs` | `["0.0.0.0/0"]` | åpnet databasen for alle adresser |
+
+Alle fire treffer autentiseringslaget og nettverksgrensen — altså nøyaktig der redaktørens
+brukerkonto ligger. Enkeltinnstillinger settes i dashboardet. Å gjøre `config.toml` til reell
+kilde for det hostede prosjektet er en egen, bevisst oppgave der hver seksjon først må settes
+til produksjonsverdier.
+
+**Redaktørens brukerkonto finnes, og tvinger fram et valg.** Prosjekteieren har opprettet
+kontoen i det hostede prosjektet (Authentication → Users) og oppgitt dens `uuid`:
+`a703ede9-3f58-4de9-8c85-73936d58df1f`. Formen er kontrollert her — gyldig uuid v4 etter
+RFC 4122 — men at raden finnes i `auth.users`, er ikke kontrollert av noen med databasetilgang.
+Migrasjonen som kobler kontoen til aktørraden fra §74.17 og tildeler `reviewer`-rollen, kan
+derfor ikke skrives før dette er avgjort: kontoen finnes bare i det hostede prosjektet, mens
+CI starter en fersk lokal stack uten den, og `workflow.user_roles.user_id` er `NOT NULL` med
+fremmednøkkel til `auth.users`. Tre veier, og ingen av dem er åpenbart riktig:
+
+| Vei | Hva den gjør | Prisen |
+|---|---|---|
+| a | Gjør koblingen betinget av at kontoen finnes, slik at migrasjonen ikke skriver raden i miljøer uten den | Migrasjonen gjør forskjellige ting i forskjellige miljøer, og CI kjører aldri den grenen som faktisk kjører i produksjon |
+| b | Seeder en tilsvarende konto i `supabase/seed.sql` for lokalt og CI | **Virker ikke** — se under |
+| c | Holder kobling og rolletildeling utenfor migrasjonene, som en operasjonell engangshandling mot produksjon | Bryter §54 sitt krav om at durable tilstandsendringer ligger i versjonerte migrasjoner, og gjør rolletildelingen usporbar i repoet |
+
+**Vei b er ikke en vei, og det er kontrollert mot kilden.** `supabase/config.toml` sier det
+selv om `[db.seed]`: «If enabled, seeds the database after migrations during a db reset.»
+Seedfilen kjøres *etter* migrasjonene. En migrasjon 005b som skriver
+`workflow.user_roles.user_id`, ville dermed kjørt før kontoen fantes, og feilet på
+fremmednøkkelen til `auth.users` uansett hva `seed.sql` inneholder. Alternativet var ført opp
+i hand-offen som ett av tre likeverdige valg; det er det ikke. Skulle kontoen finnes før
+migrasjonene er ferdige, måtte den vært opprettet av en *migrasjon* som skriver til
+`auth.users` — en kobling til Supabases eget schema som bryter på neste plattformoppgradering,
+og som uansett gjør migrasjonen miljøavhengig, altså vei a med et ekstra ledd.
+
+**Valget er delegert, og retningen er vei a.** Prosjekteieren har overlatt avgjørelsen til
+denne sesjonen. Det er en teknisk avgjørelse om hvordan en migrasjon oppfører seg i CI, ikke
+governance-avgjørelsen om hvem redaktøren er — den ble tatt og registrert i §74.17, og er ikke
+rørt her. Begrunnelsen for a: en rad i `auth.users` er per definisjon miljøspesifikk tilstand,
+ikke schema. Kontoen kan ikke finnes i en fersk lokal stack, og en oppdiktet konto lokalt ville
+gjort at CI kontrollerte en fiksjon. Vei a er den eneste som holder rolletildelingen i en
+versjonert migrasjon (§54) *og* lar raden være fraværende der den skal være fraværende.
+
+Prisen i tabellen må da betales eksplisitt, ikke ties i hjel, og migrasjonens PR må gjøre to
+ting for å betale den: raden skal ikke stille utebli, men gi en synlig `notice` når kontoen
+mangler, og CI skal kontrollere *begge* grenene — den positive ved å opprette en konto inne i
+en transaksjon som rulles tilbake, slik testene allerede gjør for alt annet, og den negative
+ved å påstå at ingen rolle er tildelt når kontoen ikke finnes. Uten den positive testen ville
+produksjonsveien vært ukjørt, og det er nøyaktig innvendingen mot vei a.
+
+Selve innholdet i migrasjonen er ellers avklart: koblingen kan settes nøyaktig én gang fra
+`NULL` (§74.17 punkt 1), granten er en selvtildeling som skal stå eksplisitt i `grant_reason`
+(§74.17 punkt 3), og `220_provenance_seed_test.sql` må justeres — den negative testen som
+krever at gaten avviser en godkjenning fordi aktøren mangler brukerkonto, skal erstattes av en
+som påstår den *nye* avvisningsgrunnen, ikke slettes.
+
+**Lærdom: et tall som bare finnes i en hand-off, er utenfor enhver vaktpost.** Hand-offen inn
+til §74.17 oppga 56 kildefiler i `src/`. Det korrekte tallet var 57, og hadde vært det siden
+`feat: add the source view` — migrasjon 005a rørte ingen fil i `src/`. Feilen er ikke ført inn
+i planen her, og skal ikke føres inn: planen har aldri hevdet et slikt tall, og å legge til en
+påstand utelukkende for å kunne kontrollere den er seremoni. Poenget er det motsatte, og det
+gjelder framover: en påstand som bare lever i en hand-off, kontrolleres av ingen. Skal den
+overleve, må den enten inn i et dokument en vaktpost leser, eller kontrolleres mot kilden på
+nytt hver gang den brukes.
+
+**Hva denne oppdateringen endret i vaktposten.** `scripts/verify-counts.sh` kontrollerer nå at
+`[api].schemas` i `supabase/config.toml` er den verdien §74.5 punkt 3 hevder. Det er den
+eneste påstanden i det punktet som *kan* kontrolleres maskinelt: verdien i `config.toml` er
+kildekode, mens dashboardets tilstand ikke er det. Kontrollen leser den påståtte verdien ut av
+planen framfor å ha den innbakt, slik at en omformulering gir «fant ingen påstand» og ikke en
+stille godkjenning — samme form som de øvrige kontrollene i filen.
+
+**Hva som gjenstår.** Milepæl B mangler fortsatt fire ting (§74.4). Sporet etter denne
+oppdateringen er ikke rollegranten, men kolonnekontrollen av api-kontrakten (§74.7): den er
+den mest verdifulle rent strukturelle oppryddingen, den er uavhengig av alt som krever et
+hostet prosjekt eller en brukerkonto, og innsatsen vokser for hver side som legges til over de
+samme uprøvde kolonnepåstandene. Ett funn sparer den neste for en blindvei:
+`information_schema.columns` rapporterer `is_nullable = 'YES'` for alle kolonner i et view —
+PostgreSQL gjør ingen nullbarhetsanalyse gjennom views. Navn og typer kan leses derfra;
+nullbarhet kan ikke, og må håndheves på en annen måte som må navngis eksplisitt.
 
 ---
 
