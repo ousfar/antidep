@@ -1243,9 +1243,9 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ## 74. Status etter kildevisningen
 
-**Oppdatert:** 25. august 2026 (etter `feat: add the source view`, kildedetaljen som avslutter
-Slice 2; forrige oppdatering etter `feat: add the claim evidence view`, «Hvorfor sier Antidep
-dette?»)
+**Oppdatert:** 26. august 2026 (etter `db: register the named qualified editor`, migrasjon 005a,
+som registrerer den navngitte kvalifiserte redaktøren som aktør; forrige oppdatering etter
+`feat: add the source view`, kildedetaljen som avslutter Slice 2)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1283,8 +1283,12 @@ og bygger både preview per pull request og produksjon fra `main`. Koblingen er 
 på prosjektsiden hos Vercel, ikke som konfigurasjon i repoet, så fravær av `vercel.json`
 sier ingenting om status.
 
-`First admin workflow` og `First published Claim` står som `[!]` — blokkert og avhengig
-av en beslutning, ikke av kode. Se §74.4.
+`First admin workflow` og `First published Claim` står fortsatt som `[!]`, men grunnen har
+endret seg. Fram til nå var de blokkert av en governance-beslutning som ikke var tatt: hvem er
+den navngitte kvalifiserte redaktøren? Den beslutningen er tatt, og redaktøren er registrert
+som aktør (§74.17). Det som gjenstår er ikke lenger et åpent spørsmål, men konkret arbeid som
+ikke er gjort: en reell brukerkonto, en rolletildeling, to verifikasjonsfaser og en
+godkjenning. Se §74.4.
 
 **Slice 2 (§30) er ferdig.** Alle fem punktene i definition of done er dekket: klinikeren kan
 finne påstanden og se hva Antidep hevder, hva det gjelder, hvor sikker kunnskapen er, hva
@@ -1323,7 +1327,8 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       feat: add claim card and certainty display              (#23)  merget   ingen migrasjon
       feat: add routing and first clinician pages             (#24)  merget   ingen migrasjon
       feat: add the claim evidence view                       (#25)  merget   ingen migrasjon
-      feat: add the source view                               (#26)  åpen     ingen migrasjon
+      feat: add the source view                               (#26)  merget   ingen migrasjon
+      db: register the named qualified editor                 (#27)  åpen     migrasjon 005a
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1346,7 +1351,7 @@ med alt Antidep bruker den til (§74.16). **PR I er dermed ferdig, og med den Sl
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #25. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #26. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
 Konvensjonen har sviktet fire ganger på rad, og er derfor ikke lenger bare en konvensjon:
@@ -1361,10 +1366,12 @@ utenfor den planlagte rekken og fikk en bokstav. Konvensjonen finnes nettopp for
 «migrasjon 007 — API-lesemodell» (§24) skal bety det samme i plan, migrasjoner og tester.
 Den tiende filen er migrasjon 007a av samme grunn: den utvider api-lesemodellen fra §24 og
 står utenfor den planlagte rekken, og nummeret 009 er reservert for DrugProduct- og
-importfundamentet (§26). Filrekkefølgen er dermed 001, 002, 003, 004, 005, 006, 006a, 007,
-008, 007a — sortert på tidsstempel, ikke på migrasjonsnummer.
+importfundamentet (§26). Den ellevte filen er migrasjon 005a, som utvider aktørregisteret fra
+§20 og står utenfor rekken på nøyaktig samme måte. Filrekkefølgen er dermed 001, 002, 003,
+004, 005, 006, 006a, 007, 008, 007a, 005a — sortert på tidsstempel, ikke på
+migrasjonsnummer, og de to siste filene bærer de to laveste bokstavnumrene.
 
-Databaselaget teller nå 1096 pgTAP-assertions over 33 testfiler.
+Databaselaget teller nå 1098 pgTAP-assertions over 33 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1399,12 +1406,13 @@ Innholdet er derimot bevisst minimalt, og det er ikke det samme som at slicen er
 - to virkestoff, to kliniske begreper, én populasjon
 - to kilder og to evidensfunn
 - to påstander med én revisjon, én evidenslenke og én evidensvurdering hver
-- to aktører, begge KI-roller
+- tre aktører: to KI-roller og den navngitte kvalifiserte redaktøren (§74.17)
 
-**Ingen verifikasjon, ingen reviewbeslutning og ingen publisering er registrert.** Det
-finnes ingen menneskelig aktør, ingen brukerkonto og ingen rolletildeling. De to
-påstandene er ubekreftede KI-forslag, og `current_published_revision_id` er tom på
-begge.
+**Ingen verifikasjon, ingen reviewbeslutning og ingen publisering er registrert.** Redaktøren
+er navngitt, men har verken brukerkonto eller rolletildeling, og kan derfor ikke registrere en
+faglig beslutning — `workflow.enforce_reviewer_qualification()` avviser forsøket, og
+`220_provenance_seed_test.sql` prøver det framfor å påstå det. De to påstandene er fortsatt
+ubekreftede KI-forslag, og `current_published_revision_id` er tom på begge.
 
 ### 74.4 Milepæl B er ikke nådd, og hvorfor
 
@@ -1417,30 +1425,58 @@ og migrasjon 005 gjorde det til en strukturell umulighet uten en reell person: e
 reviewbeslutning krever en aktør av typen `human`, knyttet til en brukerkonto, med
 gyldig `reviewer`-rolle for innholdsområdet på beslutningstidspunktet.
 
-**Neste skritt mot Milepæl B er derfor en governance-beslutning, ikke en kodeoppgave:**
-hvem er kvalifisert redaktør, og hvordan registreres vedkommende? Å seede en redaktør
-ville vært å oppfinne den godkjenningen konstitusjonen krever.
+**Governance-beslutningen er tatt.** Spørsmålet var hvem den kvalifiserte redaktøren er, og
+prosjekteieren — Peder Holman — har utpekt seg selv. Migrasjon 005a registrerer vedkommende
+som menneskelig aktør, slik at beslutningen står som en kanonisk rad framfor som en setning i
+dette dokumentet (§74.17).
 
 Konsekvens for rekkefølgen: migrasjon 007 (§24) er bygget, og api-projeksjonene viser et
 tomt publisert sett. Det er korrekt oppførsel. 007 er testet mot data opprettet inne i en
 transaksjon som rulles tilbake — samme mønster som 006 — framfor mot seedet innhold, og
 `220_provenance_seed_test.sql` bekrefter fortsatt at ingenting er publisert.
 
-**Det som nå gjenstår for Milepæl B er én ting:** en navngitt kvalifisert redaktør,
-registrert som menneskelig aktør med brukerkonto og `reviewer`-rolle. Alt maskineri fra
-kilde til klientflate står ferdig og testet rundt det tomrommet.
+**Denne teksten sa tidligere at det gjenstod «nøyaktig én ting» for Milepæl B. Det var
+feil.** Påstanden ble ført videre fra en tidligere oppdatering uten å bli kontrollert mot
+publiseringsgaten i migrasjon 006, og gaten stiller sju krav som ikke er innfridd:
+
+| Krav | Hva som mangler |
+|---|---|
+| G4, G5 | Hvert lenket evidensfunn skal ha en registrert ekstraksjonsverifikasjon, og den gjeldende skal bekrefte funnet. `workflow.evidence_verifications` er tom |
+| G8, G9 | Revisjonen skal ha en registrert claim-verifikasjon, og den gjeldende skal si `verified`. `workflow.claim_verifications` er tom |
+| G11, G12 | Menneskelig godkjenning skal finnes og være den gjeldende beslutningen. `workflow.review_decisions` er tom |
+| G13 | Evidensgrunnlaget skal være det samme som godkjenningen ble gitt for. Forutsetter at en godkjenning finnes |
+
+Registreringen av redaktøren berører ingen av dem. Den fjerner et hinder foran G11 — §12 sin
+navngitte redaktør finnes nå — men åpner ikke kravet: en reviewbeslutning krever i tillegg en
+reell brukerkonto og en gyldig `reviewer`-rolle, og verifikasjonsfasene bak G4/G5 og G8/G9 er
+urørt. Verifikasjonene kan være agentproduserte, så lenge §10 sitt skille mellom den som
+genererte og den som kontrollerer holdes, og §11 sitt krav om at kontrollen skjer mot
+kildematerialet er innfridd. Godkjenningen kan ikke være agentprodusert.
+
+**Det som gjenstår for Milepæl B er derfor fire ting**, ikke én: en reell brukerkonto med
+`reviewer`-rolle for redaktøren, ekstraksjonsverifikasjonene, claim-verifikasjonene og selve
+godkjenningen. Alt maskineri fra kilde til klientflate står ferdig og testet rundt det
+tomrommet.
+
+G8 er verdt å merke seg særskilt, fordi den er lett å utelate når kravene listes opp: G9 leser
+utfallet på den gjeldende claim-verifikasjonen, mens G8 er kravet om at det finnes en i det
+hele tatt. Med en tom tabell feiler begge, på hver sin måte. Dette er sjette gang et tall
+eller en påstand i planen har vært arvet framfor kontrollert (§74.8), og den ble funnet ved å
+lese gaten framfor hand-offen.
 
 ### 74.5 Beslutninger tatt før migrasjon 007 eksponerte verdier utad
 
 Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
 
 1. **Enum kontra oppslagstabell — utsatt, og gjort billigere å utsette.** Det finnes
-   38 enum-typer, fordelt på de ti migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
-   007, 008 og 007a — i filrekkefølge, ikke i nummerrekkefølge — med henholdsvis
-   1, 6, 11, 7, 10, 2, 0, 0, 1 og 0. Tallet er kontrollert mot
+   38 enum-typer, fordelt på de elleve migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
+   007, 008, 007a og 005a — i filrekkefølge, ikke i nummerrekkefølge — med henholdsvis
+   1, 6, 11, 7, 10, 2, 0, 0, 1, 0 og 0. Tallet er kontrollert mot
    kilden (`grep -cE '^create type ' supabase/migrations/*.sql`) og mot databasen.
-   Alle ti ledd er nå oppgitt eksplisitt framfor å la de siste hvile på restpåstanden i
-   `scripts/verify-counts.sh`; det er den formen vakten kontrollerer strengest.
+   Alle elleve ledd er nå oppgitt eksplisitt framfor å la de siste hvile på restpåstanden i
+   `scripts/verify-counts.sh`; det er den formen vakten kontrollerer strengest. Migrasjon
+   005a legger ikke til enum-typer: den registrerer én rad i et register som allerede
+   finnes.
    Viewene caster enum-kolonner til `text`, så den offentlige kontrakten er en streng
    fra et dokumentert vokabular, ikke PostgreSQL-typen. Et senere bytte til
    oppslagstabeller er dermed ikke en brytende API-endring. Castingen sparer også
@@ -1495,6 +1531,7 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Temasiden og kildesiden laster hele det publiserte settet | `api` har verken en tema- eller en kildeprojeksjon. `/topics/:slug` henter alle publiserte påstander og filtrerer i klienten, fordi en slug ikke kan inverteres til en etikett. `/sources/:sourceId` henter kilden fra `published_claim_evidence`, men evidensradene bærer ikke `statement`, så hele det publiserte settet hentes i tillegg og **joines** i klienten for å kunne navngi hva kilden brukes til (§74.16 punkt 1). Det skalerer ikke: en kunnskapsbase med hundrevis av påstander lastes i sin helhet for å vise ett tema eller én kilde, og klienten gjør et arbeid databasen burde gjort. Kildesiden er den andre forekomsten og den første som joiner framfor bare å filtrere | Et `api.published_topics`-view og en projeksjon som gir påstandsformuleringen sammen med evidensraden — eller en slug-kolonne i katalogen (posten over) — slik at oppslaget skjer på serversiden, som på legemiddelsiden. Utløses i praksis av den første utvidelsen av pilotinnholdet (§33) |
 | `knowledge.sources.superseded_by_source_id` er ikke i api-kontrakten | Kildestatusen `superseded` betyr per migrasjon 003 at en *bestemt* nyere kilde er registrert: kolonnen er NOT NULL hvis og bare hvis statusen er den, og de to forutsetter hverandre. Pekeren er verken i `api.published_claim_evidence` eller i `src/types/api.ts`, så klienten kan ikke følge den. Kildesiden sier derfor eksplisitt at etterfølgeren er registrert uten å kunne navngis (§74.16 punkt 5); uten den setningen ville etiketten «Erstattet av en nyere kilde» vært en halv sannhet, og fravær av et navn ville sett ut som fravær av en etterfølger. Prisen er at en kliniker ikke kan gå fra en utdatert kilde til den som erstattet den | Migrasjonen som utvider viewet. Den må projisere etterfølgerens *tittel* og ikke bare dens `uuid` — en identitet klienten ikke kan slå opp, er ikke et svar — og ta stilling til hva som vises når etterfølgeren ikke selv er lesbar for klientrollene, siden RLS bare gir tilgang til kilder som ligger under en publisert påstand |
 | Katalogstatusen på et virkestoff vises ikke i klinikerflaten | `api.published_drugs.status` bærer `active`, `historical` eller `withdrawn`, men beskriver Antideps forvaltning av virkestoffet og ikke markedsstatus i Norge — det står eksplisitt i kommentaren på `catalog.drug_status`. «Aktiv» ved siden av et virkestoffnavn ville blitt lest som det siste, og §58 holder workflow-status utenfor klinikerflaten, så verdien er utelatt. Prisen er at en kliniker ikke kan se at Antidep ikke lenger vedlikeholder et virkestoff det står publiserte påstander om | Det første virkestoffet med publiserte påstander og status ulik `active`. Da må vokabularet lukkes og få kjøretidskontroll (§74.12 punkt 3), og ordlyden må navngi Antidep som subjekt framfor å se ut som en markedsstatus |
+| Kompetansekravet for redaktørrollen er ikke definert, og redaktøren er utpekt av seg selv | `ANTIDEP_CONSTITUTION.md` §12 krever en «navngitt kvalifisert redaktør», men ingenting definerer hva som gjør noen kvalifisert. `CONTENT_GOVERNANCE.md` §11 legger nettopp det til Clinical Lead — «definere hvilke kompetansekrav som gjelder for reviewer-scope» — og Antidep har ingen Clinical Lead. Migrasjon 005a registrerer derfor en redaktør hvis utpeking hviler på prosjekteierrollen, ikke på et kontrollert kompetansekrav, og som er utpekt av seg selv. Samme person er dessuten prosjekteier og eneste faglige godkjenner; §45 og §46 ber om at en slik profesjonell binding registreres, og modellen har ingen kolonne for det noe sted. `workflow.user_roles.grant_reason` er i dag det eneste feltet en kvalifikasjon kan skrives i, og det er fritekst på tildelingen og ikke på personen. §72 sitt krav om at høyrisikoinnhold reviewes av noen som ikke var hovedforfatter, er innfridd bare fordi forfatteren er en KI-aktør | Beslutningen om hvem som er Clinical Lead, og migrasjonen som tildeler `reviewer`-rollen: den må skrive kvalifikasjonen inn i `grant_reason` uansett, og er dermed første sted hullet blir konkret. Skal lukkes før den første publiseringen av klinisk innhold — en godkjenning gitt under et udefinert kompetansekrav er ikke etterprøvbar (§14) |
 
 ### 74.8 Gjeld innfridd i korreksjonsmigrasjon 006a
 
@@ -2521,6 +2558,124 @@ enkeltformål.
 (sammenligning), men det som blokkerer er fortsatt ikke kode: Milepæl B mangler én navngitt
 kvalifisert redaktør (§74.4), og viewene svarer `[]` til den finnes. Den mest verdifulle
 strukturelle oppryddingen er fortsatt kolonnekontrollen av api-kontrakten (§74.7).
+
+Redaktøren ble navngitt og registrert i neste PR; se §74.17. Setningen over arvet samtidig
+feilen §74.4 nå retter: én redaktør var aldri alt som gjenstod for Milepæl B, og viewene
+svarer fortsatt `[]`.
+
+### 74.17 Hva registreringen av redaktøren innførte
+
+`db: register the named qualified editor` er migrasjon 005a. Den utvider aktørregisteret fra
+migrasjon 005 (§20), står utenfor den planlagte rekken i §18-§27 og får derfor en bokstav,
+etter samme konvensjon som 006a og 007a. Den legger ingen ny avhengighet til, oppretter ingen
+tabell, ingen enum-type og ingen funksjon. Den setter inn én rad.
+
+**Beslutningen den registrerer.** §74.4 slo fast at neste skritt mot Milepæl B ikke var en
+kodeoppgave, men en governance-beslutning: hvem er den navngitte kvalifiserte redaktøren
+`ANTIDEP_CONSTITUTION.md` §12 krever? Prosjekteieren, Peder Holman, har utpekt seg selv.
+Migrasjonen gjør den beslutningen til en kanonisk rad. En navngitt redaktør som bare finnes i
+prosa, er ikke navngitt på en måte databasen kan bruke: aktørraden er festepunktet for all
+attribusjon (`DATABASE_ARCHITECTURE.md` §32).
+
+**Fem beslutninger, i den rekkefølgen de betyr noe:**
+
+1. **Aktøren registreres uten brukerkonto, og det er formen modellen er bygget for.**
+   `provenance.actors.auth_user_id` har en ekte fremmednøkkel til `auth.users`, og den kontoen
+   er en reell Supabase-konto som må opprettes i autentiseringslaget — ikke i en migrasjon. En
+   rad med en oppdiktet `uuid` ville enten feilet på fremmednøkkelen eller pekt på en konto
+   ingen eier. Kolonnen står derfor `NULL`, og betyr nøyaktig det migrasjon 005 sier: aktøren
+   har ikke en konto i dette systemet, ikke at aktøren er ukjent. Dette er ingen omgåelse:
+   `provenance.freeze_actor_identity()` fryser aktøridentiteten, men gjør ett eksplisitt
+   unntak — `auth_user_id` kan settes én gang fra `NULL`, «fordi en menneskelig aktør kan bli
+   registrert før kontoen finnes». Unntaket er håndhevet og testet i begge retninger i
+   `200_workflow_immutability_test.sql`: koblingen kan settes én gang, og kan verken fjernes
+   eller flyttes etterpå. Den senere koblingen er dermed ikke en antakelse denne migrasjonen
+   hviler på uten dekning.
+
+2. **Raden åpner ikke publiseringsgaten, og det er prøvd framfor påstått.** En navngitt
+   redaktør i basen leses lett som at godkjenningsveien nå står åpen. Den gjør ikke det, og å
+   telle at `workflow.review_decisions` fortsatt er tom ville vært et svakt uttrykk for det —
+   tabellen er tom av mange grunner. `220_provenance_seed_test.sql` forsøker derfor faktisk å
+   registrere en publiseringsgodkjenning i redaktørens navn, og krever at databasen avviser
+   den med `insufficient_privilege` og med den meldingen
+   `workflow.enforce_reviewer_qualification()` gir. Assertionen kan ikke bli stille sann:
+   slår oppslaget på `actor_key` feil, gir spørringen null rader, `insert`-en lykkes med å
+   sette inn ingenting, og `throws_ok` feiler fordi ingen exception ble kastet. Både feilkoden
+   og meldingen kontrolleres, slik at en feil på et tidligere lag ikke kan telle som riktig
+   avvisning.
+
+3. **Selvtildeling er valgt, og skrevet ned før kolonnen krevde en verdi.**
+   `workflow.user_roles.granted_by_actor_id` er `NOT NULL` og peker på en aktør. Når
+   `reviewer`-rollen en gang tildeles, finnes bare to muligheter: enten tildeler en KI-aktør
+   et menneske faglig godkjenningsrett, eller så tildeler redaktørens egen aktør rollen til
+   seg selv. Ingen `CHECK` forbyr selvtildeling, så valget ville ellers blitt tatt i stillhet
+   av den som fylte ut kolonnen. Beslutningen er selvtildeling: autoriteten kommer utenfra
+   systemet, prosjekteieren *er* den kvalifiserte redaktøren, og det finnes ingen høyere
+   menneskelig instans i basen. Alternativet ville gjort en KI-prosess til opphavet til et
+   menneskes faglige godkjenningsrett, stikk i strid med §10 og §12. Prisen er at
+   selvtildelingen står usikret av en `CHECK`, og den må derfor stå eksplisitt i
+   `grant_reason` på tildelingsraden.
+
+4. **Beskrivelsen sier hva aktøren er, ikke hva som er kontrollert.** `description` er
+   `NOT NULL` og skal være konkret nok til å være etterprøvbar. Den sier at utpekingen hviler
+   på prosjekteierrollen og ikke på et fastsatt kompetansekrav, og at raden ikke i seg selv
+   gir godkjenningsrett — den leses fra brukerkonto og `workflow.user_roles`, ikke herfra.
+   Uten den siste setningen ville `display_name` «Peder Holman» ved siden av ordet «redaktør»
+   kunnet leses som en fullmakt raden ikke gir. Beskrivelsen er bevisst utenfor
+   identitetsvernet og kan endres når kompetansekravene finnes; den skal ikke kunne leses som
+   en kvalifikasjon Antidep har kontrollert.
+
+5. **Redaktøren har ikke forfattet noe, og det er en forutsetning.**
+   `review_decisions_separate_actor_check` nekter en godkjenning der godkjenner og forfatter er
+   samme aktør (§10, §12). Stod redaktøren senere som opphav til en revisjon, kunne
+   vedkommende ikke godkjent den. Testen påstår derfor at ingen kunnskapsobjekt er attribuert
+   til en menneskelig aktør, skrevet over aktørtypen og ikke over `actor_key`, slik at
+   assertionen ikke kan bli stille sann av en feilstavet nøkkel.
+
+**Seedtesten er justert, ikke omgått.** `220_provenance_seed_test.sql` sa selv at assertionene
+«skal justeres av migrasjonen som registrerer en reell godkjenning og en reell publisering,
+ikke omgås». Migrasjon 005a er første gang det skjer. Assertionen om at aktørregisteret
+inneholder nøyaktig de to KI-rollene er utvidet til tre rader og bærer nå `display_name` også —
+§12 krever en *navngitt* redaktør, og navnet er feltet som bærer navngivingen; uten det ville
+testen godtatt en anonym menneskelig aktør. Assertionen om at det finnes null menneskelige
+aktører er byttet med en som krever nøyaktig én, og at det er den navngitte. Filen gikk fra 14
+til 16 assertions, og databaselaget fra 1096 til 1098.
+
+**Én assertion ble strammet underveis.** Kravet om at hver aktør «forklarer konkret hva den er»
+var skrevet som «beskrivelsen er ikke tom eller `NULL`». Databasens `CHECK` krever bare 1-2000
+tegn, så en beskrivelse på ett tegn passerte begge. Migrasjon 005 sier hvorfor kolonnen finnes
+— «en aktørrad uten beskrivelse ville gjort attribusjonen til en etikett i stedet for en
+forklaring» — og en etikett er nettopp det en svært kort beskrivelse er. Assertionen har nå et
+lengdegulv, slik at den påstår det den sier den påstår.
+
+**Gjeld: én ny post.** Kompetansekravet for redaktørrollen er ikke definert, og redaktøren er
+utpekt av seg selv. §12 krever en «kvalifisert» redaktør uten å definere kvalifikasjonen;
+`CONTENT_GOVERNANCE.md` §11 legger den definisjonen til Clinical Lead, og Antidep har ingen.
+Samme person er prosjekteier og eneste faglige godkjenner, og modellen har ingen kolonne for
+den profesjonelle bindingen §45 og §46 ber om å registrere. Migrasjonen navngir personen
+beslutningen allerede har pekt ut; den lukker ikke hullet, og skjuler det ikke heller.
+
+**Hva som ble verifisert.** Migrasjonene er kjørt fra bunnen av og hele pgTAP-suiten er kjørt
+mot en lokal PostgreSQL 16 med pgTAP — Docker-registryene svarer 403 gjennom egress-proxyen, så
+`npx supabase start` er ikke tilgjengelig; CI kjører den ekte stacken. Grunnlinjen før endringen
+var 1096 passerende assertions, etter endringen 1098, uten `not ok` og uten `ERROR`.
+`npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run test`, `npm run build` og
+`./scripts/verify-counts.sh` er kjørt og passerer. Ti mutasjoner er innført én om gangen; ni
+fanges. Den som overlever er lengdegulvet i assertionen over: senkes tallet, blir assertionen
+svakere, og ingen test beskytter en annen tests terskelverdi. Mutasjonen som faktisk betyr noe
+— en beskrivelse redusert til en etikett i migrasjonen — fanges.
+
+**Den viktigste mutasjonen traff forutsetningen, ikke implementasjonen.** §74.16 slo fast at
+sju PR-er på rad hadde fått funn mutasjonstesting ikke kunne finne, hver gang fordi mutasjonene
+traff koden og ikke antakelsen den hvilte på. Her ble antakelsen mutert direkte: kravet om
+brukerkonto i `workflow.enforce_reviewer_qualification()` ble slått av i migrasjon 005, og den
+nye negative testen feilet. Den påstanden er dermed ikke lånt fra gaten — den er kontrollert
+mot den.
+
+**Hva som gjenstår.** Milepæl B mangler fire ting, ikke én (§74.4): brukerkonto med
+`reviewer`-rolle, ekstraksjonsverifikasjonene, claim-verifikasjonene og godkjenningen. Neste
+vertikale slice er §31 (sammenligning). Den mest verdifulle strukturelle oppryddingen er
+fortsatt kolonnekontrollen av api-kontrakten (§74.7).
 
 ---
 
