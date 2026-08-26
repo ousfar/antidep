@@ -2776,17 +2776,40 @@ fremmednøkkel til `auth.users`. Tre veier, og ingen av dem er åpenbart riktig:
 
 | Vei | Hva den gjør | Prisen |
 |---|---|---|
-| a | Gjør koblingen betinget av at kontoen finnes, slik at migrasjonen no-op-er i miljøer uten den | Migrasjonen gjør forskjellige ting i forskjellige miljøer, og en rolletildeling som stille uteblir er nettopp den autorisasjonspåstanden uten dekning migrasjon 005 nektet å seede |
-| b | Seeder en tilsvarende konto i `supabase/seed.sql` for lokalt og CI | `seed.sql` er reservert for rent lokal demodata (`supabase/README.md`), og en brukerkonto med fast `uuid` er noe mer enn det |
+| a | Gjør koblingen betinget av at kontoen finnes, slik at migrasjonen ikke skriver raden i miljøer uten den | Migrasjonen gjør forskjellige ting i forskjellige miljøer, og CI kjører aldri den grenen som faktisk kjører i produksjon |
+| b | Seeder en tilsvarende konto i `supabase/seed.sql` for lokalt og CI | **Virker ikke** — se under |
 | c | Holder kobling og rolletildeling utenfor migrasjonene, som en operasjonell engangshandling mot produksjon | Bryter §54 sitt krav om at durable tilstandsendringer ligger i versjonerte migrasjoner, og gjør rolletildelingen usporbar i repoet |
 
-Valget er en arkitekturbeslutning og ikke en detalj, og det skal tas av prosjekteieren framfor
-å bli tatt i stillhet av den som fyller ut migrasjonen — samme resonnement som §74.17 punkt 3
-brukte om selvtildeling. Selve innholdet i migrasjonen er ellers avklart: koblingen kan settes
-nøyaktig én gang fra `NULL` (§74.17 punkt 1), granten er en selvtildeling som skal stå
-eksplisitt i `grant_reason` (§74.17 punkt 3), og `220_provenance_seed_test.sql` må justeres —
-den negative testen som krever at gaten avviser en godkjenning fordi aktøren mangler
-brukerkonto, skal erstattes av en som påstår den *nye* avvisningsgrunnen, ikke slettes.
+**Vei b er ikke en vei, og det er kontrollert mot kilden.** `supabase/config.toml` sier det
+selv om `[db.seed]`: «If enabled, seeds the database after migrations during a db reset.»
+Seedfilen kjøres *etter* migrasjonene. En migrasjon 005b som skriver
+`workflow.user_roles.user_id`, ville dermed kjørt før kontoen fantes, og feilet på
+fremmednøkkelen til `auth.users` uansett hva `seed.sql` inneholder. Alternativet var ført opp
+i hand-offen som ett av tre likeverdige valg; det er det ikke. Skulle kontoen finnes før
+migrasjonene er ferdige, måtte den vært opprettet av en *migrasjon* som skriver til
+`auth.users` — en kobling til Supabases eget schema som bryter på neste plattformoppgradering,
+og som uansett gjør migrasjonen miljøavhengig, altså vei a med et ekstra ledd.
+
+**Valget er delegert, og retningen er vei a.** Prosjekteieren har overlatt avgjørelsen til
+denne sesjonen. Det er en teknisk avgjørelse om hvordan en migrasjon oppfører seg i CI, ikke
+governance-avgjørelsen om hvem redaktøren er — den ble tatt og registrert i §74.17, og er ikke
+rørt her. Begrunnelsen for a: en rad i `auth.users` er per definisjon miljøspesifikk tilstand,
+ikke schema. Kontoen kan ikke finnes i en fersk lokal stack, og en oppdiktet konto lokalt ville
+gjort at CI kontrollerte en fiksjon. Vei a er den eneste som holder rolletildelingen i en
+versjonert migrasjon (§54) *og* lar raden være fraværende der den skal være fraværende.
+
+Prisen i tabellen må da betales eksplisitt, ikke ties i hjel, og migrasjonens PR må gjøre to
+ting for å betale den: raden skal ikke stille utebli, men gi en synlig `notice` når kontoen
+mangler, og CI skal kontrollere *begge* grenene — den positive ved å opprette en konto inne i
+en transaksjon som rulles tilbake, slik testene allerede gjør for alt annet, og den negative
+ved å påstå at ingen rolle er tildelt når kontoen ikke finnes. Uten den positive testen ville
+produksjonsveien vært ukjørt, og det er nøyaktig innvendingen mot vei a.
+
+Selve innholdet i migrasjonen er ellers avklart: koblingen kan settes nøyaktig én gang fra
+`NULL` (§74.17 punkt 1), granten er en selvtildeling som skal stå eksplisitt i `grant_reason`
+(§74.17 punkt 3), og `220_provenance_seed_test.sql` må justeres — den negative testen som
+krever at gaten avviser en godkjenning fordi aktøren mangler brukerkonto, skal erstattes av en
+som påstår den *nye* avvisningsgrunnen, ikke slettes.
 
 **Lærdom: et tall som bare finnes i en hand-off, er utenfor enhver vaktpost.** Hand-offen inn
 til §74.17 oppga 56 kildefiler i `src/`. Det korrekte tallet var 57, og hadde vært det siden
@@ -2803,6 +2826,15 @@ eneste påstanden i det punktet som *kan* kontrolleres maskinelt: verdien i `con
 kildekode, mens dashboardets tilstand ikke er det. Kontrollen leser den påståtte verdien ut av
 planen framfor å ha den innbakt, slik at en omformulering gir «fant ingen påstand» og ikke en
 stille godkjenning — samme form som de øvrige kontrollene i filen.
+
+**Hva som gjenstår.** Milepæl B mangler fortsatt fire ting (§74.4). Sporet etter denne
+oppdateringen er ikke rollegranten, men kolonnekontrollen av api-kontrakten (§74.7): den er
+den mest verdifulle rent strukturelle oppryddingen, den er uavhengig av alt som krever et
+hostet prosjekt eller en brukerkonto, og innsatsen vokser for hver side som legges til over de
+samme uprøvde kolonnepåstandene. Ett funn sparer den neste for en blindvei:
+`information_schema.columns` rapporterer `is_nullable = 'YES'` for alle kolonner i et view —
+PostgreSQL gjør ingen nullbarhetsanalyse gjennom views. Navn og typer kan leses derfra;
+nullbarhet kan ikke, og må håndheves på en annen måte som må navngis eksplisitt.
 
 ---
 
