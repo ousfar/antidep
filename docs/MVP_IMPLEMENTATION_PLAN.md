@@ -1330,6 +1330,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       feat: add the claim evidence view                       (#25)  merget   ingen migrasjon
       feat: add the source view                               (#26)  merget   ingen migrasjon
       db: register the named qualified editor                 (#27)  merget   migrasjon 005a
+      docs: correct the record of the hosted Supabase project (#28)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
