@@ -1,0 +1,128 @@
+-- ============================================================================
+-- Migrasjon 005a — den navngitte kvalifiserte redaktøren registreres som aktør
+--
+-- Utvider aktørregisteret fra migrasjon 005 og står utenfor den planlagte
+-- rekken i MVP_IMPLEMENTATION_PLAN.md §18-§27, og får derfor en bokstav etter
+-- samme konvensjon som 006a og 007a. Nummeret 009 er fortsatt reservert for
+-- DrugProduct- og importfundamentet (§26).
+--
+-- ----------------------------------------------------------------------------
+-- Hvorfor denne migrasjonen finnes
+--
+-- MVP_IMPLEMENTATION_PLAN.md §74.4 slo fast at neste skritt mot Milepæl B ikke
+-- var en kodeoppgave, men en governance-beslutning: hvem er den navngitte
+-- kvalifiserte redaktøren ANTIDEP_CONSTITUTION.md §12 krever? Beslutningen er
+-- nå tatt. Prosjekteieren, Peder Holman, har utpekt seg selv.
+--
+-- Migrasjonen registrerer den beslutningen som en kanonisk rad framfor å la den
+-- bli stående som en setning i et plandokument. Aktørraden er festepunktet for
+-- all attribusjon (DATABASE_ARCHITECTURE.md §32), og en navngitt redaktør som
+-- bare finnes i prosa, er ikke navngitt på en måte databasen kan bruke.
+--
+-- ----------------------------------------------------------------------------
+-- Hva migrasjonen bevisst IKKE gjør
+--
+-- Den registrerer én aktørrad. Den knytter ingen brukerkonto, tildeler ingen
+-- rolle, registrerer ingen verifikasjon, ingen reviewbeslutning og ingen
+-- publisering.
+--
+--   Brukerkonto. provenance.actors.auth_user_id har en ekte fremmednøkkel til
+--   auth.users, og den kontoen er en reell Supabase-konto som må opprettes i
+--   autentiseringslaget, ikke i en migrasjon. En rad her med en oppdiktet uuid
+--   ville enten feilet på fremmednøkkelen eller — verre — pekt på en konto
+--   ingen eier. Kolonnen står derfor NULL, og det betyr nøyaktig det
+--   kolonnekommentaren i migrasjon 005 sier: aktøren har ikke en konto i dette
+--   systemet, ikke at aktøren er ukjent.
+--
+--   Dette er ikke en omgåelse av datamodellen; det er formen modellen er bygget
+--   for. provenance.freeze_actor_identity() fryser aktøridentiteten, men gjør
+--   ett eksplisitt unntak: auth_user_id kan settes én gang fra NULL, «fordi en
+--   menneskelig aktør kan bli registrert før kontoen finnes». Unntaket er
+--   håndhevet og testet i begge retninger i 200_workflow_immutability_test.sql
+--   — koblingen kan settes én gang, og kan verken fjernes eller flyttes
+--   etterpå. Den senere koblingen er dermed ikke en antakelse denne
+--   migrasjonen hviler på uten dekning.
+--
+--   Rolletildeling. workflow.user_roles.user_id er NOT NULL med fremmednøkkel
+--   til auth.users. Uten kontoen finnes det ingen rad å tildele rollen til, og
+--   en tildeling til en oppdiktet konto ville vært en autorisasjonspåstand uten
+--   dekning — samme begrunnelse som migrasjon 005 ga for ikke å seede
+--   tildelinger i det hele tatt.
+--
+--   Verifikasjon og reviewbeslutning. Begge er utførte handlinger
+--   (ANTIDEP_CONSTITUTION.md §11, §12). Ingen slik handling har funnet sted, og
+--   å registrere den ville vært den fiktive kontrollen og den fiktive
+--   godkjenningen konstitusjonen forbyr.
+--
+-- ----------------------------------------------------------------------------
+-- Raden åpner ikke publiseringsgaten, og det er håndhevet
+--
+-- En navngitt redaktør i basen kan lett leses som at godkjenningsveien nå står
+-- åpen. Den gjør ikke det. Publiseringsgaten i migrasjon 006 stiller sju krav
+-- som ikke er innfridd, og denne migrasjonen berører ingen av dem:
+--
+--   G4/G5    hvert lenket evidensfunn har en registrert ekstraksjonsverifikasjon,
+--            og den gjeldende bekrefter funnet
+--   G8/G9    revisjonen har en registrert claim-verifikasjon, og den gjeldende
+--            sier 'verified'
+--   G11/G12  menneskelig godkjenning finnes og er den gjeldende beslutningen
+--   G13      evidensgrunnlaget er det samme som godkjenningen ble gitt for
+--
+-- G8 hører med og er lett å utelate: G9 leser utfallet på den gjeldende
+-- claim-verifikasjonen, mens G8 er kravet om at det finnes en i det hele tatt.
+-- De to feiler på hver sin måte når workflow.claim_verifications er tom, og en
+-- liste som bare nevner G9 undervurderer hvor mye som gjenstår.
+--
+-- Forsøker noen likevel å registrere en reviewbeslutning i denne aktørens navn,
+-- avviser workflow.enforce_reviewer_qualification() den med
+-- insufficient_privilege, fordi aktøren ikke er knyttet til en brukerkonto.
+-- 220_provenance_seed_test.sql påstår nettopp det, slik at «raden åpnet
+-- ingenting» er en maskinelt kontrollert påstand og ikke en kommentar.
+--
+-- ----------------------------------------------------------------------------
+-- Beslutningen om granted_by_actor_id, tatt nå og skrevet ned nå
+--
+-- workflow.user_roles.granted_by_actor_id er NOT NULL og peker på en aktør.
+-- Når reviewer-rollen en gang tildeles, er det bare to muligheter: enten
+-- tildeler en KI-aktør et menneske faglig godkjenningsrett, eller så tildeler
+-- Peder Holmans egen aktør rollen til seg selv. Ingen CHECK forbyr
+-- selvtildeling, så valget ville ellers blitt tatt i stillhet av den som fylte
+-- ut kolonnen.
+--
+-- Beslutningen er selvtildeling. Autoriteten kommer utenfra systemet:
+-- prosjekteieren er den kvalifiserte redaktøren, og det finnes ingen høyere
+-- menneskelig instans i basen. Alternativet ville gjort en KI-prosess til
+-- opphavet til et menneskes faglige godkjenningsrett, og det går stikk motsatt
+-- vei av ANTIDEP_CONSTITUTION.md §10 og §12. Prisen er at selvtildelingen står
+-- usikret av en CHECK, og den må derfor stå eksplisitt i grant_reason på
+-- tildelingsraden.
+--
+-- ----------------------------------------------------------------------------
+-- Governance-hullet denne raden gjør synlig, og ikke lukker
+--
+-- ANTIDEP_CONSTITUTION.md §12 krever en «navngitt kvalifisert redaktør», men
+-- definerer ikke hva som gjør noen kvalifisert. CONTENT_GOVERNANCE.md §11
+-- legger nettopp det til Clinical Lead — «definere hvilke kompetansekrav som
+-- gjelder for reviewer-scope» — og Antidep har ingen Clinical Lead. Utpekingen
+-- hviler derfor på prosjekteierrollen og ikke på et fastsatt kompetansekrav,
+-- og redaktøren er utpekt av seg selv.
+--
+-- Det er en reell governance-mangel og ikke en formalitet: den samme personen
+-- er prosjekteier og eneste faglige godkjenner, hvilket CONTENT_GOVERNANCE.md
+-- §45 og §46 ber om å registrere som en profesjonell binding. Mangelen er
+-- registrert som gjeld i MVP_IMPLEMENTATION_PLAN.md §74.7, og skal lukkes før
+-- den første publiseringen — ikke av denne migrasjonen, som bare navngir den
+-- personen beslutningen allerede har pekt ut.
+--
+-- Beskrivelsen på raden sier dette selv. Beskrivelsen er ikke frosset av
+-- freeze_actor_identity() og kan endres når kompetansekravene finnes, men den
+-- skal ikke kunne leses som en kvalifikasjon Antidep har kontrollert.
+-- ============================================================================
+
+insert into provenance.actors (actor_type, actor_key, display_name, description)
+values (
+  'human',
+  'human:peder-holman',
+  'Peder Holman',
+  'Prosjekteier for Antidep. Har utpekt seg selv til den navngitte kvalifiserte redaktøren ANTIDEP_CONSTITUTION.md §12 krever for innhold som kan påvirke behandling. Utpekingen hviler på prosjekteierrollen og ikke på et fastsatt kompetansekrav: Antidep har ennå ingen Clinical Lead til å definere kompetansekravene for reviewer-scope (CONTENT_GOVERNANCE.md §11). Aktøren er registrert for at faglige beslutninger skal kunne attribueres til en navngitt person framfor til en KI-prosess. Raden gir ikke i seg selv godkjenningsrett: den leses av workflow.enforce_reviewer_qualification() fra brukerkonto og workflow.user_roles, ikke herfra.'
+);

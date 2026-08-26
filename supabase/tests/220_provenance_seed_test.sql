@@ -1,41 +1,68 @@
--- Migrasjon 005 — seedomfang for aktører, og hva som bevisst ikke er seedet.
+-- Migrasjon 005 og 005a — seedomfang for aktører, og hva som bevisst ikke er
+-- seedet.
 --
 -- MVP_IMPLEMENTATION_PLAN.md §29 og ANTIDEP_CONSTITUTION.md §11 og §12:
--- migrasjonen registrerer aktørene som faktisk produserte de eksisterende
--- radene, og ingenting mer. Verifikasjoner og reviewbeslutninger er utførte
--- handlinger, og ingen slik handling har funnet sted; en seedet «verified» eller
--- en seedet godkjenning ville vært nøyaktig den fiktive kontrollen og den
--- fiktive godkjenningen konstitusjonen forbyr.
+-- migrasjonene registrerer aktørene som faktisk produserte de eksisterende
+-- radene, og den navngitte kvalifiserte redaktøren §12 krever — og ingenting
+-- mer. Verifikasjoner og reviewbeslutninger er utførte handlinger, og ingen
+-- slik handling har funnet sted; en seedet «verified» eller en seedet
+-- godkjenning ville vært nøyaktig den fiktive kontrollen og den fiktive
+-- godkjenningen konstitusjonen forbyr.
 --
 -- Testen er derfor like mye en test av hva som ikke finnes som av hva som
 -- finnes. Den skal justeres av den migrasjonen som faktisk utfører en kontroll
--- eller registrerer en reell godkjenning, ikke omgås.
+-- eller registrerer en reell godkjenning, ikke omgås. Migrasjon 005a er første
+-- gang det har skjedd: den registrerte redaktøren som aktør, og assertionene om
+-- aktørregisteret er justert til å påstå den nye sannheten framfor å bli myket
+-- opp.
+--
+-- Den viktigste nye assertionen er negativ. En navngitt redaktør i basen kan
+-- lett leses som at godkjenningsveien nå står åpen, og derfor holder det ikke å
+-- telle at reviewbeslutningstabellen fortsatt er tom: testen forsøker faktisk å
+-- registrere en godkjenning i redaktørens navn og krever at databasen avviser
+-- den.
 begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(14);
+select plan(16);
 
 -- ---------------------------------------------------------------------------
--- Aktørene som faktisk produserte de eksisterende radene
+-- Aktørene som faktisk produserte de eksisterende radene, og redaktøren
 -- ---------------------------------------------------------------------------
+--
+-- display_name er med i assertionen fordi det er selve poenget med migrasjon
+-- 005a: ANTIDEP_CONSTITUTION.md §12 krever en *navngitt* kvalifisert redaktør,
+-- og navnet er det feltet som bærer navngivingen. Uten det ville testen
+-- godtatt en anonym menneskelig aktør.
 select results_eq(
   $$
-    select actor_key, actor_type::text, agent_role::text
+    select actor_key, actor_type::text, agent_role::text, display_name
     from provenance.actors
     order by actor_key
   $$,
-  $$values ('agent:claim-synthesis', 'agent', 'claim_synthesis'),
-           ('agent:evidence-extraction', 'agent', 'evidence_extraction')$$,
-  'aktørregisteret inneholder nøyaktig de to KI-rollene som produserte migrasjon 003 og 004'
+  $$values ('agent:claim-synthesis', 'agent', 'claim_synthesis', 'Antidep synteseagent'),
+           ('agent:evidence-extraction', 'agent', 'evidence_extraction', 'Antidep ekstraksjonsagent'),
+           ('human:peder-holman', 'human', null, 'Peder Holman')$$,
+  'aktørregisteret inneholder de to KI-rollene fra migrasjon 003 og 004, og den navngitte redaktøren fra 005a'
 );
+-- Lengdegulvet er ikke pynt. Databasens CHECK krever bare 1-2000 tegn, så en
+-- beskrivelse på ett tegn passerer den — og passerte også den tidligere
+-- assertionen her, som bare utelukket tom og NULL. Migrasjon 005 sier hvorfor
+-- kolonnen finnes: «en aktørrad uten beskrivelse ville gjort attribusjonen til
+-- en etikett i stedet for en forklaring». En etikett er nettopp det en svært
+-- kort beskrivelse er, så assertionen påstår det den sier den påstår.
 select is_empty(
-  $$select actor_key from provenance.actors where description = '' or description is null$$,
-  'begge aktørene forklarer konkret hva de er'
+  $$
+    select actor_key from provenance.actors
+    where description is null or length(description) < 80
+  $$,
+  'alle tre aktørene forklarer konkret hva de er, ikke bare med en etikett'
 );
-select is_empty(
-  $$select actor_key from provenance.actors where auth_user_id is not null$$,
-  'ingen aktør er knyttet til en brukerkonto; det finnes ingen brukere ennå'
+select results_eq(
+  $$select actor_key from provenance.actors where actor_type = 'human'$$,
+  $$values ('human:peder-holman')$$,
+  'det finnes nøyaktig én menneskelig aktør, og det er den navngitte redaktøren'
 );
 select is_empty(
   $$select actor_key from provenance.actors where retired_at is not null$$,
@@ -43,17 +70,55 @@ select is_empty(
 );
 
 -- ---------------------------------------------------------------------------
+-- Redaktøren er registrert, men ikke autorisert
+-- ---------------------------------------------------------------------------
+--
+-- provenance.actors.auth_user_id er nullbar med vilje: en menneskelig aktør kan
+-- registreres før brukerkontoen finnes, og koblingen kan settes én gang senere
+-- (provenance.freeze_actor_identity(), testet i 200). Migrasjon 005a bruker
+-- nettopp den formen, fordi kontoen er en reell Supabase-konto som ikke kan
+-- opprettes fra en migrasjon.
+select is_empty(
+  $$select actor_key from provenance.actors where auth_user_id is not null$$,
+  'ingen aktør er knyttet til en brukerkonto, heller ikke den nyregistrerte redaktøren'
+);
+
+-- Og dette er konsekvensen, prøvd framfor påstått: uten brukerkonto avviser
+-- workflow.enforce_reviewer_qualification() en godkjenning i redaktørens navn.
+--
+-- Assertionen kan ikke bli stille sann. Slår oppslaget på actor_key feil, gir
+-- select-en null rader, insert-en lykkes med å sette inn ingenting, og
+-- throws_ok feiler fordi ingen exception ble kastet. Både feilkoden og selve
+-- meldingen kontrolleres, slik at en feil på et tidligere lag — en NOT NULL,
+-- en CHECK eller en fremmednøkkel — ikke kan telle som riktig avvisning.
+select throws_ok(
+  $$
+    insert into workflow.review_decisions
+      (claim_revision_id, claim_revision_creator_actor_id,
+       review_type, decision, rationale,
+       reviewer_actor_id, reviewer_actor_type, decided_at)
+    select r.id, r.created_by_actor_id,
+           'publication_approval', 'approved',
+           'Forsøk på godkjenning fra en redaktør uten brukerkonto.',
+           a.id, 'human', now()
+    from knowledge.claim_revisions r
+    cross join provenance.actors a
+    where a.actor_key = 'human:peder-holman'
+    order by r.id
+    limit 1
+  $$,
+  '42501',
+  'Reviewaktøren er ikke knyttet til en brukerkonto og kan ikke registrere en faglig beslutning.',
+  'den registrerte redaktøren kan ikke godkjenne noe ennå; aktørraden alene åpner ikke publiseringsgaten'
+);
+
+-- ---------------------------------------------------------------------------
 -- Hva som bevisst ikke er seedet (ANTIDEP_CONSTITUTION.md §11, §12)
 -- ---------------------------------------------------------------------------
 select is(
-  (select count(*) from provenance.actors where actor_type = 'human'),
-  0::bigint,
-  'det finnes ingen menneskelig aktør; ingen navngitt kvalifisert redaktør er registrert ennå'
-);
-select is(
   (select count(*) from workflow.user_roles),
   0::bigint,
-  'ingen rolletildeling er seedet; det finnes ingen brukerkontoer å tildele til'
+  'ingen rolletildeling er seedet; workflow.user_roles.user_id krever en brukerkonto, og ingen finnes'
 );
 select is(
   (select count(*) from workflow.evidence_verifications),
@@ -75,10 +140,12 @@ select is(
 --
 -- Migrasjon 006 opprettet publiseringsgaten, og den endrer ikke dette bildet.
 -- Den kan ikke: publisering av en evidenssyntese krever en godkjenning fra en
--- navngitt kvalifisert redaktør, og det finnes fortsatt ingen. Gaten leverer et
--- bevis på at den nekter, ikke en publisert påstand, og disse tre assertionene
--- er det maskinelle uttrykket for det. De skal justeres av migrasjonen som
--- registrerer en reell godkjenning og en reell publisering, ikke omgås.
+-- navngitt kvalifisert redaktør, og selv om redaktøren nå er navngitt, mangler
+-- både brukerkonto, rolletildeling, verifikasjon og beslutning. Gaten leverer
+-- et bevis på at den nekter, ikke en publisert påstand, og disse tre
+-- assertionene er det maskinelle uttrykket for det. De skal justeres av
+-- migrasjonen som registrerer en reell godkjenning og en reell publisering,
+-- ikke omgås.
 select is(
   (select count(*) from knowledge.claims where current_published_revision_id is not null),
   0::bigint,
@@ -136,6 +203,42 @@ select is_empty(
     where t.wrong_rows > 0
   $$,
   'påstandslaget er i sin helhet attribuert til synteserollen som produserte det i migrasjon 004'
+);
+
+-- Redaktøren har ikke forfattet noe, og det er en forutsetning og ikke en
+-- tilfeldighet: workflow.review_decisions_separate_actor_check nekter en
+-- godkjenning der godkjenner og forfatter er samme aktør
+-- (ANTIDEP_CONSTITUTION.md §10, §12). Ville redaktøren senere stått som
+-- opphavet til en revisjon, kunne vedkommende ikke godkjent den.
+--
+-- Assertionen er skrevet over aktørtypen og ikke over actor_key, slik at den
+-- ikke kan bli stille sann av en feilstavet nøkkel. At det i det hele tatt
+-- finnes en menneskelig aktør å treffe, er påstått lenger oppe i filen.
+select is(
+  (select count(*)
+   from (
+     select c.id from knowledge.claims c
+       join provenance.actors a on a.id = c.created_by_actor_id
+       where a.actor_type = 'human'
+     union all
+     select r.id from knowledge.claim_revisions r
+       join provenance.actors a on a.id = r.created_by_actor_id
+       where a.actor_type = 'human'
+     union all
+     select l.id from knowledge.claim_evidence_links l
+       join provenance.actors a on a.id = l.created_by_actor_id
+       where a.actor_type = 'human'
+     union all
+     select ea.id from knowledge.evidence_assessments ea
+       join provenance.actors a on a.id = ea.created_by_actor_id
+       where a.actor_type = 'human'
+     union all
+     select e.id from knowledge.evidence_items e
+       join provenance.actors a on a.id = e.created_by_actor_id
+       where a.actor_type = 'human'
+   ) t),
+  0::bigint,
+  'ingen kunnskapsobjekt er attribuert til en menneskelig aktør; redaktøren er ikke forfatter av noe vedkommende senere skal kunne godkjenne'
 );
 
 select * from finish();

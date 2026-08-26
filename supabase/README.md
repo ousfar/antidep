@@ -20,13 +20,15 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
   - 008 `audit.events` og de to auditskriverne over publisering og rolleforvaltning
   - 007a `published_at` og `last_reviewed_at` i `api.published_claims`, med
     godkjenningstidspunktet frosset på publiseringshendelsen
+  - 005a den navngitte kvalifiserte redaktøren som menneskelig aktør, uten brukerkonto
+    og uten rolletildeling
 
   Nummereringen følger planlagt innhold i `docs/MVP_IMPLEMENTATION_PLAN.md` §18-§27, ikke
   filrekkefølge. Migrasjoner utenfor den planlagte rekken får en bokstav, slik at
   «migrasjon 007 — API-lesemodell» (§24) fortsatt betyr det samme i plan, migrasjoner og
-  tester. Filrekkefølgen er derfor 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a:
-  007a er skrevet etter 008, men utvider api-lesemodellen, og nummeret 009 er reservert for
-  importfundamentet (§26).
+  tester. Filrekkefølgen er derfor 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a:
+  007a er skrevet etter 008, men utvider api-lesemodellen, 005a er skrevet sist, men utvider
+  aktørregisteret fra 005, og nummeret 009 er reservert for importfundamentet (§26).
 
 - `tests/` — pgTAP-tester som kjøres med `npm run db:test`.
 - `seed.sql` — kun lokal demodata. Kontrollert vokabular og pilotdata som produksjonen
