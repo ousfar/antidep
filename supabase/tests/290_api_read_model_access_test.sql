@@ -39,6 +39,11 @@ grant select on fixture to anon, authenticated;
 
 -- Uttømmende inventar. Et nytt objekt i api er en utvidelse av den offentlige
 -- kontrakten og skal ikke kunne gli inn uten at denne listen endres.
+--
+-- De to siste kom med migrasjon 007b og er ikke del av den publiserte
+-- lesemodellen denne filen ellers handler om: de projiserer kallerens egen
+-- aktør og egne rolletildelinger, og prøves i 360_caller_authorization_test.sql.
+-- De står her fordi inventaret er uttømmende — det er hele poenget med det.
 select set_eq(
   $$
     select c.relname || ':' || c.relkind::text
@@ -50,9 +55,11 @@ select set_eq(
   $$
     values ('published_drugs:v'),
            ('published_claims:v'),
-           ('published_claim_evidence:v')
+           ('published_claim_evidence:v'),
+           ('my_actor:v'),
+           ('my_roles:v')
   $$,
-  'api inneholder nøyaktig de tre viewene migrasjon 007 oppretter, og ingen tabeller'
+  'api inneholder nøyaktig de fem viewene migrasjon 007 og 007b oppretter, og ingen tabeller'
 );
 
 -- Lag 3: hvert view er lesbart for begge Data API-rollene, og bare lesbart.
@@ -83,15 +90,30 @@ select is_empty(
   'begge Data API-rollene kan lese alle tre viewene'
 );
 
--- Uttømmende kontrakt over hvilke kanoniske tabeller lesemodellen har åpnet.
+-- Uttømmende kontrakt over hvilke kanoniske tabeller viewene i api har åpnet.
 -- Den generelle regelen — aldri mer enn SELECT — står i 020 og 030; dette er
 -- listen over hvilke tabeller det gjelder, og den skal endres bevisst.
+--
+-- Både tabellvide og kolonnevise grants telles. Et oppslag mot pg_class.relacl
+-- alene ville ikke sett de tre tabellene som bare er åpnet på kolonnenivå —
+-- knowledge.publication_events fra migrasjon 007a, og de to fra 007b — og
+-- assertionen ville sagt «tretten» mens seksten var åpnet. Samme blindsone som
+-- has_table_privilege() har, og av samme grunn.
 select set_eq(
   $$
     select n.nspname || '.' || c.relname
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
     cross join lateral aclexplode(c.relacl) a
+    where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
+      and a.grantee::regrole::text in ('anon', 'authenticated')
+    union
+    select n.nspname || '.' || c.relname
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    join pg_attribute att
+      on att.attrelid = c.oid and att.attnum > 0 and not att.attisdropped
+    cross join lateral aclexplode(att.attacl) a
     where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
       and a.grantee::regrole::text in ('anon', 'authenticated')
   $$,
@@ -102,9 +124,11 @@ select set_eq(
            ('knowledge.claim_evidence_links'), ('knowledge.evidence_assessments'),
            ('knowledge.evidence_items'), ('knowledge.sources'),
            ('knowledge.source_identifiers'), ('knowledge.source_versions'),
-           ('workflow.review_decisions')
+           ('knowledge.publication_events'),
+           ('workflow.review_decisions'),
+           ('workflow.user_roles'), ('provenance.actors')
   $$,
-  'nøyaktig de tretten tabellene api-lesemodellen leser er åpnet for klientrollene'
+  'nøyaktig de seksten tabellene viewene i api leser er åpnet for klientrollene, tabellvidt eller på kolonnenivå'
 );
 
 -- Bare én tabell i workflow er åpnet, og bare fordi en tilbaketrukket ekstraksjon

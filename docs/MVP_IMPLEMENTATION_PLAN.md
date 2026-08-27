@@ -1333,7 +1333,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       docs: correct the record of the hosted Supabase project (#28)  merget   ingen migrasjon
       test: verify the api column contract                    (#29)  merget   ingen migrasjon
       docs: clarify collaboration and reporting rules         (#30)  merget   ingen migrasjon
-      db: authorize the named qualified editor                (#31)  åpen     migrasjon 005b
+      db: authorize the named qualified editor                (#31)  merget   migrasjon 005b
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1356,7 +1356,7 @@ med alt Antidep bruker den til (§74.16). **PR I er dermed ferdig, og med den Sl
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #29. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #31. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
 Raden for #30 føres her og ikke av #30 selv. Den PR-en endret bare `CLAUDE.md` og rørte
@@ -1378,11 +1378,12 @@ Den tiende filen er migrasjon 007a av samme grunn: den utvider api-lesemodellen 
 står utenfor den planlagte rekken, og nummeret 009 er reservert for DrugProduct- og
 importfundamentet (§26). Den ellevte filen er migrasjon 005a, som utvider aktørregisteret fra
 §20 og står utenfor rekken på nøyaktig samme måte. Det gjør også den tolvte, migrasjon
-005b, som fullfører det 005a bevisst lot stå åpent. Filrekkefølgen er dermed 001, 002, 003,
-004, 005, 006, 006a, 007, 008, 007a, 005a, 005b — sortert på tidsstempel, ikke på
-migrasjonsnummer, og de to siste filene bærer de to laveste bokstavnumrene.
+005b, som fullfører det 005a bevisst lot stå åpent, og den trettende, migrasjon 007b, som
+utvider api-lesemodellen fra §24 slik 007a gjorde. Filrekkefølgen er dermed 001, 002, 003,
+004, 005, 006, 006a, 007, 008, 007a, 005a, 005b, 007b — sortert på tidsstempel, ikke på
+migrasjonsnummer, og de tre siste filene bærer de tre laveste bokstavnumrene.
 
-Databaselaget teller nå 1136 pgTAP-assertions over 35 testfiler.
+Databaselaget teller nå 1182 pgTAP-assertions over 36 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1496,19 +1497,28 @@ en fersk lokal stack uten den kontoen, så migrasjonen kunne ikke skrives før d
 hva den skulle gjøre i miljøer der kontoen ikke finnes. Valget, med prisen på hver vei, står i
 §74.18; hvordan prisen faktisk ble betalt, står i §74.20.
 
+**Adminflyten er begynt, og den lukker ingen av de fire.** Migrasjon 007b åpner den
+autentiserte leseveien for «hvem er jeg, og hva har jeg lov til?» — kallerens egen aktørrad
+og egne gjeldende rolletildelinger, og ingenting mer (§74.21). Det er første steg i «manuell
+adminflyt», den ene leveransen §29 lister for Slice 1 og som ikke er bygget. Ingen av de sju
+gatekravene i tabellen over er berørt: migrasjonen skriver ingen verifikasjon, ingen
+reviewbeslutning og ingen publisering, og den tildeler ingen rettighet. Den gjør bare en
+rettighet som allerede finnes, lesbar for den som har den.
+
 ### 74.5 Beslutninger tatt før migrasjon 007 eksponerte verdier utad
 
 Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
 
 1. **Enum kontra oppslagstabell — utsatt, og gjort billigere å utsette.** Det finnes
-   38 enum-typer, fordelt på de tolv migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
-   007, 008, 007a, 005a og 005b — i filrekkefølge, ikke i nummerrekkefølge — med henholdsvis
-   1, 6, 11, 7, 10, 2, 0, 0, 1, 0, 0 og 0. Tallet er kontrollert mot
+   38 enum-typer, fordelt på de tretten migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
+   007, 008, 007a, 005a, 005b og 007b — i filrekkefølge, ikke i nummerrekkefølge — med
+   henholdsvis 1, 6, 11, 7, 10, 2, 0, 0, 1, 0, 0, 0 og 0. Tallet er kontrollert mot
    kilden (`grep -cE '^create type ' supabase/migrations/*.sql`) og mot databasen.
-   Alle tolv ledd er nå oppgitt eksplisitt framfor å la de siste hvile på restpåstanden i
+   Alle tretten ledd er nå oppgitt eksplisitt framfor å la de siste hvile på restpåstanden i
    `scripts/verify-counts.sh`; det er den formen vakten kontrollerer strengest. Verken
-   005a eller 005b legger til enum-typer: den ene registrerer én rad i et register som
-   allerede finnes, den andre knytter og tildeler.
+   005a, 005b eller 007b legger til enum-typer: den første registrerer én rad i et register
+   som allerede finnes, den andre knytter og tildeler, og den tredje projiserer to
+   eksisterende vokabularer som `text` slik resten av `api` gjør.
    Viewene caster enum-kolonner til `text`, så den offentlige kontrakten er en streng
    fra et dokumentert vokabular, ikke PostgreSQL-typen. Et senere bytte til
    oppslagstabeller er dermed ikke en brytende API-endring. Castingen sparer også
@@ -1576,6 +1586,8 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Temasiden og kildesiden laster hele det publiserte settet | `api` har verken en tema- eller en kildeprojeksjon. `/topics/:slug` henter alle publiserte påstander og filtrerer i klienten, fordi en slug ikke kan inverteres til en etikett. `/sources/:sourceId` henter kilden fra `published_claim_evidence`, men evidensradene bærer ikke `statement`, så hele det publiserte settet hentes i tillegg og **joines** i klienten for å kunne navngi hva kilden brukes til (§74.16 punkt 1). Det skalerer ikke: en kunnskapsbase med hundrevis av påstander lastes i sin helhet for å vise ett tema eller én kilde, og klienten gjør et arbeid databasen burde gjort. Kildesiden er den andre forekomsten og den første som joiner framfor bare å filtrere | Et `api.published_topics`-view og en projeksjon som gir påstandsformuleringen sammen med evidensraden — eller en slug-kolonne i katalogen (posten over) — slik at oppslaget skjer på serversiden, som på legemiddelsiden. Utløses i praksis av den første utvidelsen av pilotinnholdet (§33) |
 | `knowledge.sources.superseded_by_source_id` er ikke i api-kontrakten | Kildestatusen `superseded` betyr per migrasjon 003 at en *bestemt* nyere kilde er registrert: kolonnen er NOT NULL hvis og bare hvis statusen er den, og de to forutsetter hverandre. Pekeren er verken i `api.published_claim_evidence` eller i `src/types/api.ts`, så klienten kan ikke følge den. Kildesiden sier derfor eksplisitt at etterfølgeren er registrert uten å kunne navngis (§74.16 punkt 5); uten den setningen ville etiketten «Erstattet av en nyere kilde» vært en halv sannhet, og fravær av et navn ville sett ut som fravær av en etterfølger. Prisen er at en kliniker ikke kan gå fra en utdatert kilde til den som erstattet den | Migrasjonen som utvider viewet. Den må projisere etterfølgerens *tittel* og ikke bare dens `uuid` — en identitet klienten ikke kan slå opp, er ikke et svar — og ta stilling til hva som vises når etterfølgeren ikke selv er lesbar for klientrollene, siden RLS bare gir tilgang til kilder som ligger under en publisert påstand |
 | Katalogstatusen på et virkestoff vises ikke i klinikerflaten | `api.published_drugs.status` bærer `active`, `historical` eller `withdrawn`, men beskriver Antideps forvaltning av virkestoffet og ikke markedsstatus i Norge — det står eksplisitt i kommentaren på `catalog.drug_status`. «Aktiv» ved siden av et virkestoffnavn ville blitt lest som det siste, og §58 holder workflow-status utenfor klinikerflaten, så verdien er utelatt. Prisen er at en kliniker ikke kan se at Antidep ikke lenger vedlikeholder et virkestoff det står publiserte påstander om | Det første virkestoffet med publiserte påstander og status ulik `active`. Da må vokabularet lukkes og få kjøretidskontroll (§74.12 punkt 3), og ordlyden må navngi Antidep som subjekt framfor å se ut som en markedsstatus |
+| `api.my_roles` kan ikke skille en utløpt rolletildeling fra ingen tildeling | Viewet viser bare tildelinger som gjelder nå, og det er riktig som autorisasjonssvar: begge tilfellene betyr «ingen rettighet nå». Som *forklaring* er de forskjellige. En reviewer hvis tildeling utløp i går, får se «du har ingen roller» uten at noe sier hvorfor, og kan ikke skille det fra aldri å ha hatt en. Radgrensen i RLS er allerede eierskap og ikke gyldighet, nettopp for at en historikkprojeksjon skal være mulig senere uten å røre policyen | Den første adminskjermen som skal forklare hvorfor en rettighet mangler. Da hører det til et eget `api`-view over kallerens egen rollehistorikk, ikke til en oppmyking av `api.my_roles`: å blande gjeldende og utløpte rettigheter i ett svar er nettopp den sammenblandingen viewet finnes for å hindre |
+| `api.my_roles.scope_id` kan ikke slås opp til en etikett | En avgrenset rolletildeling viser hvilken *type* den er avgrenset til (`scope_type`), men ikke hvilket klinisk begrep. `catalog.clinical_concepts` er bare lesbar for klientrollene gjennom publiseringspredikatet i migrasjon 007, så et begrep uten publiserte påstander under seg ville gitt en tom etikett ved siden av en reell avgrensning — altså en avgrensning som så ut som ingen, og det er den farligste retningen å ta feil i. Derfor er etiketten utelatt framfor å være noen ganger tom. Prisen er at en klient foreløpig ikke kan navngi avgrensningen. Samme form som `superseded_by_source_id` over: en identitet klienten ikke kan slå opp, er ikke et svar | Den første avgrensede rolletildelingen i faktisk bruk — i dag er redaktørens tildeling uavgrenset (§74.20). Migrasjonen må ta stilling til hva som vises når begrepet ikke er lesbar for kalleren, og det er en tilgangsbeslutning og ikke en projeksjonsdetalj |
 | Kompetansekravet for redaktørrollen er ikke definert, og redaktøren er utpekt av seg selv | `ANTIDEP_CONSTITUTION.md` §12 krever en «navngitt kvalifisert redaktør», men ingenting definerer hva som gjør noen kvalifisert. `CONTENT_GOVERNANCE.md` §11 legger nettopp det til Clinical Lead — «definere hvilke kompetansekrav som gjelder for reviewer-scope» — og Antidep har ingen Clinical Lead. Migrasjon 005a registrerer derfor en redaktør hvis utpeking hviler på prosjekteierrollen, ikke på et kontrollert kompetansekrav, og som er utpekt av seg selv. Samme person er dessuten prosjekteier og eneste faglige godkjenner; §45 og §46 ber om at en slik profesjonell binding registreres, og modellen har ingen kolonne for det noe sted. `workflow.user_roles.grant_reason` er i dag det eneste feltet en kvalifikasjon kan skrives i, og det er fritekst på tildelingen og ikke på personen. §72 sitt krav om at høyrisikoinnhold reviewes av noen som ikke var hovedforfatter, er innfridd bare fordi forfatteren er en KI-aktør | Beslutningen om hvem som er Clinical Lead, og migrasjonen som tildeler `reviewer`-rollen: den må skrive kvalifikasjonen inn i `grant_reason` uansett, og er dermed første sted hullet blir konkret. Skal lukkes før den første publiseringen av klinisk innhold — en godkjenning gitt under et udefinert kompetansekrav er ikke etterprøvbar (§14) |
 
 ### 74.8 Gjeld innfridd i korreksjonsmigrasjon 006a
@@ -3175,6 +3187,132 @@ ikke bare skrive filene tilbake.
 lenger på kode, men på at migrasjonene kjøres mot det hostede prosjektet — en egen oppgave som
 hører hos prosjekteieren (§74.18). De neste to, ekstraksjons- og claim-verifikasjonene, kan
 være agentproduserte så lenge §10 og §11 holdes; den fjerde, godkjenningen, kan ikke.
+
+### 74.21 Hva den autentiserte leseveien innførte
+
+`db: expose the caller's own actor and roles` er migrasjon 007b. Den utvider api-lesemodellen
+fra §24 slik 007a gjorde, og står derfor utenfor den planlagte rekken. Den oppretter to views,
+to RLS-policyer og to kolonnegrants. Den oppretter ingen tabell, ingen enum-type og ingen
+funksjon, og den skriver ingen rad.
+
+**Hvorfor akkurat denne, og hvorfor nå.** «Manuell adminflyt» er den ene leveransen §29 lister
+for Slice 1 som ikke er bygget, og den kan ikke begynne noe sted: hver eneste skjerm i den må
+først kunne svare på «hvem er jeg, og hva har jeg lov til?». Fram til nå kunne ingen klient
+svare på noen av delene. `workflow.user_roles` og `provenance.actors` var begge helt stengt —
+ingen grant, ingen policy, default deny — og det er fortsatt riktig for alt annet enn kallerens
+egne rader. Migrasjonen er derfor det minste defensive førstesteget: en ren lesevei, ingen
+skrivevei, ingen ny rettighet. Den gjør bare en rettighet som allerede finnes, lesbar for den
+som har den.
+
+**To spørsmål, to views, og det er en kardinalitetsbeslutning.** En kaller har null eller én
+aktør, og null til mange rolletildelinger. Slått sammen til ett view måtte identiteten enten
+forsvinne når det ikke finnes noen rolletildeling — og et tomt svar sier da ingenting om
+aktøren, som er nøyaktig feilen §74.14 punkt 6 beskriver — eller bæres som en array. To views
+gir i stedet hver sitt tomme tilfelle med entydig betydning:
+
+```text
+api.my_actor  tom   ingen aktørrad er knyttet til denne brukerkontoen
+api.my_roles  tom   kalleren har ingen rolletildeling som gjelder nå
+```
+
+Ingen av dem svarer på det sammensatte spørsmålet «kan jeg utføre handling X». Det er
+adminflytens jobb, og den bygges over disse to. En avledet «du har lov»-verdi her ville flyttet
+en autorisasjonsbeslutning inn i en projeksjon, og den ville uansett ikke vært den som gjelder:
+skriveoperasjonene kontrollerer rettigheten selv, på sin egen setnings tidspunkt.
+
+**Fire lås, og den fjerde er den som avgjør hva av raden som kan leses.** De tre første er de
+samme som i §74.9: manglende schema-`usage`, RLS som radgrense, og bare `SELECT`. Den fjerde er
+kolonnegranten fra §74.11 punkt 3, og her bærer den mer enn i 007a. Radene policyene slipper
+gjennom inneholder også `grant_reason`, `granted_by_actor_id`, `end_reason` og aktørens
+`description` og `retirement_note`. Ingen av dem er kallerens svar på «hva har jeg lov til» —
+de er governance-tekst om beslutningen, skrevet for en revisor og ikke for innehaveren — og de
+er utenfor granten.
+
+**`anon` får ingenting, og det er et valg og ikke en forglemmelse.** Begge policyene gjelder
+bare `authenticated`, og ingen av viewene er lesbare for `anon`. En uinnlogget kaller får
+avslag framfor et tomt svar, fordi et tomt svar allerede betyr noe helt annet her.
+
+**Eierskapet ligger i policyen, gyldigheten i viewet.** De to predikatene beskytter forskjellige
+ting, og det avgjorde hvor de hører hjemme:
+
+| Predikat | Hva det er | Hvor det ligger |
+|---|---|---|
+| `user_id = auth.uid()` | En sikkerhetsgrense. En kaller skal aldri se en annens rolletildeling | RLS, og gjentatt i viewet slik §74.9 gjentar publiseringspredikatet: hvert lag skal være korrekt alene |
+| gyldig nå | En projeksjonsbeslutning. En avsluttet tildeling er kallerens *egen* historikk, ikke en annens data | Viewet. I RLS ville den låst en senere projeksjon av kallerens rollehistorikk ute av sin egen tabell |
+
+**Gyldighetsmodellen er den samme som felte 005b, og den er behandlet deretter.**
+`workflow.user_roles` er ikke et flagg: intervallet er halvåpent `[valid_from, valid_to)`, og
+`valid_to` kan være satt allerede ved tildeling som en planlagt utløpsdato. Viewet spør derfor
+om begge grensene, ikke om `valid_to is null`. Uten den nedre grensen ville en tildeling som
+først begynner å gjelde senere blitt lest som gjeldende — en rettighet før den er gitt. Tiden
+måles med `statement_timestamp()` og ikke `now()`, etter regelen i §74.6, og det er prøvd og
+ikke bare påstått: fiksturen i `360_caller_authorization_test.sql` legger én tildeling som trer
+i kraft og én som utløper *mens transaksjonen løper*, og gjør vinduet deterministisk med
+`pg_sleep` framfor å hvile på at to setninger tilfeldigvis får ulike tidsstempler. Med `now()`
+feiler begge, hver sin vei.
+
+**To kolonner er utelatt fordi en databaseregel gjør dem informasjonsløse, og begge reglene
+prøves framfor å telles.** Det er den formen §74.20 etablerte, og den er brukt igjen her:
+
+1. `api.my_actor` projiserer ikke aktørtypen. `actors_auth_user_is_human_check` håndhever at
+   bare et menneske kan ha en brukerkonto, så kolonnen ville hatt nøyaktig én mulig verdi for
+   hver rad viewet kan vise. Testen forsøker å opprette en KI-aktør med brukerkonto og krever
+   at databasen avviser det. Faller regelen bort, feiler testen — og da er kolonnen ikke lenger
+   informasjonsløs, for da kan viewet skjule at kalleren er en KI-aktør.
+2. `api.my_roles` projiserer ikke tildelingens `id`. Innenfor settet viewet viser, er
+   `(role_code, scope_id)` allerede entydig: to tildelinger som begge gjelder nå ville
+   overlappet i tid, og `user_roles_no_overlapping_grant_excl` forbyr det. Testen forsøker den
+   overlappende innsettingen og krever `23P01`, og forsøker deretter den *avgrensede*
+   tildelingen av samme rolle og krever at den går gjennom — avgrensningen er en del av nøkkelen
+   og ikke en detalj ved siden av den.
+
+**Vaktposten som ikke så kolonnegrant, ser den nå.** `030_conventions_test.sql` regel 8a og 8b
+leste `pg_class.relacl`, som ikke bærer kolonnegrant; `pg_attribute.attacl` gjør det. Regelen
+sluttet dermed å måle i det migrasjon 007a tok formen i bruk, uten å feile — en migrasjon kunne
+åpnet en enkeltkolonne uten policy under, eller gitt en skriverett på kolonnenivå, og gått
+gjennom. Begge grenene leser nå `attacl` i tillegg, og begge er selvtestet med et bevisst brudd
+og med den konforme formen ved siden av, slik at reglene ikke kan være trivielt oppfylt ved å
+flagge hvert kolonnegrant. Samme blindsone er rettet i `290_api_read_model_access_test.sql`:
+inventaret over hvilke kanoniske tabeller `api` har åpnet, sa «tretten» mens seksten var åpnet,
+fordi tre av dem bare er åpnet på kolonnenivå.
+
+**Kolonnekontrakten måler nå fem views, og probe-radene er blitt eksplisitte om hvem som leste
+dem.** De to nye viewene er ikke lesbare for `anon` og krever hver sin innloggede kaller — én
+med en aktør som ikke er trukket tilbake og to tildelinger som til sammen dekker begge formene
+av scope og sluttdato, og én med en tilbaketrukket aktør, slik at `retired_at` bærer verdi i
+minst én rad. Cellene kan derfor ikke leses i én spørring. De materialiseres i stedet i en
+temptabell under den rollen og med det tokenet som faktisk skal kunne lese dem, og sammenlignes
+etterpå. Det er en innstramming: før ble cellene lest av en `set_eq` som tilfeldigvis kjørte som
+`anon`. En ny assertion krever i tillegg at hvert view i kontrakten faktisk har bidratt med
+celler — uten den ville et view som ingen probe-rad traff falt helt ut av begge sammenligningene,
+og de to feilene ville pekt hver sin vei og lest som «kontrakten er for lang».
+
+**Hva migrasjonen bevisst ikke gjør.** Den tildeler ingenting, endrer ingenting og oppretter
+ingen aktør. En kaller uten aktørrad får et tomt `api.my_actor`, ikke en rad opprettet på
+forespørsel: aktørregisteret er festepunktet for all attribusjon (`ANTIDEP_CONSTITUTION.md`
+§14), og en aktør som oppstår fordi noen logget inn ville vært en identitet systemet selv fant
+på. Skriveveien er urørt og forblir en kontrollert `SECURITY DEFINER`-funksjon
+(`DATABASE_ARCHITECTURE.md` §43).
+
+**To poster ført som gjeld (§74.7).** Et tomt `api.my_roles` skiller ikke en utløpt tildeling
+fra en som aldri fantes, og `scope_id` kan ikke slås opp til en etikett. Begge er bevisste valg
+med en pris, og prisen er skrevet ned framfor å bli oppdaget av den som bygger adminskjermen.
+
+**Mutasjonstestet: 21 mutasjoner innført, 21 drept.** Tretten på migrasjonen — begge
+policyene åpnet, `anon` sluppet inn på policy og på view, `grant_reason` og aktørens
+`description` lagt til i kolonnegranten, hver av de to gyldighetsgrensene fjernet,
+`statement_timestamp()` byttet til `now()`, hvert av de to viewenes eget eierskapspredikat
+fjernet, `scope_type` projisert som konstant `NULL`, og `security_invoker` fjernet. To på de
+utvidede grenene i regel 8a og 8b, tre på TypeScript-siden, og tre på kolonnekontrakten. Hver
+av dem er kontrollert mot hvilken assertion som faktisk felte den, ikke bare mot at *noe*
+feilet — en mutasjon drept av en urelatert assertion er et svakere signal enn det ser ut som.
+De to som er verdt å nevne særskilt: `valid_to is null` — feilen fra 005b — felles av at den
+avgrensede tildelingen med planlagt utløp forsvinner fra `api.my_roles`, og `now()` felles av
+begge de to `pg_sleep`-testene, hver sin vei.
+
+**Hva som gjenstår.** Milepæl B mangler fortsatt de samme fire tingene (§74.4). Denne
+migrasjonen lukker ingen av dem, og den er heller ikke ment å gjøre det: den åpner det første
+leddet i adminflyten, som er der de tre siste faktisk kan utføres.
 
 ---
 

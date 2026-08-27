@@ -39,6 +39,23 @@
 --            som er den dokumenterte grunnen til at published_at og
 --            last_reviewed_at kan være NULL
 --
+-- De to viewene fra migrasjon 007b projiserer ikke publisert innhold, men
+-- kallerens eget, og de er lesbare for authenticated og ikke for anon. Formene
+-- deres er derfor en egenskap ved *kalleren* og ikke ved innholdet:
+--
+--   kaller med aktør      en aktør som ikke er trukket tilbake, med to
+--                         tildelinger — én uavgrenset og uten sluttdato, én
+--                         avgrenset og med planlagt utløp
+--   tilbaketrukket kaller en aktør som er tatt ut av bruk, slik at retired_at
+--                         bærer verdi i minst én probe-rad
+--
+-- Fordi de to formene krever hver sin innloggede kaller, kan ikke alle cellene
+-- leses i én spørring. Radene materialiseres derfor i en temptabell under den
+-- klientrollen som faktisk skal kunne lese dem, og sammenlignes etterpå. Det er
+-- en innstramming og ikke en lettelse: før ble cellene lest av en set_eq som
+-- tilfeldigvis kjørte som anon, nå står det eksplisitt hvilken rolle og hvilket
+-- token hver enkelt celle ble lest med.
+--
 -- Påstanden som kontrolleres er nøyaktig denne, i begge retninger:
 --
 --   en kolonne merket nullbar i kontrakten er NULL i minst én av probe-radene
@@ -58,7 +75,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(11);
+select plan(15);
 
 -- ===========================================================================
 -- Del 1 — Kontrakten
@@ -77,10 +94,6 @@ create temporary table contract (
   nullable    boolean not null,
   primary key (view_name, column_name)
 ) on commit drop;
-
--- Probe-radene leses som anon, altså med de faktiske klientrettighetene, og
--- sammenlignes mot kontrakten i samme spørring.
-grant select on contract to anon;
 
 insert into contract (view_name, column_name, sql_type, nullable) values
   ('published_drugs', 'drug_id', 'uuid', false),
@@ -180,7 +193,18 @@ insert into contract (view_name, column_name, sql_type, nullable) values
   ('published_claim_evidence', 'source_status', 'text', false),
   ('published_claim_evidence', 'source_status_note', 'text', true),
   ('published_claim_evidence', 'source_dois', 'text[]', true),
-  ('published_claim_evidence', 'source_pmids', 'text[]', true);
+  ('published_claim_evidence', 'source_pmids', 'text[]', true),
+
+  ('my_actor', 'actor_id', 'uuid', false),
+  ('my_actor', 'actor_key', 'text', false),
+  ('my_actor', 'display_name', 'text', false),
+  ('my_actor', 'retired_at', 'timestamp with time zone', true),
+
+  ('my_roles', 'role_code', 'text', false),
+  ('my_roles', 'scope_id', 'uuid', true),
+  ('my_roles', 'scope_type', 'text', true),
+  ('my_roles', 'valid_from', 'timestamp with time zone', false),
+  ('my_roles', 'valid_to', 'timestamp with time zone', true);
 
 -- ===========================================================================
 -- Del 2 — De to begrensningene i information_schema, festet som assertions
@@ -250,7 +274,10 @@ create temporary table fixture (name text primary key, id uuid not null) on comm
 insert into auth.users (id, email) values
   ('e3a40000-0000-4000-8000-000000000001', 'reviewer-340@test.invalid'),
   ('e3a40000-0000-4000-8000-000000000002', 'publisher-340@test.invalid'),
-  ('e3a40000-0000-4000-8000-000000000003', 'verifier-340@test.invalid');
+  ('e3a40000-0000-4000-8000-000000000003', 'verifier-340@test.invalid'),
+  -- Bare for api.my_actor: uten en tilbaketrukket aktør ville retired_at aldri
+  -- båret verdi i noen probe-rad, og nullbarhetspåstanden vært uten dekning.
+  ('e3a40000-0000-4000-8000-000000000004', 'retired-340@test.invalid');
 
 insert into provenance.actors (actor_type, actor_key, display_name, description, auth_user_id)
 values
@@ -260,6 +287,15 @@ values
    'e3a40000-0000-4000-8000-000000000002'),
   ('human', 'human:verifier-340', 'Verifikator', 'Utfører verifikasjonene i testene i 340.',
    'e3a40000-0000-4000-8000-000000000003');
+
+insert into provenance.actors
+  (actor_type, actor_key, display_name, description, auth_user_id,
+   retired_at, retirement_note)
+values
+  ('human', 'human:retired-340', 'Tilbaketrukket aktør',
+   'Aktør som er tatt ut av bruk, for probe-raden i api.my_actor.',
+   'e3a40000-0000-4000-8000-000000000004',
+   now() - interval '10 days', 'Tatt ut av bruk for testene i 340.');
 
 insert into fixture (name, id)
 select 'reviewer', id from provenance.actors where actor_key = 'human:reviewer-340';
@@ -294,6 +330,22 @@ values
    (select id from fixture where name = 'verifier'), 'Publiseringsrett for testene i 340.',
    now() - interval '1 year');
 alter table workflow.user_roles enable trigger user_roles_set_row_timestamps;
+
+-- Bare for api.my_roles. Den uavgrensede reviewer-tildelingen over dekker
+-- scope_id, scope_type og valid_to som NULL; denne dekker dem som utfylt. En
+-- planlagt utløpsdato satt allerede ved tildeling må oppgi hvem som satte den
+-- og hvorfor (user_roles_end_actor_pairing_check).
+insert into workflow.user_roles
+  (user_id, role_code, scope_id, valid_from, valid_to,
+   granted_by_actor_id, grant_reason, ended_by_actor_id, end_reason)
+values
+  ('e3a40000-0000-4000-8000-000000000001', 'editor',
+   (select id from fixture where name = 'topic'),
+   now() - interval '1 year', now() + interval '1 year',
+   (select id from fixture where name = 'verifier'),
+   'Avgrenset redigeringsrett med planlagt utløp, for kolonnekontrakten i 340.',
+   (select id from fixture where name = 'verifier'),
+   'Planlagt utløp satt ved tildeling.');
 
 -- Et virkestoff uten ATC-kode. Begge de seedede har en, og uten dette ville
 -- api.published_drugs.atc_codes aldri vært NULL i noen probe-rad.
@@ -604,12 +656,25 @@ update knowledge.claims
  where id = (select id from fixture where name = 'pointer_claim');
 
 -- ===========================================================================
--- Del 5 — Probe-radene, lest som anon
+-- Del 5 — Probe-radene, lest med de faktiske klientrettighetene
 --
 -- Radene telles først. En set_eq over et tomt view ville ellers vært stille
 -- sann i den ene retningen og ubrukelig i den andre: uten rader er ingen
 -- kolonne NULL, og ingen kolonne er ikke-NULL.
+--
+-- Cellene materialiseres underveis, fordi de fem viewene ikke kan leses av én
+-- og samme kaller: de tre publiserte leses av anon, og de to fra migrasjon 007b
+-- av hver sin innloggede bruker. Temptabellen bærer hele raden som jsonb, slik
+-- at settet av kolonner utledes av radens egen form og ingen kolonne kan
+-- glemmes.
 -- ===========================================================================
+create temporary table probe_cell (
+  view_name text not null,
+  key       text not null,
+  value     jsonb not null
+) on commit drop;
+grant insert on probe_cell to anon, authenticated;
+
 set local role anon;
 
 select is(
@@ -636,32 +701,96 @@ select set_eq(
   'probe-radene dekker både en tilbaketrukket og en stående ekstraksjon'
 );
 
+insert into probe_cell (view_name, key, value)
+select 'published_drugs', j.key, j.value
+from api.published_drugs v, lateral jsonb_each(to_jsonb(v)) j;
+insert into probe_cell (view_name, key, value)
+select 'published_claims', j.key, j.value
+from api.published_claims v, lateral jsonb_each(to_jsonb(v)) j;
+insert into probe_cell (view_name, key, value)
+select 'published_claim_evidence', j.key, j.value
+from api.published_claim_evidence v, lateral jsonb_each(to_jsonb(v)) j;
+
+reset role;
+
+-- ---------------------------------------------------------------------------
+-- Kaller med aktør: én aktørrad som ikke er trukket tilbake, og to tildelinger
+-- som til sammen dekker begge formene av scope og sluttdato.
+-- ---------------------------------------------------------------------------
+select set_config('request.jwt.claims',
+                  '{"sub":"e3a40000-0000-4000-8000-000000000001"}', true);
+set local role authenticated;
+
+select is(
+  (select count(*) from api.my_actor), 1::bigint,
+  'kalleren med aktør gir én rad i api.my_actor'
+);
+select is(
+  (select count(*) from api.my_roles), 2::bigint,
+  'kalleren med aktør gir to rader i api.my_roles: den uavgrensede og den avgrensede med planlagt utløp'
+);
+
+insert into probe_cell (view_name, key, value)
+select 'my_actor', j.key, j.value
+from api.my_actor v, lateral jsonb_each(to_jsonb(v)) j;
+insert into probe_cell (view_name, key, value)
+select 'my_roles', j.key, j.value
+from api.my_roles v, lateral jsonb_each(to_jsonb(v)) j;
+
+reset role;
+
+-- ---------------------------------------------------------------------------
+-- Tilbaketrukket kaller: den eneste probe-raden der retired_at bærer verdi.
+-- ---------------------------------------------------------------------------
+select set_config('request.jwt.claims',
+                  '{"sub":"e3a40000-0000-4000-8000-000000000004"}', true);
+set local role authenticated;
+
+select is(
+  (select count(*) from api.my_actor), 1::bigint,
+  'den tilbaketrukne kalleren gir én rad i api.my_actor'
+);
+
+insert into probe_cell (view_name, key, value)
+select 'my_actor', j.key, j.value
+from api.my_actor v, lateral jsonb_each(to_jsonb(v)) j;
+
+reset role;
+select set_config('request.jwt.claims', '', true);
+
+set local role anon;
+
+reset role;
+
 -- ===========================================================================
 -- Del 6 — Nullbarheten, målt på probe-radene
 --
--- Cellene hentes med jsonb_each over hele raden framfor kolonne for kolonne.
--- En kolonne kan da ikke glemmes: settet er utledet av radens egen form, ikke
--- av en liste noen må huske å utvide.
+-- Cellene ble hentet med jsonb_each over hele raden framfor kolonne for
+-- kolonne. En kolonne kan da ikke glemmes: settet er utledet av radens egen
+-- form, ikke av en liste noen må huske å utvide.
+--
+-- Sammenligningene kjører som eier, mot temptabellen. Klientrettighetene er
+-- allerede utøvd — hver celle ble lest av den rollen og med det tokenet som
+-- faktisk skal kunne lese den — og det er den lesingen påstanden hviler på.
 -- ===========================================================================
+
+-- Selvtest av selvtesten: hvert view i kontrakten har faktisk bidratt med
+-- celler. Uten dette ville et view som ingen probe-rad traff falt helt ut av de
+-- to sammenligningene under — dets nullbare kolonner ville manglet på venstre
+-- side og dets kolonner på høyre, altså to feil som peker hver sin vei og som
+-- lett leses som «kontrakten er for lang».
+select set_eq(
+  $$select distinct view_name from probe_cell$$,
+  $$select distinct view_name from contract$$,
+  'hvert view i kontrakten har bidratt med minst én probe-rad'
+);
 
 -- En kolonne merket nullbar er NULL i minst én probe-rad, og en kolonne merket
 -- ikke-nullbar er NULL i ingen. set_eq gir begge retninger: en kolonne som blir
 -- nullbar dukker opp på venstre side, og en nullbarhetspåstand uten dekning
 -- blir stående alene på høyre.
 select set_eq(
-  $$
-    with cells as (
-      select 'published_drugs' as view_name, j.key, j.value
-      from api.published_drugs v, lateral jsonb_each(to_jsonb(v)) j
-      union all
-      select 'published_claims', j.key, j.value
-      from api.published_claims v, lateral jsonb_each(to_jsonb(v)) j
-      union all
-      select 'published_claim_evidence', j.key, j.value
-      from api.published_claim_evidence v, lateral jsonb_each(to_jsonb(v)) j
-    )
-    select distinct view_name, key from cells where value = 'null'::jsonb
-  $$,
+  $$select distinct view_name, key from probe_cell where value = 'null'::jsonb$$,
   $$select view_name, column_name from contract where nullable$$,
   'nøyaktig kontraktens nullbare kolonner er NULL i minst én probe-rad'
 );
@@ -670,24 +799,10 @@ select set_eq(
 -- et uttrykk koblet til feil sted, en join som aldri treffer — ville passert
 -- kontrollen over så lenge kontrakten kalte den nullbar.
 select set_eq(
-  $$
-    with cells as (
-      select 'published_drugs' as view_name, j.key, j.value
-      from api.published_drugs v, lateral jsonb_each(to_jsonb(v)) j
-      union all
-      select 'published_claims', j.key, j.value
-      from api.published_claims v, lateral jsonb_each(to_jsonb(v)) j
-      union all
-      select 'published_claim_evidence', j.key, j.value
-      from api.published_claim_evidence v, lateral jsonb_each(to_jsonb(v)) j
-    )
-    select distinct view_name, key from cells where value <> 'null'::jsonb
-  $$,
+  $$select distinct view_name, key from probe_cell where value <> 'null'::jsonb$$,
   $$select view_name, column_name from contract$$,
   'hver kolonne i kontrakten bærer en verdi i minst én probe-rad'
 );
-
-reset role;
 
 select finish();
 

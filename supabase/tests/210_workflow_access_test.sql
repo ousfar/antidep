@@ -16,13 +16,16 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(29);
+select plan(33);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen, slik at et tomt resultat
 -- under RLS ikke kan forveksles med en tom tabell.
 -- ---------------------------------------------------------------------------
-insert into auth.users (id, email) values (gen_random_uuid(), 'tilgang@test.invalid');
+-- Fast uuid framfor gen_random_uuid(): den positive RLS-kontrollen nederst må
+-- kunne oppgi nøyaktig denne brukeren som subjekt i tokenet.
+insert into auth.users (id, email) values
+  ('21000000-0000-4000-8000-000000000001', 'tilgang@test.invalid');
 
 insert into provenance.actors (actor_type, actor_key, display_name, description)
 values ('system', 'system:tilgang', 'Testsystemaktør',
@@ -43,10 +46,12 @@ where u.email = 'tilgang@test.invalid' and a.actor_key = 'system:tilgang';
 -- ordinær evidens. Policyen under slipper bare gjennom
 -- review_type = 'extraction_withdrawal'.
 --
--- workflow.user_roles er fortsatt helt stengt, og det er den viktigste raden i
--- denne tabellen: den er autorisasjonskilden (DATABASE_ARCHITECTURE.md §46), og
--- en klientrolle som kunne lese eller skrive der ville kunne kartlegge eller gi
--- seg selv faglige rettigheter.
+-- Migrasjon 007b åpnet i tillegg kallerens *egne* rader i workflow.user_roles og
+-- provenance.actors — men på kolonnenivå, og has_table_privilege() ser ikke
+-- kolonnegrant. Denne assertionen svarer derfor fortsatt «ingen tabellvid
+-- tilgang», og det er sant; kolonnene føres uttømmende i assertionen etter.
+-- Skillet er ikke pedantisk: en test som bare spør om tabellprivilegiet ville
+-- vært stille sann uansett hvor mange kolonner en senere migrasjon åpnet.
 select is_empty(
   $$
     select t.table_name, r.role_name, p.privilege
@@ -64,7 +69,45 @@ select is_empty(
         and t.table_name = 'workflow.review_decisions'
       )
   $$,
-  'bare workflow.review_decisions er åpnet, bare for lesing, og bare for de to Data API-rollene'
+  'bare workflow.review_decisions er åpnet tabellvidt, bare for lesing, og bare for de to Data API-rollene'
+);
+
+-- Kolonnegrantene, uttømmende over de to schemaene. pg_attribute.attacl bærer
+-- bare de *eksplisitte* kolonnegrantene, i motsetning til
+-- information_schema.role_column_grants, som også utleder én rad per kolonne av
+-- et tabellvidt grant og dermed ville drukket disse i review_decisions.
+--
+-- Listen er kontrakten migrasjon 007b åpnet: nøyaktig de kolonnene api.my_actor
+-- og api.my_roles leser eller filtrerer på. Begrunnelsene for tildeling og
+-- avslutning, aktørpekerne, aktørens beskrivelse og tilbaketrekkingsnotat står
+-- utenfor, og en migrasjon som legger til en kolonne her må endre denne raden.
+select set_eq(
+  $$
+    select n.nspname || '.' || c.relname || '.' || a.attname
+        || ':' || case when acl.grantee = 0 then 'PUBLIC'
+                       else acl.grantee::regrole::text end
+        || ':' || acl.privilege_type
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    join pg_attribute a
+      on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+    cross join lateral aclexplode(a.attacl) acl
+    where n.nspname in ('workflow', 'provenance')
+  $$,
+  $$
+    values ('provenance.actors.id:authenticated:SELECT'),
+           ('provenance.actors.actor_key:authenticated:SELECT'),
+           ('provenance.actors.display_name:authenticated:SELECT'),
+           ('provenance.actors.auth_user_id:authenticated:SELECT'),
+           ('provenance.actors.retired_at:authenticated:SELECT'),
+           ('workflow.user_roles.user_id:authenticated:SELECT'),
+           ('workflow.user_roles.role_code:authenticated:SELECT'),
+           ('workflow.user_roles.scope_id:authenticated:SELECT'),
+           ('workflow.user_roles.scope_type:authenticated:SELECT'),
+           ('workflow.user_roles.valid_from:authenticated:SELECT'),
+           ('workflow.user_roles.valid_to:authenticated:SELECT')
+  $$,
+  'kolonnegrantene i workflow og provenance er nøyaktig de elleve api.my_actor og api.my_roles trenger, og bare til authenticated'
 );
 select is_empty(
   $$
@@ -108,8 +151,12 @@ select is_empty(
   'RLS er aktivert på alle tabellene i workflow og provenance'
 );
 -- Uttømmende inventar. Skriveveien er fortsatt en SECURITY DEFINER-funksjon som
--- verken trenger grant eller policy, så den ene policyen her er en ren
--- lesepolicy for api-lesemodellen. polcmd 'r' betyr SELECT.
+-- verken trenger grant eller policy, så alle policyene her er rene lesepolicyer.
+-- polcmd 'r' betyr SELECT, og at alle tre står med 'r' er halve påstanden.
+--
+-- De to fra migrasjon 007b er begge avgrenset til kallerens egne rader. At de
+-- *er* så avgrenset, prøves i 360_caller_authorization_test.sql; her føres bare
+-- at det ikke har kommet flere policyer enn de tre.
 select set_eq(
   $$
     select n.nspname || '.' || c.relname || ':' || p.polname || ':' || p.polcmd::text
@@ -119,9 +166,32 @@ select set_eq(
     where n.nspname in ('workflow', 'provenance')
   $$,
   $$
-    values ('workflow.review_decisions:review_decisions_extraction_withdrawal_read:r')
+    values ('workflow.review_decisions:review_decisions_extraction_withdrawal_read:r'),
+           ('workflow.user_roles:user_roles_own_grants_read:r'),
+           ('provenance.actors:actors_own_actor_read:r')
   $$,
-  'workflow har nøyaktig én lesepolicy, provenance ingen, og ingen av dem åpner for skriving'
+  'workflow og provenance har nøyaktig tre lesepolicyer, og ingen av dem åpner for skriving'
+);
+
+-- Ingen av de to nye slipper inn en uinnlogget kaller. Policyen som *også*
+-- gjaldt anon ville gitt hver anonym forespørsel et oppslag mot
+-- autorisasjonskilden, og ville dessuten gjort et tomt svar tvetydig.
+select set_eq(
+  $$
+    select c.relname || ':' || coalesce(r.rolname, '(alle roller)')
+    from pg_policy p
+    join pg_class c on c.oid = p.polrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    left join lateral unnest(p.polroles) as pr(oid) on true
+    left join pg_roles r on r.oid = pr.oid
+    where n.nspname in ('workflow', 'provenance')
+      and p.polname in ('user_roles_own_grants_read', 'actors_own_actor_read')
+  $$,
+  $$
+    values ('user_roles:authenticated'),
+           ('actors:authenticated')
+  $$,
+  'policyene fra migrasjon 007b gjelder bare authenticated, ikke anon og ikke alle roller'
 );
 
 -- Policyen er smal med hensikt: en publiseringsgodkjenning skal ikke være
@@ -281,16 +351,40 @@ select isnt_empty(
   'aktørene finnes, sett fra eieren'
 );
 
+-- Uten et subjekt i tokenet er auth.uid() NULL, og begge policyene fra migrasjon
+-- 007b sammenligner mot den. NULL = NULL er ukjent og ikke sant, så ingen rad
+-- slipper gjennom — heller ikke aktørene som selv har auth_user_id NULL.
 set local role authenticated;
 select is(
   (select count(*) from workflow.user_roles),
   0::bigint,
-  'RLS gir null rolletildelinger selv med SELECT-grant, fordi ingen policy slipper noen inn'
+  'RLS gir null rolletildelinger selv med SELECT-grant, når tokenet ikke har et subjekt'
 );
 select is(
   (select count(*) from provenance.actors),
   0::bigint,
-  'RLS gir null aktører selv med SELECT-grant'
+  'RLS gir null aktører selv med SELECT-grant, når tokenet ikke har et subjekt'
+);
+reset role;
+
+-- Og den positive retningen. Uten den ville en policy mutert til «using (false)»
+-- overlevd hele filen: begge tallene over ville vært null uansett, og
+-- selvtesten ville målt fraværet av en policy framfor policyens grense.
+select set_config('request.jwt.claims',
+                  '{"sub":"21000000-0000-4000-8000-000000000001"}', true);
+set local role authenticated;
+select is(
+  (select count(*) from workflow.user_roles),
+  1::bigint,
+  'med et subjekt i tokenet slipper policyen gjennom nøyaktig kallerens egen tildeling'
+);
+-- Testaktøren her er en systemaktør uten brukerkonto, så kalleren har en rolle
+-- uten å ha en aktørrad. Det er en reell tilstand og ikke en feil i fiksturen:
+-- de to policyene svarer på hvert sitt spørsmål.
+select is(
+  (select count(*) from provenance.actors),
+  0::bigint,
+  'en kaller uten egen aktørrad ser ingen aktør, heller ikke systemaktøren'
 );
 select throws_ok(
   $$
@@ -302,6 +396,7 @@ select throws_ok(
   'RLS stopper selvtildeling av rolle selv om INSERT-granten er gitt ved et uhell'
 );
 reset role;
+select set_config('request.jwt.claims', '', true);
 
 select * from finish();
 

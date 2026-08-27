@@ -30,7 +30,13 @@
 // `Functions` står tomme til den første faktisk eksponeres i `api`.
 // ============================================================================
 
-import type { PublishedClaimEvidenceRow, PublishedClaimRow, PublishedDrugRow } from './api'
+import type {
+  MyActorRow,
+  MyRoleRow,
+  PublishedClaimEvidenceRow,
+  PublishedClaimRow,
+  PublishedDrugRow,
+} from './api'
 
 export type Database = {
   api: {
@@ -46,6 +52,16 @@ export type Database = {
       }
       published_claim_evidence: {
         Row: PublishedClaimEvidenceRow
+        Relationships: []
+      }
+      // Kallerens eget (migrasjon 007b). Ingen av de to er lesbare for `anon`,
+      // så en spørring uten sesjon gir avslag og ikke et tomt resultat.
+      my_actor: {
+        Row: MyActorRow
+        Relationships: []
+      }
+      my_roles: {
+        Row: MyRoleRow
         Relationships: []
       }
     }

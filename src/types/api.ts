@@ -1,15 +1,22 @@
 // ============================================================================
 // Radtyper for kontraktslaget `api`
 //
-// Speiler de tre viewene migrasjon 007 og 007a eksponerer:
+// Speiler de fem viewene migrasjon 007, 007a og 007b eksponerer:
 //
 //   api.published_drugs           virkestoff Antidep har publisert påstander om
 //   api.published_claims          én rad per publisert påstand
 //   api.published_claim_evidence  evidensgrunnlaget bak hver påstand
+//   api.my_actor                  kallerens egen aktørrad, eller ingen rad
+//   api.my_roles                  kallerens egne rolletildelinger som gjelder nå
+//
+// De tre første er publisert innhold og lesbare for `anon`. De to siste er
+// kallerens eget, lesbare bare for `authenticated`, og de er ikke en del av
+// klinikerflaten: de finnes for adminflyten (MVP_IMPLEMENTATION_PLAN.md §29).
 //
 // Kilden er migrasjonene, ikke denne filen. Kolonnekommentarene i
-// `supabase/migrations/20260820140000_api_published_read_model.sql` og
-// `20260821143000_api_publication_timestamps.sql` er den normative
+// `supabase/migrations/20260820140000_api_published_read_model.sql`,
+// `20260821143000_api_publication_timestamps.sql` og
+// `20260828090000_api_caller_authorization.sql` er den normative
 // beskrivelsen av hva hver verdi betyr; her gjentas bare det en klient må
 // vite for ikke å lese en verdi feil.
 //
@@ -471,4 +478,94 @@ export type PublishedClaimEvidenceRow = {
   /** Sorterte arrays: kildemodellen tillater flere, og ingen er definert som primær. */
   source_dois: string[] | null
   source_pmids: string[] | null
+}
+
+// ----------------------------------------------------------------------------
+// Kallerens eget (migrasjon 007b)
+//
+// De to radtypene under beskriver ikke publisert kunnskap, men den innloggede
+// brukerens egen aktør og egne rettigheter. `anon` har ingen SELECT på noen av
+// viewene, så et kall uten sesjon gir avslag og ikke et tomt svar.
+// ----------------------------------------------------------------------------
+
+/**
+ * Aktørraden som er knyttet til den innloggede brukerkontoen.
+ *
+ * Viewet gir null eller én rad. **Ingen rad betyr «ingen aktør er knyttet til
+ * kontoen», ikke «kalleren er ukjent»**: en brukerkonto kan finnes før noen har
+ * registrert en aktør for den, og en menneskelig aktør kan registreres før
+ * kontoen finnes. En klient som viser noe annet enn nettopp det, hevder mer enn
+ * viewet sier.
+ *
+ * Aktørtypen er ikke med: bare et menneske kan ha en brukerkonto
+ * (`actors_auth_user_is_human_check`), så feltet ville hatt én mulig verdi.
+ */
+export type MyActorRow = {
+  /** Aktørens stabile identitet, og den verdien skriveoperasjoner attribueres til. */
+  actor_id: Uuid
+  /** Maskinlesbar, språkuavhengig og stabil nøkkel på formen «type:navn». */
+  actor_key: string
+  /** Visningsnavn. Presentasjon, ikke identitet — det kan endres. */
+  display_name: string
+  /**
+   * Tidspunktet aktøren ble tatt ut av bruk, eller `null`.
+   *
+   * En tilbaketrukket aktør beholder historikken sin, men kan ikke utføre nye
+   * handlinger — publiseringsoperasjonen avviser den. En klient som ignorerer
+   * verdien vil vise rettigheter kalleren ikke får brukt.
+   */
+  retired_at: Timestamptz | null
+}
+
+/**
+ * Én rolletildeling som gjelder **nå** for den innloggede brukeren.
+ *
+ * Viewet filtrerer på det halvåpne intervallet `[valid_from, valid_to)`, målt
+ * med `statement_timestamp()`. En avsluttet tildeling og en som først begynner
+ * å gjelde senere er begge fraværende, og et tomt svar betyr «ingen rettighet
+ * nå» — det skiller ikke en utløpt tildeling fra en som aldri fantes.
+ *
+ * Radene er ikke autorisasjonen selv. Skriveoperasjonene kontrollerer
+ * rettigheten på nytt på sitt eget tidspunkt, og en klient som lar noe avhenge
+ * av innholdet her, viser en forventning — den avgjør ingenting.
+ */
+export type MyRoleRow = {
+  /**
+   * Applikasjonsrollen, som tekst: `editor`, `reviewer`, `publisher` eller
+   * `admin`. De er forskjellige rettigheter — `admin` er bruker- og
+   * systemforvaltning og gir ingen faglig godkjenningsrett — og skal ikke slås
+   * sammen i visningen.
+   *
+   * Bevisst ikke en lukket union ennå. Regelen over i denne filen er at et
+   * vokabular promoteres av den PR-en som faktisk forgrener på det, og som
+   * samtidig legger til kjøretidskontrollen; ingen klientkode leser dette feltet
+   * i dag. `string` er dessuten den tryggere typen for en klient som ennå ikke
+   * finnes: den tvinger fram et default-tilfelle framfor å invitere til en
+   * `switch` som antar at listen er uttømmende.
+   */
+  role_code: string
+  /**
+   * Det kliniske begrepet tildelingen er avgrenset til, eller `null` for en
+   * uavgrenset tildeling. `null` betyr «uten avgrensning», ikke «ukjent
+   * avgrensning». Etiketten er ikke eksponert.
+   */
+  scope_id: Uuid | null
+  /**
+   * Hva `scope_id` peker på, eller `null` når tildelingen er uavgrenset. De to
+   * er alltid `null` sammen eller utfylt sammen.
+   *
+   * Feltet finnes for at en klient skal kunne se at en tildeling *er* avgrenset
+   * uten å kunne slå opp begrepet: en avgrenset rettighet lest som uavgrenset
+   * er den farligste retningen å ta feil i.
+   */
+  scope_type: string | null
+  /** Tidspunktet tildelingen begynte å gjelde. Alltid i fortiden for en rad som vises. */
+  valid_from: Timestamptz
+  /**
+   * Tidspunktet tildelingen opphører, eller `null` når ingen sluttdato er satt.
+   *
+   * En verdi her er en planlagt utløpsdato som ennå ikke har inntruffet — raden
+   * vises jo — og ikke en tilbakekalling som allerede har virket.
+   */
+  valid_to: Timestamptz | null
 }
