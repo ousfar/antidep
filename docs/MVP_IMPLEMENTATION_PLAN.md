@@ -1333,6 +1333,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       docs: correct the record of the hosted Supabase project (#28)  merget   ingen migrasjon
       test: verify the api column contract                    (#29)  merget   ingen migrasjon
       docs: clarify collaboration and reporting rules         (#30)  merget   ingen migrasjon
+      db: authorize the named qualified editor                (#31)  åpen     migrasjon 005b
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
