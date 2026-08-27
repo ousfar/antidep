@@ -25,7 +25,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(14);
+select plan(27);
 
 -- ---------------------------------------------------------------------------
 -- Den negative grenen: kontoen finnes ikke
@@ -216,6 +216,228 @@ select throws_like(
   $$,
   '%uten registrert ekstraksjonsverifikasjon%',
   'rolletildelingen åpner ikke publiseringsgaten; den stopper fortsatt på den manglende ekstraksjonsverifikasjonen'
+);
+
+-- ---------------------------------------------------------------------------
+-- De fire lovlige tilstandene en eksisterende rolletildeling kan stå i
+-- ---------------------------------------------------------------------------
+--
+-- workflow.user_roles er en gyldighetsmodell og ikke et flagg: tildelingen har
+-- et halvåpent intervall [valid_from, valid_to), og valid_to kan være satt
+-- allerede ved tildeling som en planlagt utløpsdato. «Løpende» og «gyldig nå»
+-- er derfor to forskjellige spørsmål.
+--
+-- Funksjonen skiller mellom alle fire tilstandene, og bare én av dem skriver
+-- noe. Hver av de tre andre prøves her framfor å bli påstått.
+
+-- 1. Gyldig nå, men tidsavgrenset. Tildelingen fra assertionene over avsluttes
+--    med en utløpsdato som ligger fram i tid — det er en normal tildeling og
+--    ikke en tilbakekalling.
+--
+--    Dette er regresjonstesten. Et predikat skrevet som «valid_to is null»
+--    leser denne raden som «ingen tildeling», forsøker å skrive en ny med
+--    intervallet [nå, ∞), og user_roles_no_overlapping_grant_excl avviser den:
+--    kallet feiler i stedet for å svare. En `supabase db push` ville stoppet.
+update workflow.user_roles
+set valid_to = now() + interval '30 days',
+    ended_by_actor_id = granted_by_actor_id,
+    end_reason = 'Planlagt utløpsdato satt i testen; tildelingen gjelder fortsatt.';
+
+select is(
+  workflow.ensure_named_editor_authorization(),
+  'already_authorized',
+  'en tidsavgrenset tildeling som gjelder nå leses som gyldig, ikke som fraværende'
+);
+select is(
+  (select count(*) from workflow.user_roles),
+  1::bigint,
+  'ingen overlappende tildeling forsøkes ved siden av den tidsavgrensede'
+);
+
+-- 2. Avsluttet tildeling. Den skal ikke gjeninnføres.
+--
+--    DATABASE_ARCHITECTURE.md §46 krever at en rettighet kan tilbakekalles
+--    umiddelbart, og en tilbakekalling som en rutinemessig migrasjonskjøring
+--    omgjør, er ingen tilbakekalling. workflow.freeze_role_grant() sier det
+--    samme om modellen: en gjeninnføring er en ny tildeling med sin egen
+--    begrunnelse — og en slik begrunnelse kan ikke dikte seg selv opp.
+--
+--    Slettingen her er teststillas. Intervallet på en avsluttet tildeling kan
+--    ikke skrives om etterpå (freeze_role_grant), så tilstanden må settes opp
+--    fra bunnen. Alt rulles tilbake.
+delete from workflow.user_roles;
+insert into workflow.user_roles
+  (user_id, role_code, scope_id, valid_from, valid_to,
+   granted_by_actor_id, grant_reason, ended_by_actor_id, end_reason)
+select 'a703ede9-3f58-4de9-8c85-73936d58df1f', 'reviewer', null,
+       now() - interval '2 years', now() - interval '1 year',
+       a.id, 'Opprinnelig tildeling i testen.',
+       a.id, 'Tilbakekalt i testen.'
+from provenance.actors a
+where a.actor_key = 'human:peder-holman';
+
+select is(
+  workflow.ensure_named_editor_authorization(),
+  'role_ended',
+  'en avsluttet tildeling rapporteres som avsluttet, ikke som fraværende'
+);
+-- Både at ingenting ble skrevet og at den avsluttede raden står urørt. En ren
+-- telling ville passert også om raden var blitt skrevet om.
+select results_eq(
+  $$
+    select ur.role_code::text,
+           ur.valid_from < statement_timestamp(),
+           ur.valid_to < statement_timestamp(),
+           ur.end_reason
+    from workflow.user_roles ur
+  $$,
+  $$values ('reviewer', true, true, 'Tilbakekalt i testen.')$$,
+  'tilbakekallingen står urørt, og ingen ny tildeling er skrevet ved siden av den'
+);
+
+-- 3. Tildeling som først begynner å gjelde senere. Ingen rettighet finnes nå,
+--    men en ny tildeling ville overlappet den framtidige og blitt avvist.
+delete from workflow.user_roles;
+insert into workflow.user_roles
+  (user_id, role_code, scope_id, valid_from, granted_by_actor_id, grant_reason)
+select 'a703ede9-3f58-4de9-8c85-73936d58df1f', 'reviewer', null,
+       now() + interval '7 days', a.id, 'Planlagt tildeling i testen.'
+from provenance.actors a
+where a.actor_key = 'human:peder-holman';
+
+select is(
+  workflow.ensure_named_editor_authorization(),
+  'role_not_yet_valid',
+  'en tildeling som begynner å gjelde senere leses ikke som en gyldig rettighet nå'
+);
+select is(
+  (select count(*) from workflow.user_roles),
+  1::bigint,
+  'ingen overlappende tildeling forsøkes foran den framtidige'
+);
+
+-- 4. Presedens: en avsluttet tildeling ved siden av en løpende betyr at
+--    rettigheten gjelder. Det motsatte svaret ville vært feil på den farligste
+--    måten en autorisasjonskontroll kan ta feil, og rekkefølgen mellom de tre
+--    spørsmålene er derfor skrevet ut i funksjonen framfor å falle ut av
+--    rekkefølgen på tre uavhengige kontroller.
+delete from workflow.user_roles;
+insert into workflow.user_roles
+  (user_id, role_code, scope_id, valid_from, valid_to,
+   granted_by_actor_id, grant_reason, ended_by_actor_id, end_reason)
+select 'a703ede9-3f58-4de9-8c85-73936d58df1f', 'reviewer', null,
+       now() - interval '2 years', now() - interval '1 year',
+       a.id, 'Opprinnelig tildeling i testen.',
+       a.id, 'Tilbakekalt i testen.'
+from provenance.actors a
+where a.actor_key = 'human:peder-holman';
+insert into workflow.user_roles
+  (user_id, role_code, scope_id, valid_from, granted_by_actor_id, grant_reason)
+select 'a703ede9-3f58-4de9-8c85-73936d58df1f', 'reviewer', null,
+       now() - interval '1 hour', a.id, 'Gjeninnført tildeling i testen.'
+from provenance.actors a
+where a.actor_key = 'human:peder-holman';
+
+select is(
+  workflow.ensure_named_editor_authorization(),
+  'already_authorized',
+  'en løpende tildeling ved siden av en avsluttet gir gyldig, ikke avsluttet'
+);
+select is(
+  (select count(*) from workflow.user_roles),
+  2::bigint,
+  'presedensen skriver ingenting; begge de eksisterende tildelingene står'
+);
+
+-- 5. Gyldighet måles på setningen, ikke på transaksjonen.
+--
+--    MVP_IMPLEMENTATION_PLAN.md §74.6: tid som *avgjør* noe måles med
+--    statement_timestamp(); now() er transaksjonens starttidspunkt. Predikatet
+--    her avgjør om en rettighet gjelder, så forskjellen er ikke akademisk: en
+--    tildeling som trådte i kraft mens transaksjonen løp, ville med now() blitt
+--    lest som «gjelder ikke ennå» så lenge transaksjonen varte.
+--
+--    Vinduet gjøres deterministisk med pg_sleep framfor å hvile på at to
+--    setninger tilfeldigvis får ulikt tidsstempel: tildelingen begynner å
+--    gjelde 50 ms etter transaksjonsstart, og kallet skjer minst 200 ms etter.
+delete from workflow.user_roles;
+insert into workflow.user_roles
+  (user_id, role_code, scope_id, valid_from, granted_by_actor_id, grant_reason)
+select 'a703ede9-3f58-4de9-8c85-73936d58df1f', 'reviewer', null,
+       now() + interval '50 milliseconds', a.id,
+       'Tildeling som trer i kraft mens transaksjonen løper.'
+from provenance.actors a
+where a.actor_key = 'human:peder-holman';
+
+select pg_sleep(0.2);
+
+select is(
+  workflow.ensure_named_editor_authorization(),
+  'already_authorized',
+  'en tildeling som trådte i kraft mens transaksjonen løp, leses som gyldig nå'
+);
+
+-- 6. En *avgrenset* reviewer-tildeling er en annen og smalere rettighet.
+--
+--    Den skal verken telle som den uavgrensede eller blokkere den.
+--    user_roles_no_overlapping_grant_excl nøkler på
+--    coalesce(scope_id, ...), så de to kolliderer ikke — og nettopp derfor må
+--    oppslaget i funksjonen bruke samme nøkkel. Uten `scope_id is null` der
+--    ville en avgrenset tildeling gjort at redaktøren stille satt igjen med en
+--    smalere rettighet enn den migrasjonen skal gi.
+delete from workflow.user_roles;
+insert into workflow.user_roles
+  (user_id, role_code, scope_id, valid_from, granted_by_actor_id, grant_reason)
+select 'a703ede9-3f58-4de9-8c85-73936d58df1f', 'reviewer', cc.id,
+       now() - interval '1 hour', a.id,
+       'Avgrenset tildeling i testen.'
+from provenance.actors a, catalog.clinical_concepts cc
+where a.actor_key = 'human:peder-holman'
+  and cc.canonical_label = 'vektendring';
+
+select is(
+  workflow.ensure_named_editor_authorization(),
+  'authorized',
+  'en avgrenset tildeling teller ikke som den uavgrensede; den skrives'
+);
+select results_eq(
+  $$
+    select ur.scope_id is null, ur.grant_reason like 'Selvtildeling%'
+    from workflow.user_roles ur
+    order by 1
+  $$,
+  $$values (false, false), (true, true)$$,
+  'begge tildelingene står side om side; den avgrensede er urørt, og den nye er den uavgrensede selvtildelingen'
+);
+
+-- 7. En annen applikasjonsrolle er ikke en reviewer-rolle.
+--
+--    DATABASE_ARCHITECTURE.md §45: admin, editor og publisher gir ikke faglig
+--    godkjenningsrett. Talte oppslaget dem med, ville funksjonen lest en
+--    editor-tildeling som «allerede autorisert» og aldri skrevet
+--    reviewer-rollen — redaktøren ville stått igjen uten godkjenningsrett, og
+--    ingenting ville sagt fra.
+delete from workflow.user_roles;
+insert into workflow.user_roles
+  (user_id, role_code, scope_id, valid_from, granted_by_actor_id, grant_reason)
+select 'a703ede9-3f58-4de9-8c85-73936d58df1f', 'editor', null,
+       now() - interval '1 hour', a.id, 'Editor-tildeling i testen.'
+from provenance.actors a
+where a.actor_key = 'human:peder-holman';
+
+select is(
+  workflow.ensure_named_editor_authorization(),
+  'authorized',
+  'en editor-tildeling teller ikke som en reviewer-tildeling; reviewer skrives'
+);
+select results_eq(
+  $$
+    select ur.role_code::text, ur.grant_reason like 'Selvtildeling%'
+    from workflow.user_roles ur
+    order by 1
+  $$,
+  $$values ('editor', false), ('reviewer', true)$$,
+  'editor-tildelingen står urørt ved siden av den nye reviewer-tildelingen'
 );
 
 select * from finish();

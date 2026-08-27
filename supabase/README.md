@@ -253,7 +253,27 @@ kopi av den, og koblingen kan fullføres med ett kall til i et miljø der kontoe
 select workflow.ensure_named_editor_authorization();
 ```
 
-Kallet er idempotent og svarer `account_missing`, `authorized` eller `already_authorized`.
+Kallet er idempotent, og bare det første av de fem svarene skriver noe:
+
+| Svar                 | Betydning                                          |
+| -------------------- | -------------------------------------------------- |
+| `authorized`         | tildelingen ble skrevet                            |
+| `already_authorized` | en reviewer-tildeling er gyldig nå                 |
+| `role_not_yet_valid` | en reviewer-tildeling begynner å gjelde senere     |
+| `role_ended`         | en reviewer-tildeling er avsluttet                 |
+| `account_missing`    | kontoen finnes ikke i `auth.users` i dette miljøet |
+
+`workflow.user_roles` er en gyldighetsmodell og ikke et flagg: intervallet er halvåpent, og
+`valid_to` kan være satt allerede ved tildeling som en planlagt utløpsdato. «Løpende» og
+«gyldig nå» er derfor to forskjellige spørsmål, og bare det andre avgjør om rettigheten
+finnes. Gyldighet måles med `statement_timestamp()`, ikke med `now()`
+(`docs/MVP_IMPLEMENTATION_PLAN.md` §74.6).
+
+**En avsluttet tildeling gjeninnføres aldri.** En tilbakekalling som en rutinemessig
+`supabase db push` omgjør, er ingen tilbakekalling (`docs/DATABASE_ARCHITECTURE.md` §46).
+Funksjonen rapporterer `role_ended` og lar et menneske avgjøre; en gjeninnføring er en ny
+tildeling med sin egen begrunnelse.
+
 Funksjonen tar ingen parametere — konto og aktørnøkkel er konstanter i kroppen, så den kan
 bare gjøre denne ene tildelingen, aldri en vilkårlig. `EXECUTE` er trukket fra `PUBLIC`.
 

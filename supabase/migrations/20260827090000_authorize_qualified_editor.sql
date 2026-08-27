@@ -65,6 +65,43 @@
 -- reviewer»-funksjon, altså en rettighetseskalering med et vennlig navn.
 --
 -- ----------------------------------------------------------------------------
+-- Hva «allerede tildelt» betyr, og hvorfor det ikke er «valid_to is null»
+--
+-- workflow.user_roles er en gyldighetsmodell, ikke et flagg: en tildeling har
+-- et halvåpent intervall [valid_from, valid_to), og valid_to kan være satt
+-- allerede ved tildeling som en planlagt utløpsdato. «Løpende» og «gyldig nå»
+-- er derfor to forskjellige spørsmål, og bare det andre er det funksjonen skal
+-- svare på.
+--
+-- Fire lovlige tilstander finnes, og funksjonen skiller mellom alle fire:
+--
+--   gyldig nå               already_authorized   ingenting skrives
+--   starter i framtiden     role_not_yet_valid   ingenting skrives
+--   avsluttet               role_ended           ingenting skrives
+--   ingen tildeling         authorized           tildelingen skrives
+--
+-- «Gyldig nå» måles med statement_timestamp() og ikke med now(). Dette er et
+-- predikat som *avgjør* noe, og MVP_IMPLEMENTATION_PLAN.md §74.6 er eksplisitt
+-- på skillet: tid som avgjør måles på setningen, tid som registrerer måles på
+-- transaksjonen. now() er transaksjonens starttidspunkt og ville besvart
+-- spørsmålet «var rollen gyldig da transaksjonen begynte?».
+--
+-- **En avsluttet tildeling gjeninnføres ikke.** Det er den viktigste av de fire
+-- og et bevisst sikkerhetsvalg: DATABASE_ARCHITECTURE.md §46 krever at en
+-- rettighet skal kunne tilbakekalles umiddelbart, og en tilbakekalling som en
+-- rutinemessig `supabase db push` stilltiende omgjør, er ikke en tilbakekalling.
+-- workflow.freeze_role_grant() sier det samme om modellen: «en gjeninnføring av
+-- en tilbakekalt rolle er en ny tildeling med sin egen begrunnelse og sitt eget
+-- tidsrom». En slik begrunnelse kan ikke dikte seg selv opp i en bootstrap.
+-- Funksjonen rapporterer derfor role_ended og lar et menneske avgjøre.
+--
+-- Predikatet er avgrenset til scope_id is null, samme nøkkel som
+-- user_roles_no_overlapping_grant_excl bruker (user_id, role_code,
+-- coalesce(scope_id, ...)). En *avgrenset* reviewer-tildeling er en annen og
+-- smalere rettighet, den kolliderer ikke med denne, og den skal derfor verken
+-- blokkere tildelingen eller telle som den.
+--
+-- ----------------------------------------------------------------------------
 -- Selvtildeling, og hvorfor begrunnelsen må stå i raden
 --
 -- `granted_by_actor_id` er NOT NULL og peker på en aktør. Beslutningen ble tatt
@@ -110,7 +147,11 @@ declare
   c_actor_key constant text := 'human:peder-holman';
   v_actor_id uuid;
   v_linked_account_id uuid;
-  v_granted integer;
+  -- Ett oppslag, tre svar. Å stille de tre spørsmålene hver for seg ville gjort
+  -- rekkefølgen mellom dem til et implisitt valg; her er presedensen skrevet ut.
+  v_valid_now boolean;
+  v_starts_later boolean;
+  v_any_grant boolean;
 begin
   select a.id, a.auth_user_id into v_actor_id, v_linked_account_id
   from provenance.actors a
@@ -155,9 +196,44 @@ begin
   where id = v_actor_id
     and auth_user_id is null;
 
+  select
+    count(*) filter (
+      where ur.valid_from <= statement_timestamp()
+        and (ur.valid_to is null or ur.valid_to > statement_timestamp())
+    ) > 0,
+    count(*) filter (where ur.valid_from > statement_timestamp()) > 0,
+    count(*) > 0
+  into v_valid_now, v_starts_later, v_any_grant
+  from workflow.user_roles ur
+  where ur.user_id = c_account_id
+    and ur.role_code = 'reviewer'
+    and ur.scope_id is null;
+
+  -- Presedensen er skrevet ut framfor å falle ut av rekkefølgen på tre
+  -- uavhengige if-er. En avsluttet tildeling ved siden av en løpende betyr at
+  -- rettigheten gjelder; det motsatte svaret ville vært feil på den farligste
+  -- måten en autorisasjonskontroll kan ta feil.
+  if v_valid_now then
+    return 'already_authorized';
+  end if;
+
+  if v_starts_later then
+    raise notice
+      'Kontoen % har en reviewer-tildeling som først begynner å gjelde senere. Ingen ny tildeling er skrevet: en tildeling nå ville overlappet den, og databasen ville avvist den (user_roles_no_overlapping_grant_excl).',
+      c_account_id;
+    return 'role_not_yet_valid';
+  end if;
+
+  if v_any_grant then
+    raise notice
+      'Kontoen % har hatt en reviewer-tildeling som er avsluttet. Ingen ny er skrevet: en tilbakekalling som en migrasjonskjøring omgjør, er ingen tilbakekalling (DATABASE_ARCHITECTURE.md §46). En gjeninnføring er en ny tildeling med sin egen begrunnelse, og den avgjørelsen hører til et menneske.',
+      c_account_id;
+    return 'role_ended';
+  end if;
+
   insert into workflow.user_roles
     (user_id, role_code, scope_id, granted_by_actor_id, grant_reason)
-  select
+  values (
     c_account_id,
     'reviewer',
     -- NULL betyr «uten avgrensning», ikke «ukjent avgrensning». Antidep har ett
@@ -166,23 +242,14 @@ begin
     null,
     v_actor_id,
     'Selvtildeling, og det er et bevisst valg. Prosjekteieren er den navngitte kvalifiserte redaktøren ANTIDEP_CONSTITUTION.md §12 krever, og det finnes ingen høyere menneskelig instans i Antidep som kunne tildelt rollen. Alternativet — at en KI-aktør tildeler et menneske faglig godkjenningsrett — ville gjort en KI-prosess til opphavet til den retten, stikk i strid med §10 og §12. Ingen CHECK forbyr selvtildeling, så begrunnelsen står her. Tildelingen hviler på prosjekteierrollen og ikke på et fastsatt kompetansekrav: Antidep har ennå ingen Clinical Lead til å definere kompetansekravene for reviewer-scope (CONTENT_GOVERNANCE.md §11). Den skal revurderes når kravene finnes.'
-  where not exists (
-    select 1
-    from workflow.user_roles ur
-    where ur.user_id = c_account_id
-      and ur.role_code = 'reviewer'
-      and ur.scope_id is null
-      and ur.valid_to is null
   );
 
-  get diagnostics v_granted = row_count;
-
-  return case when v_granted > 0 then 'authorized' else 'already_authorized' end;
+  return 'authorized';
 end;
 $$;
 
 comment on function workflow.ensure_named_editor_authorization() is
-  'Idempotent autorisasjon av den navngitte kvalifiserte redaktøren (ANTIDEP_CONSTITUTION.md §12): knytter aktørraden fra migrasjon 005a til brukerkontoen og tildeler en løpende reviewer-rolle uten scope. Returnerer account_missing, authorized eller already_authorized. Kontoen finnes bare i miljøet den ble opprettet i, så funksjonen skriver ingenting og gir en notice der den mangler (MVP_IMPLEMENTATION_PLAN.md §74.18). Konto og aktørnøkkel er konstanter i kroppen: funksjonen kan bare gjøre denne ene tildelingen, aldri en vilkårlig.';
+  'Idempotent autorisasjon av den navngitte kvalifiserte redaktøren (ANTIDEP_CONSTITUTION.md §12): knytter aktørraden fra migrasjon 005a til brukerkontoen og tildeler en reviewer-rolle uten scope når ingen slik tildeling finnes fra før. Returnerer account_missing (ingen rad i auth.users), authorized (tildelingen ble skrevet), already_authorized (en tildeling er gyldig nå), role_not_yet_valid (en tildeling begynner å gjelde senere) eller role_ended (en tildeling er avsluttet). Bare authorized skriver noe. Gyldighet måles med statement_timestamp() fordi predikatet avgjør noe (MVP_IMPLEMENTATION_PLAN.md §74.6). En avsluttet tildeling gjeninnføres aldri: en tilbakekalling som en migrasjonskjøring omgjør, er ingen tilbakekalling (DATABASE_ARCHITECTURE.md §46). Konto og aktørnøkkel er konstanter i kroppen: funksjonen kan bare gjøre denne ene tildelingen, aldri en vilkårlig.';
 
 revoke execute on function workflow.ensure_named_editor_authorization() from public;
 

@@ -1382,7 +1382,7 @@ importfundamentet (§26). Den ellevte filen er migrasjon 005a, som utvider aktø
 004, 005, 006, 006a, 007, 008, 007a, 005a, 005b — sortert på tidsstempel, ikke på
 migrasjonsnummer, og de to siste filene bærer de to laveste bokstavnumrene.
 
-Databaselaget teller nå 1123 pgTAP-assertions over 35 testfiler.
+Databaselaget teller nå 1136 pgTAP-assertions over 35 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -3018,7 +3018,8 @@ henger sammen:
 
 1. **Raden uteblir ikke i stillhet.** Mangler kontoen, returnerer funksjonen statusen
    `account_missing` og gir i tillegg en synlig `notice` i utdataene fra `supabase db push`
-   og `supabase db reset`.
+   og `supabase db reset`. Det samme gjelder de to andre tilstandene der funksjonen bevisst
+   ikke skriver, `role_not_yet_valid` og `role_ended`.
 
 2. **Logikken ligger i én navngitt funksjon, ikke som løse setninger i migrasjonsfilen.**
    `workflow.ensure_named_editor_authorization()` er det ene stedet koblingen og tildelingen
@@ -3094,21 +3095,21 @@ mindre fiktiv mens den står (`ANTIDEP_CONSTITUTION.md` §12).
 **Hva som ble verifisert.** Migrasjonene er kjørt fra bunnen av og hele pgTAP-suiten er kjørt
 mot en lokal PostgreSQL 16 med pgTAP; Docker-registryene svarer 403 gjennom egress-proxyen, så
 `npx supabase start` er ikke tilgjengelig, og CI kjører den ekte stacken. Grunnlinjen før
-endringen var 1109 passerende assertions, etter endringen 1123, uten `not ok`, uten planavvik
+endringen var 1109 passerende assertions, etter endringen 1136, uten `not ok`, uten planavvik
 og uten `ERROR`. `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run test`,
 `npm run build` og `./scripts/verify-counts.sh` er kjørt og passerer.
 
-Tjuefem mutasjoner er innført én om gangen — nitten i SQL, seks i planens tallpåstander — og
-tjuefire fanges. Den som overlever er `raise notice` degradert til `raise debug`: pgTAP kan
+Trettifem mutasjoner er innført én om gangen — tjueni i SQL, seks i planens tallpåstander — og
+trettifire fanges. Den som overlever er `raise notice` degradert til `raise debug`: pgTAP kan
 ikke observere en `notice`, så den halvdelen av kravet i §74.18 er ikke maskinelt kontrollert.
 Det er registrert som gjeld i §74.7 framfor å bli stående som en kommentar. Statusen
 funksjonen returnerer, er den halvdelen som *er* kontrollert, og den er nettopp derfor et
 returnert felt og ikke bare en `notice`.
 
-**Vaktposten er lukket i begge ledd, som i §74.19.** Fjernes assertion 13 fra
+**Vaktposten er lukket i begge ledd, som i §74.19.** Fjernes en assertion fra
 `350_editor_authorization_test.sql` uten at planen justeres, feiler pgTAP på «Looks like you
-planned 14 tests but ran 13». Justeres `plan()` med, blir pgTAP stille — og da slår
-`scripts/verify-counts.sh` ut mot §74.2, fordi summen av `plan(N)` ikke lenger er 1123. Begge
+planned 27 tests but ran 26». Justeres `plan()` med, blir pgTAP stille — og da slår
+`scripts/verify-counts.sh` ut mot §74.2, fordi summen av `plan(N)` ikke lenger er 1136. Begge
 utveier er stengt, og det er prøvd og ikke antatt.
 
 **Den viktigste mutasjonen traff forutsetningen, ikke implementasjonen.** Assertion 13 hviler
@@ -3119,6 +3120,56 @@ av i migrasjon 005, og `190_workflow_constraints_test.sql` feilet på fem assert
 dem «editor- og admin-rollene gir ikke faglig godkjenningsrett». En variant der `editor` også
 kvalifiserte, ble fanget av de samme. Begge ledd er dermed lukket: at rollen åpner kontrollen,
 er prøvd her; at den er nødvendig for å åpne den, er prøvd i 190.
+
+**Reviewen fant en feil i «allerede tildelt», og den var reell.** Første utgave av
+funksjonen leste en eksisterende tildeling som `valid_to is null`. `workflow.user_roles` er
+ikke et flagg, men en gyldighetsmodell: intervallet er halvåpent, og `valid_to` kan være satt
+allerede ved tildeling som en planlagt utløpsdato. Tre lovlige tilstander ble derfor håndtert
+feil, og alle tre er reprodusert mot databasen før de ble rettet:
+
+| Tilstand | Hva som skjedde | Hva som skjer nå |
+|---|---|---|
+| Tidsavgrenset, men gyldig nå | Raden ble lest som fraværende, en ny tildeling forsøkt skrevet, og `user_roles_no_overlapping_grant_excl` avviste den. Funksjonen feilet i stedet for å svare — en `supabase db push` ville stoppet | `already_authorized`, ingenting skrives |
+| Begynner å gjelde senere | `already_authorized`, mens null tildelinger faktisk var gyldige. En autorisasjonskontroll som svarer «autorisert» om noe som ikke gjelder | `role_not_yet_valid`, ingenting skrives |
+| Avsluttet | `authorized`: rettigheten ble stille gjeninnført, og tilbakekallingen omgjort av en migrasjonskjøring | `role_ended`, ingenting skrives |
+
+**Den avsluttede tildelingen var den farligste, og valget der er bevisst.** `DATABASE_ARCHITECTURE.md`
+§46 krever at en rettighet skal kunne tilbakekalles umiddelbart, og en tilbakekalling som en
+rutinemessig `supabase db push` omgjør, er ingen tilbakekalling. `workflow.freeze_role_grant()`
+sier det samme om modellen: en gjeninnføring er en ny tildeling med sin egen begrunnelse — og
+en slik begrunnelse kan ikke dikte seg selv opp i en bootstrap. Funksjonen rapporterer derfor
+og lar et menneske avgjøre. Det er også det mest reversible: å nekte kan et menneske overstyre,
+å gjeninnføre i stillhet kan ingen oppdage.
+
+Returverdiene er utvidet fra tre til fem, og bare `authorized` skriver noe. Presedensen mellom
+dem er skrevet ut i funksjonen framfor å falle ut av rekkefølgen på tre uavhengige kontroller:
+en løpende tildeling ved siden av en avsluttet betyr at rettigheten gjelder, og det motsatte
+svaret ville vært feil på den farligste måten en autorisasjonskontroll kan ta feil.
+
+Gyldighet måles med `statement_timestamp()` og ikke med `now()`. §74.6 ber uttrykkelig den som
+skriver ny autorisasjons- eller gyldighetslogikk om å lese skillet først: `now()` er
+transaksjonens starttidspunkt, så en tildeling som trådte i kraft mens transaksjonen løp, ville
+blitt lest som «gjelder ikke ennå» så lenge transaksjonen varte. Assertion 23 gjør vinduet
+deterministisk med `pg_sleep` framfor å hvile på at to setninger tilfeldigvis får ulike
+tidsstempler.
+
+To hull til ble funnet av mutasjonstestingen og ikke av reviewen: uten `scope_id is null` og
+`role_code = 'reviewer'` i oppslaget ville en *avgrenset* reviewer-tildeling eller en
+`editor`-tildeling blitt lest som «allerede autorisert», og redaktøren ville stille sittet igjen
+med en smalere rettighet enn migrasjonen skal gi. Begge har nå hver sin assertion.
+
+**En sjette felle for mutasjonsharnessen, funnet her.** `F2` — å slå av vernet mot at en
+avsluttet tildeling gjenåpnes — rapporterte seg først som overlevende. Mutasjonen traff
+definisjonen i migrasjon 005, men migrasjon 008 gjør `create or replace` på den samme
+funksjonen, så den muterte definisjonen var død kode. **En mutasjon av en definisjon en senere
+migrasjon erstatter, er en stille no-op som ser ut som et hull i testdekningen.** Kontrollen er
+å lese `prosrc` fra `pg_proc` og bekrefte at mutasjonen faktisk står i den lastede kroppen.
+Mot den gjeldende definisjonen ble mutasjonen drept.
+
+**Og en syvende: harnessen gjenopprettet filene, men ikke databasen.** Etter siste mutasjon i en
+batch lå den muterte funksjonen fortsatt i basen, og neste kjøring målte mot den. To assertioner
+så ut til å feile mot kode som var korrekt på disk. Gjenopprettingen må kjøre `reset` til slutt,
+ikke bare skrive filene tilbake.
 
 **Hva som gjenstår.** Milepæl B mangler fortsatt fire ting (§74.4). Den første venter ikke
 lenger på kode, men på at migrasjonene kjøres mot det hostede prosjektet — en egen oppgave som
