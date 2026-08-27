@@ -33,11 +33,22 @@ export const ROUTE_PATTERNS = {
   topic: '/topics/:topicSlug',
   claimEvidence: '/claims/:claimId/evidence',
   source: '/sources/:sourceId',
+  access: '/access',
 } as const
 
 /** Forsiden: hvilke virkestoff Antidep har publisert kunnskap om. */
 export function homePath(): string {
   return '/'
+}
+
+/**
+ * Min tilgang (MVP_IMPLEMENTATION_PLAN.md §29, §74.22): innlogging, og et svar
+ * på «hvem er jeg, og hva har jeg lov til?». Ingen parameter — adressen er den
+ * samme for en uinnlogget og en innlogget kaller, og siden selv avgjør hvilket
+ * av de to den viser (`AccessPage.tsx`).
+ */
+export function accessPath(): string {
+  return '/access'
 }
 
 /** Legemiddelsiden for ett kanonisk virkestoffnavn (§30). */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  accessPath,
   claimEvidencePath,
   drugPath,
   homePath,
@@ -42,12 +43,17 @@ describe('adressene', () => {
     expect(homePath()).toBe('/')
   })
 
+  it('min tilgang har ingen parameter: adressen er den samme innlogget og ikke', () => {
+    expect(accessPath()).toBe('/access')
+  })
+
   it('mønstrene og byggerne beskriver samme adresser', () => {
     // Et mønster som drifter fra byggeren gir lenker ruteren ikke kjenner.
     expect(ROUTE_PATTERNS.drug).toBe('/drugs/:drugSlug')
     expect(ROUTE_PATTERNS.topic).toBe('/topics/:topicSlug')
     expect(ROUTE_PATTERNS.claimEvidence).toBe('/claims/:claimId/evidence')
     expect(ROUTE_PATTERNS.source).toBe('/sources/:sourceId')
+    expect(ROUTE_PATTERNS.access).toBe(accessPath())
     expect(ROUTE_PATTERNS.home).toBe(homePath())
   })
 })

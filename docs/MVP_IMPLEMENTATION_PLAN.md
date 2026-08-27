@@ -1335,7 +1335,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       docs: clarify collaboration and reporting rules         (#30)  merget   ingen migrasjon
       db: authorize the named qualified editor                (#31)  merget   migrasjon 005b
       db: expose the caller's own actor and roles             (#32)  merget   migrasjon 007b
-      docs: mark #32 as merged in the PR log                  (#33)  åpen     ingen migrasjon
+      docs: mark #32 as merged in the PR log                  (#33)  merget   ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1358,7 +1358,7 @@ med alt Antidep bruker den til (§74.16). **PR I er dermed ferdig, og med den Sl
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #31. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #33. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
 Raden for #30 føres her og ikke av #30 selv. Den PR-en endret bare `CLAUDE.md` og rørte
@@ -3317,6 +3317,107 @@ migrasjonen lukker ingen av dem, og den er heller ikke ment å gjøre det: den �
 leddet i adminflyten, som er der de tre siste faktisk kan utføres.
 
 ---
+
+### 74.22 Hva innlogging og min tilgang innførte
+
+`feat: add sign-in and my access` er Steg 1 av «manuell adminflyt» (§29): innlogging, og et
+svar på «hvem er jeg, og hva har jeg lov til?», bygget over den autentiserte leseveien
+migrasjon 007b åpnet (§74.21). Ingen migrasjon: viewene og grantene fra 007b er nok for Steg 1.
+Steg 2 — skriveveien/RPC-laget (DATABASE_ARCHITECTURE.md §43, §48) — og Spor 2 —
+verifikasjon/godkjenning — hører til senere PR-er, og er ikke rørt her.
+
+**Én side, ikke to.** `/access` («Min tilgang») er den samme adressen for en uinnlogget og en
+innlogget kaller. En uinnlogget kaller ser innloggingsskjemaet der en innlogget kaller ser
+svaret, og siden selv — ikke en ruteforgrening — avgjør hvilket av de to som vises
+(`src/app/pages/AccessPage.tsx`). To sider, én for hver tilstand, ville latt ordlyden på de to
+drive fra hverandre på nøyaktig den måten §74.16 og §74.20 allerede har dokumentert at skjer
+når samme sannhet skrives to steder.
+
+**FELLE 1 — sesjonen er en inngang til spørringen, ikke en omgivelse rundt den.**
+`useReadModel()` kjører bare på nytt når spørringens referanse endres, og innlogging endrer
+ingen parameter på `fetchCallerActor`/`fetchCallerRoles` — samme funksjon, samme referanse.
+Uten et eksplisitt grep ville siden fortsatt vist svaret fra før innlogging. Løsningen er
+strukturell, ikke en sesjonsnøkkel i en `useCallback`-avhengighet: `AccessPage` forgrener på
+innloggingsstatus (`useAuthSession()`, ny hook i `src/app/use-auth-session.ts`, som abonnerer på
+`client.auth.onAuthStateChange()`), og komponenten som faktisk kaller de to lesefunksjonene
+finnes ikke i treet før kalleren er innlogget. En innlogging bytter dermed hele undertreet, og
+en førstegangsmontering er per konstruksjon en frisk spørring — ingen nøkkel å holde i sync.
+Testet direkte: `use-auth-session.test.tsx` beviser at hooken oppdager en innlogging og en
+utlogging via abonnementet alene, og `AccessPage.test.tsx` beviser at ingen spørring mot
+`api.my_actor`/`api.my_roles` kjører før innlogging, og at begge kjører rett etter — mutert ved
+å la komponenten montere uforgrenet, som felte fire av ti tester i den filen.
+
+**FELLE 2 — fire tilstander, ikke tre.** `ReadModelResult` er `ok | empty | error`, og
+`useReadModel()` legger til `loading`. En uinnlogget kaller mot `api.my_actor` ville fått 42501
+fra RLS og blitt lest som `error` — feil beskjed, og nøyaktig den samme sammenblandingen av feil
+og fravær §74.12 punkt 1 allerede forbyr på klinikerflaten. Den unngås strukturelt av samme
+grep som løser FELLE 1: spørringene kjører aldri før kalleren er innlogget, så en uinnlogget
+kaller ser aldri `error` — den ser innloggingsskjemaet. De fire tilstandene `AccessPage` skiller,
+med hver sin ordlyd:
+
+```text
+ikke innlogget            innloggingsskjemaet
+innlogget, ingen aktør    «Kontoen din er ikke knyttet til en person i Antidep»
+innlogget, ingen roller   «Du har ingen rettighet nå»
+feil                      «Antidep fikk ikke hentet informasjon om tilgangen din»
+```
+
+Aktør og roller er to uavhengige spørringer, og siden venter bevisst på at begge er ferdige før
+den viser noe annet enn «laster»: et svar som konkluderte «ingen aktør» mens rollene fortsatt
+lastet, ville vært en forhastet konklusjon presentert som endelig.
+
+**FELLE 3 — egen modul, ikke `published-read-model.ts`.** Kallerens egne roller er ikke
+publisert kunnskap og har en annen tomhetssemantikk: en tom `api.my_actor` betyr «ingen aktør
+er knyttet til denne kontoen», en tom `api.my_roles` betyr «ingen rettighet nå» — to navngitte
+tomhetsformer, ikke lesemodellens ene generiske `empty`. Fetch-funksjonene ligger derfor i en ny
+modul, `src/lib/caller-authorization.ts`, med sin egen resultattype
+(`CallerActorResult`/`CallerRolesResult`, med variantene `ok | no_actor | error` og
+`ok | no_roles | error`). Sorteringsdoktrinen fra `published-read-model.ts` gjelder heller ikke:
+rekkefølgen på en persons roller er ingen vekting, bare en stabil rekkefølge mellom kall
+(sortert på `role_code`). `useReadModel()` selv er generalisert til å være generisk over
+resultattypen — `Result` utledes nå direkte av spørringens returtype, og trenger ingen egen
+`Row`-parameter — slik at hentelogikken (klientoppslag, stale-response-vakten fra §74.14 punkt
+4, feilfanging) er felles uten at de to modulenes betydninger flates ut. Ingen eksisterende
+kallsted i `published-read-model.ts`-familien trengte å endres: `Result` faller tilbake til
+`ReadModelResult<Row>` når ingenting annet er oppgitt.
+
+**FELLE 4 — ingen «du har lov»-boolean i klienten.** Viewene svarer på hva kalleren HAR, ikke
+hva kalleren KAN — det sier migrasjon 007b eksplisitt (§74.21), og klienten skal ikke regne ut
+en autorisasjonsbeslutning en projeksjon ikke bærer. En tilbaketrukket aktør
+(`retired_at` satt) har fortsatt sine rolletildelinger i `api.my_roles`, men
+`knowledge.assert_publisher_authorized(uuid, uuid)` avviser den likevel på sitt eget tidspunkt.
+Siden viser derfor rollene *og* et eksplisitt varsel side om side når aktøren er tilbaketrukket
+— aldri ved å skjule rollene, som ville vært en stille og feil «ingen rettighet», og aldri uten
+varselet, som ville lovet en handling systemet avviser.
+
+**To gjeldsposter fra §74.7 er bevisst ikke utvidet.** `api.my_roles.scope_id` kan ikke slås opp
+til en etikett, og skiller ikke en utløpt tildeling fra en som aldri fantes. Siden viser
+«avgrenset til et bestemt klinisk begrep» uten navnet, med samme ordlydsmønster som
+`superseded_by_source_id`-merknaden på kildesiden (§74.16 punkt 5): en identitet klienten ikke
+kan slå opp, er ikke et svar. Ingen ny historikk-projeksjon er bygget for Steg 1.
+
+**Nettleserverifisering.** Chromium (`/opt/pw-browsers/chromium`) kjørt headless med
+devtools-protokollen direkte over Node 22 sin innebygde `WebSocket` — Playwright er ikke
+installert. En midlertidig `preview.html`/`src/preview-main.tsx` rendret `AppLayout` i en
+`MemoryRouter` på `/access` med `fakeClient()`, styrt fra en query-parameter, og dekket alle
+tilstandene fra FELLE 2 og tilbaketrekkingsvarselet fra FELLE 4 på både mobil- (390px) og
+skrivebordsbredde (1280px) — 14 kombinasjoner, ingen `Runtime.exceptionThrown` og ingen
+konsollfeil i noen av dem. Innloggingsskjemaet, et avvist forsøk og utlogging ble i tillegg
+øvd direkte i nettleseren (skrevet inn med den samme native-verdisetter-teknikken React
+kontrollerte felt krever, ikke bare i jsdom), og viste seg identisk med den automatiserte
+testpakken. Begge filene er slettet før commit, som instruert.
+
+**Mutasjonstestet.** FELLE 1, FELLE 2 og FELLE 4 er hver mutert og bekreftet fanget: montering
+uforgrenet av innloggingsstatus felte fire av ti tester i `AccessPage.test.tsx`; å behandle
+`no_actor` som `error` felte den testen som ber om nettopp det skillet; å slutte å rendre
+tilbaketrekkingsvarselet felte både den testen og testen som krever at varselet *ikke* vises
+for en aktør som ikke er tilbaketrukket. Hele testpakken teller nå 770 passerende tester, opp
+fra 740 ved sesjonsstart.
+
+**Hva som gjenstår.** Steg 2 av adminflyten — den kontrollerte skriveveien admin-RPC-laget
+(DATABASE_ARCHITECTURE.md §43, §48) — er ikke bygget. Spor 2 (verifikasjon og godkjenning) er
+heller ikke rørt. Milepæl B mangler fortsatt de samme fire tingene den har gjort siden §74.4:
+denne PR-en lukker ingen av dem, og er ikke ment å gjøre det.
 
 ---
 
