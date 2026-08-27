@@ -1243,10 +1243,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ## 74. Status etter kildevisningen
 
-**Oppdatert:** 26. august 2026 (etter `test: verify the api column contract`, som binder
-radtypene i `src/types/` til databasens kolonner — se §74.19; forrige oppdatering etter
-`docs: correct the record of the hosted Supabase project`, som retter en påstand om det
-hostede prosjektet som hadde vært arvet siden migrasjon 007, §74.18)
+**Oppdatert:** 27. august 2026 (etter `db: authorize the named qualified editor`, som
+knytter redaktørens brukerkonto til aktørraden og tildeler `reviewer`-rollen — se §74.20;
+forrige oppdatering etter `test: verify the api column contract`, som binder radtypene i
+`src/types/` til databasens kolonner, §74.19)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1331,7 +1331,9 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       feat: add the source view                               (#26)  merget   ingen migrasjon
       db: register the named qualified editor                 (#27)  merget   migrasjon 005a
       docs: correct the record of the hosted Supabase project (#28)  merget   ingen migrasjon
-      test: verify the api column contract                        (#29)  åpen     ingen migrasjon
+      test: verify the api column contract                    (#29)  merget   ingen migrasjon
+      docs: clarify collaboration and reporting rules         (#30)  merget   ingen migrasjon
+      db: authorize the named qualified editor                (#31)  åpen     migrasjon 005b
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1354,8 +1356,13 @@ med alt Antidep bruker den til (§74.16). **PR I er dermed ferdig, og med den Sl
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #28. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #29. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
+
+Raden for #30 føres her og ikke av #30 selv. Den PR-en endret bare `CLAUDE.md` og rørte
+verken planen eller vaktposten, så loggen fikk et hull mellom #29 og #31. Et hull i en tabell
+som heter «faktisk PR-rekkefølge» leses som en feil, ikke som et fravær, og etterføring er
+billigere enn å la nummerrekken være usann.
 
 Konvensjonen har sviktet fire ganger på rad, og er derfor ikke lenger bare en konvensjon:
 `scripts/verify-counts.sh` krever at hver rad unntatt den nyeste står som `merget`, og at
@@ -1370,11 +1377,12 @@ utenfor den planlagte rekken og fikk en bokstav. Konvensjonen finnes nettopp for
 Den tiende filen er migrasjon 007a av samme grunn: den utvider api-lesemodellen fra §24 og
 står utenfor den planlagte rekken, og nummeret 009 er reservert for DrugProduct- og
 importfundamentet (§26). Den ellevte filen er migrasjon 005a, som utvider aktørregisteret fra
-§20 og står utenfor rekken på nøyaktig samme måte. Filrekkefølgen er dermed 001, 002, 003,
-004, 005, 006, 006a, 007, 008, 007a, 005a — sortert på tidsstempel, ikke på
+§20 og står utenfor rekken på nøyaktig samme måte. Det gjør også den tolvte, migrasjon
+005b, som fullfører det 005a bevisst lot stå åpent. Filrekkefølgen er dermed 001, 002, 003,
+004, 005, 006, 006a, 007, 008, 007a, 005a, 005b — sortert på tidsstempel, ikke på
 migrasjonsnummer, og de to siste filene bærer de to laveste bokstavnumrene.
 
-Databaselaget teller nå 1109 pgTAP-assertions over 34 testfiler.
+Databaselaget teller nå 1136 pgTAP-assertions over 35 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1416,6 +1424,12 @@ er navngitt, men har verken brukerkonto eller rolletildeling, og kan derfor ikke
 faglig beslutning — `workflow.enforce_reviewer_qualification()` avviser forsøket, og
 `220_provenance_seed_test.sql` prøver det framfor å påstå det. De to påstandene er fortsatt
 ubekreftede KI-forslag, og `current_published_revision_id` er tom på begge.
+
+**Migrasjon 005b endrer ikke listen over, og det er ikke en forglemmelse.** Den kobler
+redaktørens aktørrad til brukerkontoen og tildeler `reviewer`-rollen — men bare i miljøer der
+kontoen finnes i `auth.users`. Den finnes bare i det hostede prosjektet, og der er ingen
+migrasjon kjørt (§74.18). I en fersk lokal stack og i CI gjør migrasjonen derfor ingenting,
+og sier fra om det. Se §74.20.
 
 ### 74.4 Milepæl B er ikke nådd, og hvorfor
 
@@ -1461,33 +1475,40 @@ kildematerialet er innfridd. Godkjenningen kan ikke være agentprodusert.
 godkjenningen. Alt maskineri fra kilde til klientflate står ferdig og testet rundt det
 tomrommet.
 
+**Den første av de fire er ikke lenger en kodeoppgave.** Migrasjon 005b knytter redaktørens
+aktørrad til brukerkontoen og tildeler `reviewer`-rollen, og begge grenene av den er kjørt i
+CI (§74.20). Men *utført* er den ingen steder: kontoen finnes bare i det hostede prosjektet,
+og der er ingen migrasjon kjørt (§74.18). Redaktøren har derfor fortsatt ingen rolle i noen
+database. Første gang migrasjonene kjøres mot det hostede prosjektet, blir tildelingen
+skrevet — og den oppgaven er ikke gjort. Milepæl B mangler dermed fortsatt fire ting; det som
+har endret seg, er at den første av dem venter på en kjøring og ikke på kode.
+
 G8 er verdt å merke seg særskilt, fordi den er lett å utelate når kravene listes opp: G9 leser
 utfallet på den gjeldende claim-verifikasjonen, mens G8 er kravet om at det finnes en i det
 hele tatt. Med en tom tabell feiler begge, på hver sin måte. Dette er sjette gang et tall
 eller en påstand i planen har vært arvet framfor kontrollert (§74.8), og den ble funnet ved å
 lese gaten framfor hand-offen.
 
-**Den første av de fire er delvis gjort, og resten av den er blokkert av en beslutning som
-ikke er tatt.** Prosjekteieren har opprettet redaktørens brukerkonto i autentiseringslaget i
-det hostede Supabase-prosjektet. Selve rollegranten — migrasjonen som kobler kontoen til
-aktørraden og tildeler `reviewer` — er ikke skrevet, fordi den ikke kan skrives før det er
-avgjort hva den skal gjøre i miljøer der kontoen ikke finnes. `workflow.user_roles.user_id` er
-`NOT NULL` med fremmednøkkel til `auth.users`, og CI starter en fersk lokal stack uten den
-kontoen. Valget, med prisen på hver vei, står i §74.18.
+**Beslutningen som blokkerte rollegranten, er tatt og gjennomført.** Prosjekteieren opprettet
+redaktørens brukerkonto i autentiseringslaget i det hostede Supabase-prosjektet.
+`workflow.user_roles.user_id` er `NOT NULL` med fremmednøkkel til `auth.users`, og CI starter
+en fersk lokal stack uten den kontoen, så migrasjonen kunne ikke skrives før det var avgjort
+hva den skulle gjøre i miljøer der kontoen ikke finnes. Valget, med prisen på hver vei, står i
+§74.18; hvordan prisen faktisk ble betalt, står i §74.20.
 
 ### 74.5 Beslutninger tatt før migrasjon 007 eksponerte verdier utad
 
 Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
 
 1. **Enum kontra oppslagstabell — utsatt, og gjort billigere å utsette.** Det finnes
-   38 enum-typer, fordelt på de elleve migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
-   007, 008, 007a og 005a — i filrekkefølge, ikke i nummerrekkefølge — med henholdsvis
-   1, 6, 11, 7, 10, 2, 0, 0, 1, 0 og 0. Tallet er kontrollert mot
+   38 enum-typer, fordelt på de tolv migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
+   007, 008, 007a, 005a og 005b — i filrekkefølge, ikke i nummerrekkefølge — med henholdsvis
+   1, 6, 11, 7, 10, 2, 0, 0, 1, 0, 0 og 0. Tallet er kontrollert mot
    kilden (`grep -cE '^create type ' supabase/migrations/*.sql`) og mot databasen.
-   Alle elleve ledd er nå oppgitt eksplisitt framfor å la de siste hvile på restpåstanden i
-   `scripts/verify-counts.sh`; det er den formen vakten kontrollerer strengest. Migrasjon
-   005a legger ikke til enum-typer: den registrerer én rad i et register som allerede
-   finnes.
+   Alle tolv ledd er nå oppgitt eksplisitt framfor å la de siste hvile på restpåstanden i
+   `scripts/verify-counts.sh`; det er den formen vakten kontrollerer strengest. Verken
+   005a eller 005b legger til enum-typer: den ene registrerer én rad i et register som
+   allerede finnes, den andre knytter og tildeler.
    Viewene caster enum-kolonner til `text`, så den offentlige kontrakten er en streng
    fra et dokumentert vokabular, ikke PostgreSQL-typen. Et senere bytte til
    oppslagstabeller er dermed ikke en brytende API-endring. Castingen sparer også
@@ -1546,6 +1567,7 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Fysisk sletting av en rolletildeling er selv uauditert | En rolletildeling kan fjernes fysisk uten at det står hvem som fjernet den. Auditradene for tildelingen og avslutningen består — det er nettopp derfor `object_id` ikke har fremmednøkkel — men slettingen selv etterlater ingen rad. En trigger kan ikke navngi den som sletter, fordi `DELETE` ikke bærer en aktør, og `audit.events.actor_id` er med hensikt `NOT NULL` | Admin-flyten (§48). Der går slettingen gjennom en kontrollert funksjon som kjenner aktøren, og `DATABASE_ARCHITECTURE.md` §36 sitt krav om «særskilt audit» ved fysisk sletting kan innfris |
 | Endringer på `provenance.actors` auditeres ikke | Aktørraden er festepunktet for all attribusjon, og visningsnavn, beskrivelse og tilbaketrekking kan endres uten spor. Identiteten er riktignok frosset av `provenance.freeze_actor_identity()`, så det som kan endres er presentasjon og livssyklus, ikke hvem aktøren er | Samme trigger som over, og av samme grunn: tabellen har ingen kolonne som sier hvem som endret raden, så en trigger har ingen aktør å registrere |
 | `audit.events.request_or_run_id` har ingen produsent | Auditrader kan ikke grupperes etter forespørselen eller agentkjøringen de hørte til, så en operasjon som består av flere skrivinger framstår som uavhengige hendelser | `provenance.agent_runs`, eller det første admin-RPC-laget som har en forespørselsidentitet å sende med |
+| Den synlige `notice` fra migrasjon 005b er ikke maskinelt kontrollert | §74.18 krevde at raden ikke skal utebli i stillhet når brukerkontoen mangler, og migrasjonen gir derfor en `notice`. pgTAP kan ikke observere en `notice`, så den delen av kravet hviler på at et menneske leser utdataene fra `supabase db push`. Statusen `account_missing` som funksjonen returnerer, er den halvdelen som *er* kontrollert (`350_editor_authorization_test.sql` assertion 1), og en mutasjon som degraderer `raise notice` til `raise debug` overlever derfor hele suiten | Den første vaktposten som uansett må lese utdataene fra en migrasjonskjøring — eller en avvikling av behovet, ved at kontoen finnes i alle miljøer og grenen ikke lenger kan tas |
 | En basiskolonne kan miste sin `NOT NULL` uten at kolonnekontrakten fanger det | Kolonnenavn og kolonnetyper i `api` er nå uttømmende kontrollert mot katalogen, og nullbarheten er målt på faktiske rader (§74.19). Målingen fanger en kolonne som blir nullbar fordi joinen, uttrykket eller projeksjonen endres — den minimale probe-raden går da NULL. Den fanger ikke at en basiskolonne under viewet stille mister sin `NOT NULL`: probe-fiksturen navngir kolonnen i sin `insert`, så den fortsetter å sette en verdi, og raden ser lik ut. Klienten ville lest en kolonne som `string` mens databasen kan svare `null` | Enten en avledning som knytter hver ikke-nullbare api-kolonne til den basiskolonnen den kommer fra og krever `attnotnull` der — det krever en kolonnekartlegging gjennom viewdefinisjonen, som PostgreSQL ikke eksponerer ferdig — eller den første migrasjonen som gjør en basiskolonne nullbar. Migrasjonen må da endre kontraktsraden i `supabase/tests/340_api_column_contract_test.sql` og radtypen sammen |
 | Ingen regel binder et kontrastivt effektmål til en komparator | `knowledge.claim_revisions` tillater fortsatt `magnitude_measure = 'mean_difference'` sammen med `comparator_kind = 'none'`, og en redaktør kan skrive kombinasjonen. Migrasjon 003 tillater nøyaktig det samme paret på `knowledge.evidence_items`, så gjelden gjelder begge tabellene. Presentasjonslaget nekter nå å tolke den på begge (§74.13, §74.15) gjennom én felles avledning, men det er et forsvar i visningen, ikke en invariant: dataene er like ugyldige, og enhver annen leser av `api` ser dem rå | Migrasjonen som legger til betingelsen, eller admin-flyten (§29), som er første sted en redaktør kan skrive kombinasjonen. Regelen må ta stilling til `mean_change`, som er en endring fra behandlingsstart og korrekt har `none` |
 | Ingen regel binder en tallfestet effekt til at evidensen er graderbar | En revisjon kan bære `magnitude_value` samtidig som vurderingen er `no_assessable_evidence` — som ifølge migrasjon 004 betyr at det ikke finnes tilstrekkelig grunnlag til å gjøre en vurdering i det hele tatt. Kolonnekommentaren på `magnitude_value` sier selv at en påstand som er mer presis enn evidensen under den, er et brudd på `ANTIDEP_CONSTITUTION.md` §4 og §6, men ingen `CHECK` håndhever det på tvers av de to tabellene. Presentasjonslaget skjuler tallet (§74.13); databasen tillater det | Samme migrasjon som over, eller admin-flyten. Regelen krysser `knowledge.claim_revisions` og `knowledge.evidence_assessments`, så den må enten være en trigger eller en betingelse i publiseringsgaten |
@@ -2976,6 +2998,183 @@ SQL-endring og ingen endring i `src/` — bare to nye kontroller og en innstramm
      `psql -f` skriver den som en kommentar og avslutter med 0. Et lokalt harness som bare
      teller `^not ok` er derfor blindt for en slettet assertion. Det var nettopp den
      mutasjonen som skulle måles, og den så ut til å overleve til harnessen ble rettet.
+
+---
+
+### 74.20 Hva autorisasjonen av redaktøren innførte
+
+`db: authorize the named qualified editor` er migrasjon 005b. Den fullfører det 005a bevisst
+lot stå åpent: aktørraden knyttes til redaktørens brukerkonto, og `reviewer`-rollen tildeles.
+Den oppretter ingen tabell og ingen enum-type. Den legger til én funksjon og skriver to rader
+— i miljøer der brukerkontoen finnes.
+
+**Migrasjonen er miljøavhengig, og det er valget §74.18 tok.** `workflow.user_roles.user_id`
+er `NOT NULL` med fremmednøkkel til `auth.users`. Kontoen finnes bare i det hostede
+prosjektet; CI og lokal utvikling starter en fersk stack uten den. «Vei a» gjør koblingen
+betinget av at kontoen finnes, framfor å dikte opp en konto lokalt eller å holde
+rolletildelingen utenfor de versjonerte migrasjonene. Prisen i tabellen der — at CI ellers
+aldri ville kjørt den grenen som faktisk kjører i produksjon — er betalt på tre måter, og de
+henger sammen:
+
+1. **Raden uteblir ikke i stillhet.** Mangler kontoen, returnerer funksjonen statusen
+   `account_missing` og gir i tillegg en synlig `notice` i utdataene fra `supabase db push`
+   og `supabase db reset`. Det samme gjelder de to andre tilstandene der funksjonen bevisst
+   ikke skriver, `role_not_yet_valid` og `role_ended`.
+
+2. **Logikken ligger i én navngitt funksjon, ikke som løse setninger i migrasjonsfilen.**
+   `workflow.ensure_named_editor_authorization()` er det ene stedet koblingen og tildelingen
+   er beskrevet, og både migrasjonen og testen kaller den. Alternativet — å skrive setningene
+   rett i filen og la testen gjenta dem — ville gitt to påstander som kan drive fra
+   hverandre, og testen ville da kontrollert en kopi framfor produksjonsveien. Det er samme
+   form som kolonnekontrakten i §74.19 punkt 2, av samme grunn.
+
+3. **Begge grenene kjøres i CI.** `350_editor_authorization_test.sql` kaller funksjonen i
+   migrert tilstand og krever `account_missing` og at ingenting skrives, oppretter så kontoen
+   inne i transaksjonen som rulles tilbake og kjører hele produksjonsveien: kobling,
+   tildeling, auditrad, idempotens og virkningen på kvalifikasjonskontrollen.
+
+**Funksjonen blir stående, og det er en del av vei a.** Koblingen kan bli stående ugjort i et
+miljø der kontoen kommer senere. Da skal den kunne fullføres med ett kall til, ikke med en ny
+migrasjon som bærer en andre kopi av logikken. Funksjonen tar ingen parametere: både kontoens
+`uuid` og aktørens `actor_key` er konstanter i kroppen, så den kan bare gjøre denne ene
+tildelingen. En parameterisert utgave ville vært en generell «gi hvem som helst
+reviewer»-funksjon — en rettighetseskalering med et vennlig navn. `EXECUTE` er trukket fra
+`PUBLIC`, og klientrollene har uansett ikke `usage` på `workflow`.
+
+**Tre vakter, fordi en betinget migrasjon har flere måter å ta feil på enn en ubetinget:**
+
+- Mangler aktørraden fra 005a, feiler funksjonen høyt med `no_data_found`. Uten den vakten
+  ville en brutt migrasjonskjede sett ut som «kontoen manglet», altså som den normale,
+  forventede grenen.
+- Peker aktøren allerede på en *annen* brukerkonto, feiler funksjonen med
+  `restrict_violation`. Uten den ville rollen blitt tildelt en konto som ikke er bundet til
+  redaktøraktøren — en rettighet uten den attribusjonen den hviler på, og
+  `provenance.freeze_actor_identity()` ville uansett nektet å flytte koblingen etterpå.
+- Et andre kall tildeler ikke rollen på nytt. Uten den vakten ville
+  `user_roles_no_overlapping_grant_excl` avvist kallet, og «kjør den én gang til i miljøet der
+  kontoen finnes» ville ikke vært en vei.
+
+**Selvtildelingen står i raden, ikke i en kommentar.** Beslutningen ble tatt i §74.17 punkt 3:
+`granted_by_actor_id` peker på redaktørens egen aktør, fordi alternativet ville gjort en
+KI-aktør til opphavet til et menneskes faglige godkjenningsrett (§10, §12). Ingen `CHECK`
+forbyr selvtildeling, så `grant_reason` er hele sikringen. Testen krever at ordet
+«Selvtildeling» står *først* i begrunnelsen og ikke bare et sted i den: et treff hvor som
+helst i feltet ville også slått ut på en benektelse av det (§74.16-lærdommen om ordlyd).
+`scope_id` er `NULL` — «uten avgrensning», ikke «ukjent avgrensning».
+
+**Hva raden ikke gjør.** Den åpner ikke publiseringsgaten. G4/G5, G8/G9 og G13 er urørt, og
+assertion 14 prøver det framfor å påstå det: gaten stopper fortsatt på den manglende
+ekstraksjonsverifikasjonen. Den lukker heller ikke governance-hullet fra §74.17 —
+kompetansekravet for reviewer-scope er fortsatt udefinert, og redaktøren er utpekt av seg
+selv. Det står i `grant_reason` framfor å bli borte.
+
+**220 er justert, ikke omgått — og hand-offen inn hit tok feil om hvordan.** Hand-offen sa at
+tre assertioner i `220_provenance_seed_test.sql` ville bli røde, og at den negative
+throws_ok-testen måtte erstattes fordi godkjenningen etter migrasjonen ville blitt avvist av
+en annen grunn. Det stemmer ikke for vei a: i CI finnes ikke kontoen, migrasjonen skriver
+ingenting, og alle tre assertionene er like sanne som før. Suiten ble kjørt med migrasjonen på
+plass og uten en eneste endring i 220 — 1109 av 1109 passerte. **Dette er niende gang en
+påstand som ble ført videre fra en hand-off eller en gjeldspost, har vært feil** (§74.4,
+§74.8, §74.18). Den ble funnet ved å kjøre suiten framfor ved å lese setningen på nytt.
+
+**Men den riktige justeringen var en annen, og den var viktigere.** At assertionene i 220
+fortsatt er sanne, er nettopp problemet: de ville vært like sanne om migrasjon 005b aldri
+hadde kjørt. En påstand om at noe ikke finnes, sier ingenting om koden som valgte å ikke
+skrive det. Derfor binder assertion 1-3 i 350 den negative grenen til selve funksjonen ved å
+*kalle* den og kreve at kallet ikke skriver noe. 220 beholder sine assertioner om tilstanden
+og sier nå i klartekst hva de ikke dekker.
+
+**Beslutningen om `changes_requested` framfor `approved`.** Assertion 13 er speilbildet av den
+negative testen i 220: den samme handlingen som avvises uten brukerkonto, skal gå gjennom med
+konto og rolle. Beslutningen som registreres er likevel `changes_requested`.
+`workflow.enforce_reviewer_qualification()` leser verken beslutningstype eller utfall, så
+assertionen blir ikke svakere av det — mens en `approved` ville vært en registrert faglig
+godkjenning uten at noen har gjennomgått noe. At transaksjonen rulles tilbake, gjør den ikke
+mindre fiktiv mens den står (`ANTIDEP_CONSTITUTION.md` §12).
+
+**Hva som ble verifisert.** Migrasjonene er kjørt fra bunnen av og hele pgTAP-suiten er kjørt
+mot en lokal PostgreSQL 16 med pgTAP; Docker-registryene svarer 403 gjennom egress-proxyen, så
+`npx supabase start` er ikke tilgjengelig, og CI kjører den ekte stacken. Grunnlinjen før
+endringen var 1109 passerende assertions, etter endringen 1136, uten `not ok`, uten planavvik
+og uten `ERROR`. `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run test`,
+`npm run build` og `./scripts/verify-counts.sh` er kjørt og passerer.
+
+Trettifem mutasjoner er innført én om gangen — tjueni i SQL, seks i planens tallpåstander — og
+trettifire fanges. Den som overlever er `raise notice` degradert til `raise debug`: pgTAP kan
+ikke observere en `notice`, så den halvdelen av kravet i §74.18 er ikke maskinelt kontrollert.
+Det er registrert som gjeld i §74.7 framfor å bli stående som en kommentar. Statusen
+funksjonen returnerer, er den halvdelen som *er* kontrollert, og den er nettopp derfor et
+returnert felt og ikke bare en `notice`.
+
+**Vaktposten er lukket i begge ledd, som i §74.19.** Fjernes en assertion fra
+`350_editor_authorization_test.sql` uten at planen justeres, feiler pgTAP på «Looks like you
+planned 27 tests but ran 26». Justeres `plan()` med, blir pgTAP stille — og da slår
+`scripts/verify-counts.sh` ut mot §74.2, fordi summen av `plan(N)` ikke lenger er 1136. Begge
+utveier er stengt, og det er prøvd og ikke antatt.
+
+**Den viktigste mutasjonen traff forutsetningen, ikke implementasjonen.** Assertion 13 hviler
+på at rolletildelingen er det som gjør kvalifikasjonskontrollen tilfreds. Den påstanden er
+lånt hvis ingenting håndhever at rollen er *nødvendig* — en `lives_ok` passerer like godt om
+kravet ikke finnes. Rollekravet i `workflow.enforce_reviewer_qualification()` ble derfor slått
+av i migrasjon 005, og `190_workflow_constraints_test.sql` feilet på fem assertioner, blant
+dem «editor- og admin-rollene gir ikke faglig godkjenningsrett». En variant der `editor` også
+kvalifiserte, ble fanget av de samme. Begge ledd er dermed lukket: at rollen åpner kontrollen,
+er prøvd her; at den er nødvendig for å åpne den, er prøvd i 190.
+
+**Reviewen fant en feil i «allerede tildelt», og den var reell.** Første utgave av
+funksjonen leste en eksisterende tildeling som `valid_to is null`. `workflow.user_roles` er
+ikke et flagg, men en gyldighetsmodell: intervallet er halvåpent, og `valid_to` kan være satt
+allerede ved tildeling som en planlagt utløpsdato. Tre lovlige tilstander ble derfor håndtert
+feil, og alle tre er reprodusert mot databasen før de ble rettet:
+
+| Tilstand | Hva som skjedde | Hva som skjer nå |
+|---|---|---|
+| Tidsavgrenset, men gyldig nå | Raden ble lest som fraværende, en ny tildeling forsøkt skrevet, og `user_roles_no_overlapping_grant_excl` avviste den. Funksjonen feilet i stedet for å svare — en `supabase db push` ville stoppet | `already_authorized`, ingenting skrives |
+| Begynner å gjelde senere | `already_authorized`, mens null tildelinger faktisk var gyldige. En autorisasjonskontroll som svarer «autorisert» om noe som ikke gjelder | `role_not_yet_valid`, ingenting skrives |
+| Avsluttet | `authorized`: rettigheten ble stille gjeninnført, og tilbakekallingen omgjort av en migrasjonskjøring | `role_ended`, ingenting skrives |
+
+**Den avsluttede tildelingen var den farligste, og valget der er bevisst.** `DATABASE_ARCHITECTURE.md`
+§46 krever at en rettighet skal kunne tilbakekalles umiddelbart, og en tilbakekalling som en
+rutinemessig `supabase db push` omgjør, er ingen tilbakekalling. `workflow.freeze_role_grant()`
+sier det samme om modellen: en gjeninnføring er en ny tildeling med sin egen begrunnelse — og
+en slik begrunnelse kan ikke dikte seg selv opp i en bootstrap. Funksjonen rapporterer derfor
+og lar et menneske avgjøre. Det er også det mest reversible: å nekte kan et menneske overstyre,
+å gjeninnføre i stillhet kan ingen oppdage.
+
+Returverdiene er utvidet fra tre til fem, og bare `authorized` skriver noe. Presedensen mellom
+dem er skrevet ut i funksjonen framfor å falle ut av rekkefølgen på tre uavhengige kontroller:
+en løpende tildeling ved siden av en avsluttet betyr at rettigheten gjelder, og det motsatte
+svaret ville vært feil på den farligste måten en autorisasjonskontroll kan ta feil.
+
+Gyldighet måles med `statement_timestamp()` og ikke med `now()`. §74.6 ber uttrykkelig den som
+skriver ny autorisasjons- eller gyldighetslogikk om å lese skillet først: `now()` er
+transaksjonens starttidspunkt, så en tildeling som trådte i kraft mens transaksjonen løp, ville
+blitt lest som «gjelder ikke ennå» så lenge transaksjonen varte. Assertion 23 gjør vinduet
+deterministisk med `pg_sleep` framfor å hvile på at to setninger tilfeldigvis får ulike
+tidsstempler.
+
+To hull til ble funnet av mutasjonstestingen og ikke av reviewen: uten `scope_id is null` og
+`role_code = 'reviewer'` i oppslaget ville en *avgrenset* reviewer-tildeling eller en
+`editor`-tildeling blitt lest som «allerede autorisert», og redaktøren ville stille sittet igjen
+med en smalere rettighet enn migrasjonen skal gi. Begge har nå hver sin assertion.
+
+**En sjette felle for mutasjonsharnessen, funnet her.** `F2` — å slå av vernet mot at en
+avsluttet tildeling gjenåpnes — rapporterte seg først som overlevende. Mutasjonen traff
+definisjonen i migrasjon 005, men migrasjon 008 gjør `create or replace` på den samme
+funksjonen, så den muterte definisjonen var død kode. **En mutasjon av en definisjon en senere
+migrasjon erstatter, er en stille no-op som ser ut som et hull i testdekningen.** Kontrollen er
+å lese `prosrc` fra `pg_proc` og bekrefte at mutasjonen faktisk står i den lastede kroppen.
+Mot den gjeldende definisjonen ble mutasjonen drept.
+
+**Og en syvende: harnessen gjenopprettet filene, men ikke databasen.** Etter siste mutasjon i en
+batch lå den muterte funksjonen fortsatt i basen, og neste kjøring målte mot den. To assertioner
+så ut til å feile mot kode som var korrekt på disk. Gjenopprettingen må kjøre `reset` til slutt,
+ikke bare skrive filene tilbake.
+
+**Hva som gjenstår.** Milepæl B mangler fortsatt fire ting (§74.4). Den første venter ikke
+lenger på kode, men på at migrasjonene kjøres mot det hostede prosjektet — en egen oppgave som
+hører hos prosjekteieren (§74.18). De neste to, ekstraksjons- og claim-verifikasjonene, kan
+være agentproduserte så lenge §10 og §11 holdes; den fjerde, godkjenningen, kan ikke.
 
 ---
 
