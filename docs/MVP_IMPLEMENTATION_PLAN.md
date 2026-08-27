@@ -1335,6 +1335,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       docs: clarify collaboration and reporting rules         (#30)  merget   ingen migrasjon
       db: authorize the named qualified editor                (#31)  merget   migrasjon 005b
       db: expose the caller's own actor and roles             (#32)  merget   migrasjon 007b
+      docs: mark #32 as merged in the PR log                  (#33)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
