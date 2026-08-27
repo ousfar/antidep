@@ -1243,10 +1243,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ## 74. Status etter kildevisningen
 
-**Oppdatert:** 26. august 2026 (etter `docs: correct the record of the hosted Supabase
-project`, som retter en påstand om det hostede prosjektet som har vært arvet siden migrasjon
-007 — se §74.18; forrige oppdatering etter `db: register the named qualified editor`,
-migrasjon 005a, som registrerer den navngitte kvalifiserte redaktøren som aktør)
+**Oppdatert:** 26. august 2026 (etter `test: verify the api column contract`, som binder
+radtypene i `src/types/` til databasens kolonner — se §74.19; forrige oppdatering etter
+`docs: correct the record of the hosted Supabase project`, som retter en påstand om det
+hostede prosjektet som hadde vært arvet siden migrasjon 007, §74.18)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1330,7 +1330,8 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       feat: add the claim evidence view                       (#25)  merget   ingen migrasjon
       feat: add the source view                               (#26)  merget   ingen migrasjon
       db: register the named qualified editor                 (#27)  merget   migrasjon 005a
-      docs: correct the record of the hosted Supabase project (#28)  åpen     ingen migrasjon
+      docs: correct the record of the hosted Supabase project (#28)  merget   ingen migrasjon
+      test: verify the api column contract                        (#29)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1353,7 +1354,7 @@ med alt Antidep bruker den til (§74.16). **PR I er dermed ferdig, og med den Sl
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #27. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #28. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
 
 Konvensjonen har sviktet fire ganger på rad, og er derfor ikke lenger bare en konvensjon:
@@ -1373,7 +1374,7 @@ importfundamentet (§26). Den ellevte filen er migrasjon 005a, som utvider aktø
 004, 005, 006, 006a, 007, 008, 007a, 005a — sortert på tidsstempel, ikke på
 migrasjonsnummer, og de to siste filene bærer de to laveste bokstavnumrene.
 
-Databaselaget teller nå 1098 pgTAP-assertions over 33 testfiler.
+Databaselaget teller nå 1109 pgTAP-assertions over 34 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1545,7 +1546,7 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Fysisk sletting av en rolletildeling er selv uauditert | En rolletildeling kan fjernes fysisk uten at det står hvem som fjernet den. Auditradene for tildelingen og avslutningen består — det er nettopp derfor `object_id` ikke har fremmednøkkel — men slettingen selv etterlater ingen rad. En trigger kan ikke navngi den som sletter, fordi `DELETE` ikke bærer en aktør, og `audit.events.actor_id` er med hensikt `NOT NULL` | Admin-flyten (§48). Der går slettingen gjennom en kontrollert funksjon som kjenner aktøren, og `DATABASE_ARCHITECTURE.md` §36 sitt krav om «særskilt audit» ved fysisk sletting kan innfris |
 | Endringer på `provenance.actors` auditeres ikke | Aktørraden er festepunktet for all attribusjon, og visningsnavn, beskrivelse og tilbaketrekking kan endres uten spor. Identiteten er riktignok frosset av `provenance.freeze_actor_identity()`, så det som kan endres er presentasjon og livssyklus, ikke hvem aktøren er | Samme trigger som over, og av samme grunn: tabellen har ingen kolonne som sier hvem som endret raden, så en trigger har ingen aktør å registrere |
 | `audit.events.request_or_run_id` har ingen produsent | Auditrader kan ikke grupperes etter forespørselen eller agentkjøringen de hørte til, så en operasjon som består av flere skrivinger framstår som uavhengige hendelser | `provenance.agent_runs`, eller det første admin-RPC-laget som har en forespørselsidentitet å sende med |
-| `api`-kontrakten i TypeScript er ikke maskinelt kontrollert mot databasens kolonner | Radtypene og `Database`-typen i `src/types/` er håndskrevne påstander om `api`. En kolonne som skifter navn, blir nullbar eller endrer type gjør dem usanne uten at noe feiler. Vokabularhalvdelen er lukket: `tests/api-vocabularies.test.ts` leser migrasjonene og krever at hver av de åtte lukkede unionene er nøyaktig sin enum (§74.13, §74.15). Kolonnenavn, nullbarhet og kolonnetyper står igjen, og innsatsen er høyere etter evidensvisningen: den leser over femti kolonner fra `api.published_claim_evidence`, langt flere enn noe annet i appen, og hver av dem er en uprøvd påstand. Kildesiden leser nå det samme viewet, så to sider hviler på de samme uprøvde kolonnepåstandene | En kontroll i CI som sammenligner `information_schema.columns` for `api` mot typene — databasejobben har allerede en kjørende stack — eller den første migrasjonen som endrer et api-view |
+| En basiskolonne kan miste sin `NOT NULL` uten at kolonnekontrakten fanger det | Kolonnenavn og kolonnetyper i `api` er nå uttømmende kontrollert mot katalogen, og nullbarheten er målt på faktiske rader (§74.19). Målingen fanger en kolonne som blir nullbar fordi joinen, uttrykket eller projeksjonen endres — den minimale probe-raden går da NULL. Den fanger ikke at en basiskolonne under viewet stille mister sin `NOT NULL`: probe-fiksturen navngir kolonnen i sin `insert`, så den fortsetter å sette en verdi, og raden ser lik ut. Klienten ville lest en kolonne som `string` mens databasen kan svare `null` | Enten en avledning som knytter hver ikke-nullbare api-kolonne til den basiskolonnen den kommer fra og krever `attnotnull` der — det krever en kolonnekartlegging gjennom viewdefinisjonen, som PostgreSQL ikke eksponerer ferdig — eller den første migrasjonen som gjør en basiskolonne nullbar. Migrasjonen må da endre kontraktsraden i `supabase/tests/340_api_column_contract_test.sql` og radtypen sammen |
 | Ingen regel binder et kontrastivt effektmål til en komparator | `knowledge.claim_revisions` tillater fortsatt `magnitude_measure = 'mean_difference'` sammen med `comparator_kind = 'none'`, og en redaktør kan skrive kombinasjonen. Migrasjon 003 tillater nøyaktig det samme paret på `knowledge.evidence_items`, så gjelden gjelder begge tabellene. Presentasjonslaget nekter nå å tolke den på begge (§74.13, §74.15) gjennom én felles avledning, men det er et forsvar i visningen, ikke en invariant: dataene er like ugyldige, og enhver annen leser av `api` ser dem rå | Migrasjonen som legger til betingelsen, eller admin-flyten (§29), som er første sted en redaktør kan skrive kombinasjonen. Regelen må ta stilling til `mean_change`, som er en endring fra behandlingsstart og korrekt har `none` |
 | Ingen regel binder en tallfestet effekt til at evidensen er graderbar | En revisjon kan bære `magnitude_value` samtidig som vurderingen er `no_assessable_evidence` — som ifølge migrasjon 004 betyr at det ikke finnes tilstrekkelig grunnlag til å gjøre en vurdering i det hele tatt. Kolonnekommentaren på `magnitude_value` sier selv at en påstand som er mer presis enn evidensen under den, er et brudd på `ANTIDEP_CONSTITUTION.md` §4 og §6, men ingen `CHECK` håndhever det på tvers av de to tabellene. Presentasjonslaget skjuler tallet (§74.13); databasen tillater det | Samme migrasjon som over, eller admin-flyten. Regelen krysser `knowledge.claim_revisions` og `knowledge.evidence_assessments`, så den må enten være en trigger eller en betingelse i publiseringsgaten |
 | Modellen kan ikke avgjøre om en effektstørrelses fortegn stemmer med påstandens retning | `direction = 'increase'` med `magnitude_value = -0,4` ser motstridende ut, men er det ikke nødvendigvis: fortegnet hører til skalaen `magnitude_unit` måler på, og modellen registrerer ikke om den skalaens positive retning peker samme vei som temaet påstanden handler om. «Økning i vekttap» med en negativ vektforskjell er konsistent. Kontrollen er derfor bevisst ikke innført — den ville gitt falske utslag på gyldige data | Det første objektet som registrerer polariteten til et utfall i forhold til sitt `ClinicalConcept`. Uten det kan verken UI eller en databaseregel bedømme fortegnet |
@@ -2850,6 +2851,131 @@ samme uprøvde kolonnepåstandene. Ett funn sparer den neste for en blindvei:
 `information_schema.columns` rapporterer `is_nullable = 'YES'` for alle kolonner i et view —
 PostgreSQL gjør ingen nullbarhetsanalyse gjennom views. Navn og typer kan leses derfra;
 nullbarhet kan ikke, og må håndheves på en annen måte som må navngis eksplisitt.
+
+---
+
+### 74.19 Hva kolonnekontrakten av api innførte
+
+`test: verify the api column contract` innfrir den andre halvdelen av gjeldsposten som har
+stått siden migrasjon 007: radtypene i `src/types/api.ts` og `Database`-typen i
+`src/types/database.ts` er nå bundet til kolonnene `api` faktisk har. Ingen migrasjon, ingen
+SQL-endring og ingen endring i `src/` — bare to nye kontroller og en innstrammet gjeldspost.
+
+1. **Kontrakten er erklært ett sted og kontrolleres i to retninger.** `contract`-tabellen i
+   `supabase/tests/340_api_column_contract_test.sql` har én rad per kolonne i `api`: view,
+   kolonnenavn, SQL-type og nullbarhet. Derfra går kontrollen begge veier, i hver sin CI-jobb:
+
+   | Retning | Hvor | Hva den krever |
+   |---|---|---|
+   | kontrakt → database | `340_api_column_contract_test.sql` (databasejobben) | at `api` har nøyaktig disse kolonnene, med nøyaktig disse typene |
+   | kontrakt → TypeScript | `tests/api-columns.test.ts` (valideringsjobben) | at radtypene har nøyaktig disse egenskapene, med typer som svarer til SQL-typen |
+
+   TypeScript-siden leser `values`-listen ut av pgTAP-filen. **Kryssleseren er ikke en
+   bekvemmelighet, den er hele bindingen:** uten den ville de to halvdelene vært to
+   uavhengige påstander, og typene ville fortsatt ikke vært knyttet til databasen. Parseren
+   krever at hver ikke-tom linje i blokken lar seg lese og kaster ellers, slik at en
+   omformatert liste stopper testen framfor å gjøre den stille sann på et avkortet utvalg.
+   Det er samme regel som «fant ingen påstand» i `scripts/verify-counts.sh`.
+
+2. **Nullbarhet kan ikke leses ut av katalogen; den må måles.** `information_schema.columns`
+   svarer `is_nullable = 'YES'` for *hver* kolonne i et view — PostgreSQL gjør ingen
+   nullbarhetsanalyse gjennom views. Den samme visningen kollapser dessuten hver array-kolonne
+   til `data_type = 'ARRAY'` og taper elementtypen, som er nettopp det TypeScript-siden må vite
+   for å skille `string[]` fra `number[]`. Begge begrensningene er festet som egne assertions
+   framfor å stå som en kommentar ingen kontrollerer: skulle en framtidig PostgreSQL-versjon
+   begynne å svare presist, feiler de, og da er probe-fiksturen ikke lenger den eneste veien.
+   Typen leses derfor med `format_type()` fra `pg_attribute`.
+
+3. **Nullbarheten måles på tre probe-former.** Filen publiserer sitt eget innhold inne i
+   transaksjonen og ruller alt tilbake, som 260 og 290 — godkjenningen utføres av en aktør som
+   opprettes der, slik at ingen fiktiv godkjenning blir stående (§12 i Constitution).
+   Formene er valgt for å spenne ut kontrakten:
+
+   | Form | Hva den demonstrerer |
+   |---|---|
+   | rik | hver valgfri kolonne bærer verdi; ekstraksjonen trekkes tilbake *etter* publisering, fordi gaten G6 nekter å publisere et underkjent grunnlag |
+   | minimal | hver valgfri verdi utelatt, på påstand, evidensfunn og kilde; deterministisk faktum, så hele certainty-blokken er fraværende og ikke bare tom |
+   | peker | publiseringspekeren flyttet utenom den kontrollerte operasjonen, som er den dokumenterte grunnen til at `published_at` og `last_reviewed_at` kan være NULL |
+
+   Påstanden som kontrolleres er en `set_eq` i begge retninger: nøyaktig kontraktens nullbare
+   kolonner er NULL i minst én probe-rad. En kolonne som blir nullbar dukker opp på venstre
+   side; en nullbarhetspåstand uten dekning blir stående alene på høyre. En andre `set_eq`
+   krever at hver kolonne bærer verdi et sted — uten den ville en kolonne som *alltid* er NULL,
+   et uttrykk koblet til feil sted, passert så lenge kontrakten kalte den nullbar.
+
+   Cellene hentes med `jsonb_each` over hele raden framfor kolonne for kolonne. Settet er da
+   utledet av radens egen form, og en kolonne kan ikke glemmes.
+
+4. **Hva målingen ikke beviser, og hva som derfor står igjen som gjeld.** En kolonne som blir
+   nullbar fordi joinen, uttrykket eller projeksjonen endres, går NULL i den minimale raden og
+   fanges. En basiskolonne som stille mister sin `NOT NULL`, fanges ikke: probe-fiksturen
+   navngir kolonnen i sin `insert` og fortsetter å sette en verdi. Det er ført som gjeld i
+   §74.7, og erstatter den gamle posten om at kontrakten ikke var kontrollert i det hele tatt.
+   Kolonnenavn og kolonnetyper er derimot uttømmende dekket, i begge retninger.
+
+5. **`number` er ett begrep i TypeScript og tre i SQL.** SQL-typen bestemmer hvilke skrevne
+   TypeScript-typer som er tillatt, og `integer`, `bigint` og `numeric` tillater alle `number`.
+   Det er ikke en slapphet: språket har ikke skillet, og kontrakten kan ikke påstå et skille
+   den ikke kan holde. Presisjonen ligger i SQL-typen, som pgTAP-filen kontrollerer mot
+   katalogen. En SQL-type kontrakten ikke kjenner kaster framfor å gli forbi.
+
+6. **Typene leses fra AST-en, ikke fra typecheckeren.** `Uuid`, `Timestamptz`, `DateText` og
+   `IntervalText` er alle alias for `string`. En typechecker ville løst dem opp og mistet
+   nettopp skillet kontrakten handler om — en `uuid` er ikke en `date`. `ts.createSourceFile`
+   parser filen uten å typesjekke den, og medlemmets annotasjon leses som skrevet. At de fire
+   faktisk *er* alias for `string`, og at de lukkede vokabularene er `(typeof X)[number]` over
+   en `as const`-liste, utledes fra samme fil framfor å listes opp — et nytt vokabular blir da
+   gjenkjent uten en endring to steder.
+
+7. **Kartet fra view til radtype leses ut av `Database`-typen.** Det er ikke skrevet ned i
+   testen. Et nytt view i kontrakten må derfor også være erklært for supabase-js for at
+   kontrollen skal gå opp, og et view som fjernes fra `Database` uten å fjernes fra kontrakten
+   slår ut på samme måte.
+
+8. **En arvet påstand rettet: «de åtte lukkede unionene» var fjorten.** Gjeldsposten som nå er
+   erstattet sa at `tests/api-vocabularies.test.ts` kontrollerer «hver av de åtte lukkede
+   unionene». Filen kontrollerer fjorten. Tallet åtte hører til §74.15 punkt 4, der det er
+   riktig: åtte er antallet vokabularer *evidensvisningen forgrener på*, og som derfor fikk
+   kjøretidskontroll. De to tallene hadde glidd sammen. Feilen er av samme klasse som de sju
+   §74.8 og §74.18 beskriver, og ble funnet ved å telle `export const`-listene i `api.ts` —
+   ikke ved å lese setningen på nytt.
+
+9. **Mutasjonstesting, og to feller harnessen gikk i.** 44 mutasjoner er innført og 42 drept: mot
+   kontraktslisten (navn, type, rad fjernet, rad lagt til, nullbarhet snudd begge veier,
+   `date` forvekslet med `timestamptz`, array skrevet som skalar), mot probe-fiksturen
+   (pekerraden fjernet, tilbaketrekkingen slått av, `evidence_gap` tømt, kildeversjonen
+   fjernet, DOI-en fjernet, testvirkestoffet gitt en ATC-kode), mot viewene og granten i
+   migrasjonene (kolonne omdøpt, kolonnetype endret, kolonne gjort alltid NULL, `left join`
+   gjort til `join`, ny kolonne lagt til, kolonnegrant fjernet), mot radtypene i `src/types/`
+   (egenskap omdøpt, slettet, lagt til, `| null` fjernet og lagt til, alias brutt, vokabular
+   gjort til bar `string`, view fjernet fra `Database`) og mot selve assertionene. De to som
+   overlever er begge forstått: en bevisst no-op (` and true` føyd til en `where`-betingelse),
+   som skal overleve og bekrefter at harnessen ikke rapporterer drap den ikke har gjort; og en
+   flytting av den minimale påstanden til et virkestoff med ATC-kode, som overlever fordi
+   pekerpåstanden dekker `atc_codes` NULL uansett — den skarpere mutasjonen, som gir
+   *testvirkestoffet* en ATC-kode, dreper testen. Harnessen avviste i tillegg en identisk
+   erstatning som no-op og tre mønstre med null treff som tvetydige, framfor å telle dem som
+   kjørte mutasjoner.
+
+   **Og forutsetningen, ikke bare implementasjonen:** `tests/api-columns.test.ts` hviler på at
+   assertion 3 i pgTAP-filen faktisk binder kontrakten til databasen. Slettes den, passerer
+   TypeScript-siden mens kjeden er brutt. Mutasjonen ble innført, og pgTAP feiler høyt —
+   `plan(11)` stemmer ikke lenger med antall kjørte assertions. Justeres planen med, endrer
+   totalen seg, og `scripts/verify-counts.sh` slår ut mot §74.2. Kjeden er dermed lukket i
+   begge ledd.
+
+   To feller kostet tid, og begge er verdt å kjenne for neste mutasjonskjøring:
+
+   - **`git checkout --` gjenoppretter ikke en usporet fil.** De to nye filene var ennå ikke
+     lagt til i indeksen, så gjenopprettingen feilet stille og lot mutasjonen bli stående.
+     Neste mutasjon målte da mot en rød grunnlinje — nøyaktig den tilstanden der *hver*
+     mutasjon rapporterer seg som drept. Grunnlinjekontrollen fanget det og avbrøt.
+     Harnessen kopierer nå filene til et sikkerhetskopi-katalog framfor å stole på git.
+   - **Rå `psql` feiler ikke på en plan som ikke stemmer.** `pg_prove`, som
+     `supabase test db` bruker, behandler «Looks like you planned 11 but ran 10» som en feil;
+     `psql -f` skriver den som en kommentar og avslutter med 0. Et lokalt harness som bare
+     teller `^not ok` er derfor blindt for en slettet assertion. Det var nettopp den
+     mutasjonen som skulle måles, og den så ut til å overleve til harnessen ble rettet.
 
 ---
 
