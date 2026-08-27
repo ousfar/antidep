@@ -12,7 +12,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(28);
+select plan(31);
 
 -- ---------------------------------------------------------------------------
 -- Regeldefinisjoner. Hver view returnerer bruddene på én konvensjon.
@@ -121,6 +121,13 @@ where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
 -- (DATABASE_ARCHITECTURE.md §42, §44). Alt annet er fortsatt forbudt: enhver
 -- skriverett, enhver rett til PUBLIC, og enhver rett til service_role, som
 -- omgår RLS og ikke er applikasjonens universalnøkkel (§49).
+--
+-- Både tabellvide og kolonnevise grants telles. Et grant på kolonnenivå ligger i
+-- pg_attribute.attacl og ikke i pg_class.relacl, og er heller ikke synlig i
+-- has_table_privilege(); en regel som bare leste relacl ville derfor sluttet å
+-- måle i det migrasjon 007a tok kolonnegrant i bruk, uten å feile. Formen er nå
+-- brukt av tre migrasjoner (007a, 007b), så blindsonen er reell og ikke
+-- hypotetisk.
 create view pg_temp.violation_client_write_grants as
 select n.nspname as schema_name,
        c.relname as object_name,
@@ -129,6 +136,23 @@ select n.nspname as schema_name,
 from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
 cross join lateral aclexplode(c.relacl) a
+where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
+  and (
+    a.grantee = 0
+    or a.grantee::regrole::text = 'service_role'
+    or (a.grantee::regrole::text in ('anon', 'authenticated')
+        and a.privilege_type <> 'SELECT')
+  )
+union all
+select n.nspname,
+       c.relname || '.' || att.attname,
+       case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end,
+       a.privilege_type
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+join pg_attribute att
+  on att.attrelid = c.oid and att.attnum > 0 and not att.attisdropped
+cross join lateral aclexplode(att.attacl) a
 where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
   and (
     a.grantee = 0
@@ -144,6 +168,10 @@ where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
 -- neste migrasjon som skriver en policy vil da åpne mer enn den tror. Grant og
 -- policy hører sammen og skal innføres sammen (DATABASE_ARCHITECTURE.md §44
 -- punkt 2 og 3, §48).
+--
+-- Kolonnegrant teller på samme måte, og av samme grunn som i regel 8a: en
+-- migrasjon som åpnet en enkeltkolonne uten å skrive policyen under, ville
+-- ellers gått gjennom vakten.
 create view pg_temp.violation_client_grant_without_policy as
 select n.nspname as schema_name,
        c.relname as object_name,
@@ -151,6 +179,18 @@ select n.nspname as schema_name,
 from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
 cross join lateral aclexplode(c.relacl) a
+where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
+  and a.grantee::regrole::text in ('anon', 'authenticated')
+  and not exists (select 1 from pg_policy pol where pol.polrelid = c.oid)
+union all
+select n.nspname,
+       c.relname || '.' || att.attname,
+       case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+join pg_attribute att
+  on att.attrelid = c.oid and att.attnum > 0 and not att.attisdropped
+cross join lateral aclexplode(att.attacl) a
 where n.nspname in ('catalog', 'knowledge', 'workflow', 'provenance', 'audit')
   and a.grantee::regrole::text in ('anon', 'authenticated')
   and not exists (select 1 from pg_policy pol where pol.polrelid = c.oid);
@@ -234,6 +274,14 @@ grant insert on knowledge.bad_probe_b to authenticated;
 create table knowledge.bad_probe_e (id uuid primary key default gen_random_uuid());
 create policy bad_probe_e_write on knowledge.bad_probe_e
   for all to authenticated using (true);
+-- Kolonnegrant uten policy under, og en skriverett på kolonnenivå: de to
+-- formene regel 8a og 8b ikke så før de leste pg_attribute.attacl.
+create table knowledge.bad_probe_f (
+  id uuid primary key default gen_random_uuid(),
+  begrunnelse text
+);
+grant select (begrunnelse) on knowledge.bad_probe_f to anon;
+grant insert (begrunnelse) on knowledge.bad_probe_f to authenticated;
 create table knowledge.bad_probe_c (
   id bigint generated always as identity primary key,
   created_at timestamptz not null default now()
@@ -295,6 +343,20 @@ select isnt_empty(
   'regelen fanger en policy som åpner for skriving'
 );
 select isnt_empty(
+  $$
+    select * from pg_temp.violation_client_write_grants
+    where object_name = 'bad_probe_f.begrunnelse' and privilege_type = 'INSERT'
+  $$,
+  'regelen fanger en skriverett gitt på kolonnenivå, som pg_class.relacl ikke bærer'
+);
+select isnt_empty(
+  $$
+    select * from pg_temp.violation_client_grant_without_policy
+    where object_name = 'bad_probe_f.begrunnelse'
+  $$,
+  'regelen fanger et kolonnegrant uten policy under seg'
+);
+select isnt_empty(
   'select * from pg_temp.violation_api_view_security_invoker',
   'regelen fanger et api-view uten security_invoker'
 );
@@ -351,9 +413,38 @@ select is_empty(
 );
 
 drop table knowledge.good_probe_exposed;
+
+-- Og formen migrasjon 007a og 007b innfører: ingen tabellvid grant, bare noen
+-- kolonner åpnet, med en lesepolicy under. Uten denne kontrollen kunne de to
+-- utvidede reglene vært trivielt oppfylt ved å flagge hvert kolonnegrant.
+create table knowledge.good_probe_columns (
+  id uuid primary key default gen_random_uuid(),
+  aapen text,
+  lukket text
+);
+alter table knowledge.good_probe_columns enable row level security;
+create policy good_probe_columns_read on knowledge.good_probe_columns
+  for select to authenticated using (true);
+grant select (aapen) on knowledge.good_probe_columns to authenticated;
+
+select is_empty(
+  $$
+    select 'skriverett' as regel, schema_name, object_name
+    from pg_temp.violation_client_write_grants
+    where object_name like 'good_probe_columns%'
+    union all
+    select 'grant uten policy', schema_name, object_name
+    from pg_temp.violation_client_grant_without_policy
+    where object_name like 'good_probe_columns%'
+  $$,
+  'en tabell med bare et SELECT-grant på kolonnenivå og en lesepolicy under regnes som konform'
+);
+
+drop table knowledge.good_probe_columns;
 drop function knowledge.bad_probe_fn_unsafe_path();
 drop function knowledge.bad_probe_fn();
 drop view api.bad_probe_view;
+drop table knowledge.bad_probe_f;
 drop table knowledge.bad_probe_e;
 drop table knowledge.bad_probe_d;
 drop table knowledge.bad_probe_c;

@@ -24,13 +24,15 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
     og uten rolletildeling
   - 005b redaktørens brukerkonto knyttet til aktørraden, og `reviewer`-rollen tildelt —
     men bare i miljøer der kontoen finnes i `auth.users`
+  - 007b kallerens egen aktørrad og egne gjeldende rolletildelinger: `api.my_actor` og
+    `api.my_roles`, med RLS-policyene og kolonnegrantene under dem
 
   Nummereringen følger planlagt innhold i `docs/MVP_IMPLEMENTATION_PLAN.md` §18-§27, ikke
   filrekkefølge. Migrasjoner utenfor den planlagte rekken får en bokstav, slik at
   «migrasjon 007 — API-lesemodell» (§24) fortsatt betyr det samme i plan, migrasjoner og
   tester. Filrekkefølgen er derfor 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a,
-  005b: 007a er skrevet etter 008, men utvider api-lesemodellen, 005a og 005b er skrevet
-  sist, men utvider aktørregisteret og medlemskapsmodellen fra 005, og nummeret 009 er
+  005b, 007b: 007a og 007b er skrevet etter 008, men utvider api-lesemodellen, 005a og 005b
+  utvider aktørregisteret og medlemskapsmodellen fra 005, og nummeret 009 er
   reservert for importfundamentet (§26).
 
 - `tests/` — pgTAP-tester som kjøres med `npm run db:test`.
@@ -87,7 +89,15 @@ for den gjeldende publiseringen, og ikke mer. Publiseringsbegrunnelsen og hvem s
 publiserte er ikke blant dem. Et kolonnegrant er en reell begrensning: et
 `security_invoker`-view kan ikke projisere en kolonne kalleren mangler grant på. Merk at
 det ikke er synlig i `has_table_privilege()` eller `information_schema.role_table_grants` —
-en vaktpost må se på `role_column_grants` for å oppdage det.
+en vaktpost må se på `role_column_grants` for å oppdage det, eller på
+`pg_attribute.attacl`, som `tests/030_conventions_test.sql` nå gjør.
+
+Fra migrasjon 007b har `authenticated` — og bare `authenticated` — `SELECT` på fem kolonner i
+`provenance.actors` og seks i `workflow.user_roles`, nok til å lese sin _egen_ aktørrad og
+sine _egne_ gjeldende rolletildelinger gjennom `api.my_actor` og `api.my_roles`. RLS-policyene
+under dem slipper bare gjennom rader der kalleren er `auth.uid()`. Begrunnelsen for en
+tildeling, hvem som tildelte eller avsluttet den, og aktørens beskrivelse er ikke blant
+kolonnene: det er governance-tekst og ikke kallerens svar på «hva har jeg lov til».
 
 Fra migrasjon 007 har klientrollene i tillegg `SELECT` på de tretten kanoniske tabellene
 api-viewene leser. Det følger av at views i `api` er `security_invoker` og altså leser med
