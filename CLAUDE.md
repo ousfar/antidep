@@ -12,12 +12,35 @@
   - `docs/PRODUCT_INFORMATION_ARCHITECTURE.md` for clinician-facing UX and information structure.
 - Do not load every architecture document by default. Preserve context for the task at hand.
 
+## Working with the repository owner
+
+- The repository owner is a clinician, not a software architect. Assume no software-engineering background.
+- Do not ask the owner to decide technical questions — architecture, database design, libraries, implementation patterns, file layout, test strategy — when you can choose a defensible solution yourself.
+- On technical uncertainty, default to the safest and most reversible option that fits the existing documentation and architecture, implement it, and record the trade-off in the PR description so it can be judged in code review before merge.
+- Escalate to the owner only when the decision genuinely requires them: a product choice, clinical judgement, a regulatory question, cost, an external account or access, an irreversible action, or anything that cannot safely be resolved from the repository's documentation.
+- When you do escalate, ask one concrete question in plain Norwegian, framed as consequences for the product — not for the code.
+
+## Communicating results
+
+- Write to the owner in short, simple Norwegian (Bokmål), as to a clinician without a software background.
+- Do not write long technical explanations unless the owner explicitly asks for them.
+- Avoid naming internal components, files, database mechanisms and technologies when the name is not needed to understand the result.
+- Do not spend tokens on advanced technical detail the owner does not need in order to make a decision.
+- Summarise finished work under these headings by default:
+  - **Hva er gjort?**
+  - **Hva betyr det for appen?**
+  - **Kan jeg teste noe nå?**
+  - **Er det noe jeg faktisk må ta stilling til?**
+  - **Hva er naturlig neste steg?**
+- If the work does not yet produce anything meaningful to test in the UI, say so explicitly.
+- If an open question is purely technical, say briefly that the owner does not need to decide it now and that the PR can be reviewed before merge.
+
 ## Priority and scope
 
 - The Constitution outranks implementation convenience. If code and the Constitution conflict, change the implementation.
 - Stay within the explicitly requested PR/slice. Do not implement adjacent future work merely because it seems useful.
 - Prefer the smallest coherent solution that preserves the documented architecture. Avoid speculative abstractions and premature generalization.
-- Act autonomously on routine implementation details that can be resolved from the repository, tests, or governing docs. Ask only when a genuine product, clinical, regulatory, or irreversible architectural decision cannot be resolved safely from existing context.
+- Act autonomously on technical and routine implementation details that can be resolved from the repository, tests, or governing docs. See “Working with the repository owner” for the short list of decisions that must be escalated instead.
 - Do not silently change governing architecture or clinical policy to make implementation easier. Surface the conflict instead.
 
 ## Core architecture invariants
@@ -63,6 +86,7 @@
 - Explore the relevant code and docs before changing code. For non-trivial changes, form a concrete plan before implementation.
 - Follow existing patterns once they exist; do not introduce a new dependency or architectural pattern without a concrete need.
 - Keep PRs small, single-purpose, and reviewable. Do not bundle cleanup or unrelated refactors into feature work.
+- Assume every PR gets a technical review (normally by ChatGPT) before merge. Write the description for a reviewer who has not seen the conversation: what changed, why, which technical trade-offs were made, and how reversible they are.
 - Never merge your own PR unless explicitly instructed.
 - Update the implementation-plan status/checklist when the plan explicitly calls for it.
 
