@@ -30,10 +30,13 @@
   - **Hva er gjort?**
   - **Hva betyr det for appen?**
   - **Kan jeg teste noe nå?**
-  - **Er det noe jeg faktisk må ta stilling til?**
+  - **Er det noe jeg faktisk må ta stilling til?** — answer “Nei” when nothing genuinely needs the owner.
   - **Hva er naturlig neste steg?**
 - If the work does not yet produce anything meaningful to test in the UI, say so explicitly.
-- If an open question is purely technical, say briefly that the owner does not need to decide it now and that the PR can be reviewed before merge.
+- Do not report purely technical observations that need no decision from the owner: pre-existing warnings, cleanup opportunities, refactoring ideas, tooling quirks, or trade-offs already settled. Saying “you don't need to decide this” is still reporting it. Silence is the default.
+- Park anything worth doing later where it will be picked up on its own: open a GitHub issue with a `[teknisk]` title prefix, and leave it out of the summary. If it is small and belongs to the current slice, just do it. Never leave it only in prose the owner has to read.
+- Technical trade-offs are written for the code reviewer in the PR description, not for the owner in the summary.
+- This never applies to clinical safety, evidence integrity, data loss, or security. Surface those to the owner immediately, however technical they look.
 
 ## Priority and scope
 
