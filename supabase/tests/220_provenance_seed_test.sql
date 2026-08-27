@@ -1,5 +1,5 @@
--- Migrasjon 005 og 005a — seedomfang for aktører, og hva som bevisst ikke er
--- seedet.
+-- Migrasjon 005, 005a og 005b — seedomfang for aktører, og hva som bevisst ikke
+-- er seedet.
 --
 -- MVP_IMPLEMENTATION_PLAN.md §29 og ANTIDEP_CONSTITUTION.md §11 og §12:
 -- migrasjonene registrerer aktørene som faktisk produserte de eksisterende
@@ -21,6 +21,20 @@
 -- telle at reviewbeslutningstabellen fortsatt er tom: testen forsøker faktisk å
 -- registrere en godkjenning i redaktørens navn og krever at databasen avviser
 -- den.
+--
+-- Migrasjon 005b endrer ikke tilstanden her, og det er hele poenget med den.
+-- Den knytter redaktørens aktørrad til brukerkontoen og tildeler
+-- reviewer-rollen, men bare i miljøer der kontoen faktisk finnes i auth.users
+-- (MVP_IMPLEMENTATION_PLAN.md §74.18, «vei a»). En fersk stack — lokalt og i CI
+-- — har den ikke. Assertionene under er derfor den negative grenen av 005b, og
+-- de sier hva som skjer når den grenen kjører: ingenting skrives.
+--
+-- Det de IKKE sier, er at 005b har kjørt. En påstand om at noe ikke finnes,
+-- ville vært like sann om migrasjonen aldri hadde kjørt.
+-- 350_editor_authorization_test.sql binder derfor begge grenene til selve
+-- funksjonen ved å kalle den: den negative med krav om at kallet ikke skriver
+-- noe, og den positive ved å opprette kontoen inne i en transaksjon som rulles
+-- tilbake.
 begin;
 
 create extension if not exists pgtap with schema extensions;
@@ -78,9 +92,12 @@ select is_empty(
 -- (provenance.freeze_actor_identity(), testet i 200). Migrasjon 005a bruker
 -- nettopp den formen, fordi kontoen er en reell Supabase-konto som ikke kan
 -- opprettes fra en migrasjon.
+--
+-- Migrasjon 005b setter koblingen — men bare der kontoen finnes. Her gjør den
+-- det ikke, og aktøren står fortsatt uten konto.
 select is_empty(
   $$select actor_key from provenance.actors where auth_user_id is not null$$,
-  'ingen aktør er knyttet til en brukerkonto, heller ikke den nyregistrerte redaktøren'
+  'ingen aktør er knyttet til en brukerkonto; brukerkontoen finnes ikke i dette miljøet, så 005b knyttet ingen'
 );
 
 -- Og dette er konsekvensen, prøvd framfor påstått: uten brukerkonto avviser
@@ -118,7 +135,7 @@ select throws_ok(
 select is(
   (select count(*) from workflow.user_roles),
   0::bigint,
-  'ingen rolletildeling er seedet; workflow.user_roles.user_id krever en brukerkonto, og ingen finnes'
+  'ingen rolletildeling finnes; workflow.user_roles.user_id krever en brukerkonto, og 005b fant ingen å tildele rollen til'
 );
 select is(
   (select count(*) from workflow.evidence_verifications),

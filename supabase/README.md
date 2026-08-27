@@ -22,13 +22,16 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
     godkjenningstidspunktet frosset på publiseringshendelsen
   - 005a den navngitte kvalifiserte redaktøren som menneskelig aktør, uten brukerkonto
     og uten rolletildeling
+  - 005b redaktørens brukerkonto knyttet til aktørraden, og `reviewer`-rollen tildelt —
+    men bare i miljøer der kontoen finnes i `auth.users`
 
   Nummereringen følger planlagt innhold i `docs/MVP_IMPLEMENTATION_PLAN.md` §18-§27, ikke
   filrekkefølge. Migrasjoner utenfor den planlagte rekken får en bokstav, slik at
   «migrasjon 007 — API-lesemodell» (§24) fortsatt betyr det samme i plan, migrasjoner og
-  tester. Filrekkefølgen er derfor 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a:
-  007a er skrevet etter 008, men utvider api-lesemodellen, 005a er skrevet sist, men utvider
-  aktørregisteret fra 005, og nummeret 009 er reservert for importfundamentet (§26).
+  tester. Filrekkefølgen er derfor 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a,
+  005b: 007a er skrevet etter 008, men utvider api-lesemodellen, 005a og 005b er skrevet
+  sist, men utvider aktørregisteret og medlemskapsmodellen fra 005, og nummeret 009 er
+  reservert for importfundamentet (§26).
 
 - `tests/` — pgTAP-tester som kjøres med `npm run db:test`.
 - `seed.sql` — kun lokal demodata. Kontrollert vokabular og pilotdata som produksjonen
@@ -228,6 +231,41 @@ migrasjon 003 og 004. Ingen verifikasjon og ingen reviewbeslutning er seedet: be
 utførte handlinger, og en seedet godkjenning ville vært nøyaktig den fiktive godkjenningen
 `docs/ANTIDEP_CONSTITUTION.md` §12 forbyr. `provenance.agent_runs` opprettes først når en
 faktisk automatisk pipeline skriver kjøringer.
+
+## Redaktørens autorisasjon
+
+Migrasjon 005a registrerer den navngitte kvalifiserte redaktøren
+(`docs/ANTIDEP_CONSTITUTION.md` §12) som menneskelig aktør. Migrasjon 005b knytter aktørraden
+til brukerkontoen og tildeler `reviewer`-rollen.
+
+**005b gjør forskjellige ting i forskjellige miljøer, og det er et valg.**
+`workflow.user_roles.user_id` er `NOT NULL` med fremmednøkkel til `auth.users`. Kontoen er en
+reell Supabase-konto som bare finnes i miljøet den ble opprettet i, mens en lokal stack og CI
+starter uten den. Migrasjonen skriver derfor bare når kontoen faktisk finnes, og sier fra med
+en `notice` når den ikke gjør det. Bakgrunnen og de forkastede alternativene står i
+`docs/MVP_IMPLEMENTATION_PLAN.md` §74.18; hvordan prisen for valget er betalt, i §74.20.
+
+Logikken ligger i `workflow.ensure_named_editor_authorization()`, ikke som løse setninger i
+migrasjonsfilen. Da kan testene kjøre nøyaktig den koden som kjører i produksjon framfor en
+kopi av den, og koblingen kan fullføres med ett kall til i et miljø der kontoen kommer senere:
+
+```sql
+select workflow.ensure_named_editor_authorization();
+```
+
+Kallet er idempotent og svarer `account_missing`, `authorized` eller `already_authorized`.
+Funksjonen tar ingen parametere — konto og aktørnøkkel er konstanter i kroppen, så den kan
+bare gjøre denne ene tildelingen, aldri en vilkårlig. `EXECUTE` er trukket fra `PUBLIC`.
+
+**Rollen er selvtildelt, og begrunnelsen står i raden.** `granted_by_actor_id` peker på
+redaktørens egen aktør. Alternativet ville gjort en KI-aktør til opphavet til et menneskes
+faglige godkjenningsrett (`docs/ANTIDEP_CONSTITUTION.md` §10, §12). Ingen `CHECK` forbyr
+selvtildeling, så `grant_reason` er hele sikringen.
+
+**Tildelingen åpner ikke publiseringsgaten.** Ekstraksjonsverifikasjon, claim-verifikasjon og
+selve godkjenningen mangler fortsatt (`docs/MVP_IMPLEMENTATION_PLAN.md` §74.4).
+`350_editor_authorization_test.sql` kjører begge grenene av migrasjonen og prøver begge
+påstandene framfor å telle dem.
 
 ## API-lesemodellen
 
