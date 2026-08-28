@@ -24,7 +24,13 @@ import { MemoryRouter } from 'react-router'
 import { AppLayout } from './App'
 import { AntidepClientProvider, type AntidepClientAvailability } from './antidep-client'
 import type { AntidepClient } from '../lib/supabase'
-import type { PublishedClaimEvidenceRow, PublishedClaimRow, PublishedDrugRow } from '../types/api'
+import type {
+  MyActorRow,
+  MyRoleRow,
+  PublishedClaimEvidenceRow,
+  PublishedClaimRow,
+  PublishedDrugRow,
+} from '../types/api'
 
 /** Hva ett view svarer: rader, en feil, eller aldri (for ventetilstanden). */
 export type FakeOutcome<Row> =
@@ -34,6 +40,8 @@ export interface FakeApi {
   readonly published_drugs?: FakeOutcome<PublishedDrugRow>
   readonly published_claims?: FakeOutcome<PublishedClaimRow>
   readonly published_claim_evidence?: FakeOutcome<PublishedClaimEvidenceRow>
+  readonly my_actor?: FakeOutcome<MyActorRow>
+  readonly my_roles?: FakeOutcome<MyRoleRow>
 }
 
 interface RecordedQuery {
@@ -47,17 +55,107 @@ function outcomeFor(api: FakeApi, view: string): FakeOutcome<Record<string, unkn
   return outcome ?? []
 }
 
+// ----------------------------------------------------------------------------
+// Fake `auth`, for Min tilgang (§74.22)
+//
+// Nok til å teste det klientkoden faktisk gjør mot `client.auth`: lese
+// sesjonen ved montering, abonnere på endringer, logge inn og logge ut. Faken
+// validerer *ikke* e-post/passord mot noe — det er Supabases jobb på ekte, ikke
+// vår klientkodes — så et vellykket forsøk er standard, og
+// `FakeAuthOptions.signInError` gjør forsøket avvist når en test trenger det.
+// ----------------------------------------------------------------------------
+
+interface FakeSession {
+  readonly user: { readonly id: string }
+}
+
+type FakeAuthListener = (event: string, session: FakeSession | null) => void
+
+export interface FakeAuthOptions {
+  /** Sesjonen når rendringen starter. `null` (standard) betyr ikke innlogget. */
+  readonly initialUserId?: string | null
+  /**
+   * Gjør et innloggingsforsøk avvist med denne meldingen, uansett hva som er
+   * skrevet inn. Utelatt (standard) betyr at forsøket lykkes.
+   */
+  readonly signInError?: string
+  /** Identiteten et vellykket innloggingsforsøk gir. */
+  readonly signInUserId?: string
+}
+
+export const TEST_USER_IDS = {
+  a: '99999999-9999-4999-8999-111111111111',
+  b: '99999999-9999-4999-8999-222222222222',
+} as const
+
+/**
+ * Ett registrert `signOut()`-kall, slik det faktisk ble gjort mot faken.
+ *
+ * Finnes for å teste `scope` eksplisitt: supabase-js sin standard er
+ * `'global'` — logger kalleren ut av *alle* enheter — og en «Logg ut»-knapp
+ * skal ikke ha den sideeffekten uten at det er et bevisst produktvalg. Uten en
+ * assertion på det faktiske kallet kunne `AccessPage.tsx` sluttet å sende
+ * `scope: 'local'` uten at noen test merket det.
+ */
+export interface FakeSignOutCall {
+  readonly scope?: string
+}
+
+function fakeAuth(options: FakeAuthOptions, signOutCalls: FakeSignOutCall[]) {
+  let session: FakeSession | null =
+    options.initialUserId == null ? null : { user: { id: options.initialUserId } }
+  const listeners = new Set<FakeAuthListener>()
+
+  function emit(event: string) {
+    for (const listener of listeners) {
+      listener(event, session)
+    }
+  }
+
+  return {
+    getSession: () => Promise.resolve({ data: { session } }),
+    onAuthStateChange: (callback: FakeAuthListener) => {
+      listeners.add(callback)
+      return { data: { subscription: { unsubscribe: () => listeners.delete(callback) } } }
+    },
+    // Ingen parameter: faken validerer aldri e-post/passord mot noe — det er
+    // Supabases jobb på ekte, ikke klientkodens. Se doc-kommentaren over.
+    signInWithPassword: () => {
+      if (options.signInError !== undefined) {
+        return Promise.resolve({
+          data: { session: null, user: null },
+          error: { message: options.signInError },
+        })
+      }
+      session = { user: { id: options.signInUserId ?? TEST_USER_IDS.a } }
+      emit('SIGNED_IN')
+      return Promise.resolve({ data: { session, user: session.user }, error: null })
+    },
+    signOut: (signOutOptions?: FakeSignOutCall) => {
+      signOutCalls.push(signOutOptions ?? {})
+      session = null
+      emit('SIGNED_OUT')
+      return Promise.resolve({ error: null })
+    },
+  }
+}
+
 /**
  * En klient som oppfører seg som PostgREST på de tre tingene lesemodellen
  * bruker: kolonnevalg, `eq`-filtre og sortering. Filtrene anvendes faktisk, så
  * en side som slutter å filtrere på `drug_id` vil vise andre virkestoffs
  * påstander i testen — som i produksjon.
  */
-export function fakeClient(api: FakeApi = {}): {
+export function fakeClient(
+  api: FakeApi = {},
+  authOptions: FakeAuthOptions = {},
+): {
   client: AntidepClient
   queries: RecordedQuery[]
+  signOutCalls: FakeSignOutCall[]
 } {
   const queries: RecordedQuery[] = []
+  const signOutCalls: FakeSignOutCall[] = []
 
   const client = {
     from(view: string) {
@@ -92,20 +190,22 @@ export function fakeClient(api: FakeApi = {}): {
       }
       return builder
     },
+    auth: fakeAuth(authOptions, signOutCalls),
   }
 
-  return { client: client as unknown as AntidepClient, queries }
+  return { client: client as unknown as AntidepClient, queries, signOutCalls }
 }
 
 export interface RenderRouteOptions {
   readonly api?: FakeApi
+  readonly auth?: FakeAuthOptions
   /** Overstyrer klienttilstanden helt, for å teste manglende konfigurasjon. */
   readonly availability?: AntidepClientAvailability
 }
 
 /** Rendrer hele skallet på én adresse. */
 export function renderRoute(path: string, options: RenderRouteOptions = {}) {
-  const fake = fakeClient(options.api)
+  const fake = fakeClient(options.api, options.auth)
   const availability: AntidepClientAvailability = options.availability ?? {
     status: 'ready',
     client: fake.client,
@@ -117,7 +217,7 @@ export function renderRoute(path: string, options: RenderRouteOptions = {}) {
       </MemoryRouter>
     </AntidepClientProvider>,
   )
-  return { ...result, queries: fake.queries }
+  return { ...result, queries: fake.queries, signOutCalls: fake.signOutCalls }
 }
 
 const DRUG_A = '11111111-1111-4111-8111-111111111111'
@@ -272,6 +372,37 @@ export function evidenceRow(
     source_status_note: null,
     source_dois: ['10.0000/test.a'],
     source_pmids: null,
+    ...overrides,
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Kallerens eget (migrasjon 007b), for Min tilgang (§74.22)
+// ----------------------------------------------------------------------------
+
+const ACTOR_A = '00000000-0000-4000-8000-111111111111'
+
+export const TEST_ACTOR_IDS = { a: ACTOR_A } as const
+
+/** Kallerens egen aktørrad, slik `api.my_actor` gir den. */
+export function myActorRow(overrides: Partial<MyActorRow> = {}): MyActorRow {
+  return {
+    actor_id: ACTOR_A,
+    actor_key: 'human:testredaktor',
+    display_name: 'Test Redaktør',
+    retired_at: null,
+    ...overrides,
+  }
+}
+
+/** Én rolletildeling som gjelder nå, slik `api.my_roles` gir den. */
+export function myRoleRow(overrides: Partial<MyRoleRow> = {}): MyRoleRow {
+  return {
+    role_code: 'reviewer',
+    scope_id: null,
+    scope_type: null,
+    valid_from: '2026-08-20T10:00:00Z',
+    valid_to: null,
     ...overrides,
   }
 }

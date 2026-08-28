@@ -32,13 +32,14 @@
 import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router'
 import { AntidepClientProvider, resolveAntidepClient } from './antidep-client'
+import { AccessPage } from './pages/AccessPage'
 import { ClaimEvidencePage } from './pages/ClaimEvidencePage'
 import { DrugPage } from './pages/DrugPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { SourcePage } from './pages/SourcePage'
 import { TopicPage } from './pages/TopicPage'
-import { ROUTE_PATTERNS, homePath } from './routes'
+import { ROUTE_PATTERNS, accessPath, homePath } from './routes'
 
 const MAIN_ID = 'hovedinnhold'
 
@@ -83,6 +84,13 @@ export function AppLayout() {
           Antidep er under utvikling. Kunnskapsbasen er ufullstendig, og innholdet skal ikke brukes
           som grunnlag for kliniske beslutninger ennå.
         </p>
+        {/* Steg 1 av adminflyten (§29, §74.22): innlogging og «Min tilgang» er
+            nå den samme siden for alle, innlogget eller ikke — se
+            AccessPage.tsx. Lenken står i toppen slik forsidelenken gjør, ikke
+            gjemt bak klinikerflaten. */}
+        <nav aria-label="Konto">
+          <Link to={accessPath()}>Min tilgang</Link>
+        </nav>
       </header>
       {/* tabIndex -1 gjør hovedområdet fokuserbart programmatisk, ikke med tab. */}
       <main id={MAIN_ID} ref={main} tabIndex={-1}>
@@ -92,6 +100,7 @@ export function AppLayout() {
           <Route element={<TopicPage />} path={ROUTE_PATTERNS.topic} />
           <Route element={<ClaimEvidencePage />} path={ROUTE_PATTERNS.claimEvidence} />
           <Route element={<SourcePage />} path={ROUTE_PATTERNS.source} />
+          <Route element={<AccessPage />} path={ROUTE_PATTERNS.access} />
           <Route element={<NotFoundPage />} path="*" />
         </Routes>
       </main>

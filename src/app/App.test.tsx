@@ -34,6 +34,17 @@ describe('skallet', () => {
     expect(skip).toHaveAttribute('href', `#${screen.getByRole('main').id}`)
     expect(document.body.querySelector('a')).toBe(skip)
   })
+
+  it('har en lenke til Min tilgang i toppen, uavhengig av innloggingsstatus', () => {
+    // Steg 1 av adminflyten (§29, §74.22): lenken skal stå i toppen for alle,
+    // ikke bare gjemt bak en klinikerflate som forutsetter innlogging.
+    renderRoute('/')
+    const banner = screen.getByRole('banner')
+    expect(within(banner).getByRole('link', { name: 'Min tilgang' })).toHaveAttribute(
+      'href',
+      '/access',
+    )
+  })
 })
 
 describe('rutingen', () => {
@@ -73,6 +84,11 @@ describe('rutingen', () => {
     expect(
       await screen.findByRole('heading', { level: 3, name: 'Evidensgrunnlaget' }),
     ).toBeInTheDocument()
+  })
+
+  it('adressen /access treffer Min tilgang', () => {
+    renderRoute('/access')
+    expect(screen.getByRole('heading', { level: 2, name: 'Min tilgang' })).toBeInTheDocument()
   })
 
   it('kildeadressen treffer kildesiden', async () => {
