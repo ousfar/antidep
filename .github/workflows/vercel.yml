@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  deployments: write
 
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -47,9 +48,13 @@ jobs:
           fi
 
       - name: Deploy
+        id: deploy
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
           else
-            vercel deploy --prebuilt --token="$VERCEL_TOKEN"
+            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
           fi
+
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployment: $url" >> "$GITHUB_STEP_SUMMARY"
