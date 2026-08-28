@@ -29,8 +29,8 @@ create function pg_temp.extraction_actor() returns uuid language sql stable as $
   select id from provenance.actors where actor_key = 'agent:evidence-extraction'
 $$;
 
-insert into knowledge.sources (source_type, title, authors_or_issuer)
-values ('journal_article', 'Immutabilitetstestkilde', 'Testforfatter I');
+insert into knowledge.sources (source_type, title, authors_or_issuer, created_by_actor_id)
+values ('journal_article', 'Immutabilitetstestkilde', 'Testforfatter I', pg_temp.extraction_actor());
 
 insert into knowledge.source_versions
   (source_id, retrieved_at, retrieved_from, external_version, content_hash)

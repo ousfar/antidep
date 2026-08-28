@@ -39,7 +39,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(16);
+select plan(17);
 
 -- ---------------------------------------------------------------------------
 -- Aktørene som faktisk produserte de eksisterende radene, og redaktøren
@@ -193,6 +193,20 @@ select is_empty(
   $$,
   'alle evidensfunn er attribuert til ekstraksjonsrollen som produserte dem i migrasjon 003'
 );
+-- Migrasjon 003c la created_by_actor_id til knowledge.sources i etterkant
+-- (et hull migrasjon 005 etterlot, se migrasjonens hodekommentar) og
+-- backfyller de to seedede radene med samme aktør: aktørens egen beskrivelse
+-- sier allerede at den «Produserte kildene, kildeversjonene og evidensfunnene
+-- i migrasjon 003».
+select is_empty(
+  $$
+    select s.id::text
+    from knowledge.sources s
+    join provenance.actors a on a.id = s.created_by_actor_id
+    where a.actor_key <> 'agent:evidence-extraction'
+  $$,
+  'alle kilder er attribuert til ekstraksjonsrollen som produserte dem i migrasjon 003'
+);
 select is_empty(
   $$
     select t.table_name || ':' || t.wrong_rows::text
@@ -252,6 +266,10 @@ select is(
      union all
      select e.id from knowledge.evidence_items e
        join provenance.actors a on a.id = e.created_by_actor_id
+       where a.actor_type = 'human'
+     union all
+     select s.id from knowledge.sources s
+       join provenance.actors a on a.id = s.created_by_actor_id
        where a.actor_type = 'human'
    ) t),
   0::bigint,

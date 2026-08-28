@@ -1336,7 +1336,7 @@ PR G  db: add publication events and gate                     (#15)  merget   mi
       db: authorize the named qualified editor                (#31)  merget   migrasjon 005b
       db: expose the caller's own actor and roles             (#32)  merget   migrasjon 007b
       docs: mark #32 as merged in the PR log                  (#33)  merget   ingen migrasjon
-      feat: add sign-in and my access                         (#34)  åpen     ingen migrasjon
+      feat: add sign-in and my access                         (#34)  merget   ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1359,8 +1359,13 @@ med alt Antidep bruker den til (§74.16). **PR I er dermed ferdig, og med den Sl
 
 Tabellen over er en logg over utført arbeid, og skal føres i den PR-en som gjør arbeidet
 ferdig, ikke i en senere. Statuskolonnen beskriver tilstanden da raden ble skrevet, så den
-nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #33. Hva
+nyeste raden står alltid som `åpen` til neste PR retter den; denne PR-en retter #34. Hva
 006a innfridde, står i §74.8; hva 007 innfridde, i §74.9.
+
+Raden for denne PR-en selv føres i en egen commit på samme PR: PR-nummeret er ikke tildelt
+før PR-en er åpnet, og en foreløpig rad uten nummer ville vært en påstand tabellen ikke kan
+stå for. `(#N)` i parentes skal aldri stå andre steder i planen enn i denne tabellen, så
+nummeret venter til det finnes.
 
 Raden for #30 føres her og ikke av #30 selv. Den PR-en endret bare `CLAUDE.md` og rørte
 verken planen eller vaktposten, så loggen fikk et hull mellom #29 og #31. Et hull i en tabell
@@ -1382,11 +1387,16 @@ står utenfor den planlagte rekken, og nummeret 009 er reservert for DrugProduct
 importfundamentet (§26). Den ellevte filen er migrasjon 005a, som utvider aktørregisteret fra
 §20 og står utenfor rekken på nøyaktig samme måte. Det gjør også den tolvte, migrasjon
 005b, som fullfører det 005a bevisst lot stå åpent, og den trettende, migrasjon 007b, som
-utvider api-lesemodellen fra §24 slik 007a gjorde. Filrekkefølgen er dermed 001, 002, 003,
-004, 005, 006, 006a, 007, 008, 007a, 005a, 005b, 007b — sortert på tidsstempel, ikke på
-migrasjonsnummer, og de tre siste filene bærer de tre laveste bokstavnumrene.
+utvider api-lesemodellen fra §24 slik 007a gjorde. Den fjortende filen er migrasjon 003a, som
+utvider kildetabellen fra §20 og lukker et attribusjonshull migrasjon 005 etterlot (§74.23).
+Den femtende, migrasjon 008a, utvider auditvokabularet fra §25 med én ny verdi. Den sekstende
+og siste, migrasjon 007c, utvider api-lesemodellen fra §24 en fjerde gang — med det første
+skrivbare medlemmet, adminflytens kontrollerte skrivevei for å opprette en Source (§29,
+§74.23). Filrekkefølgen er dermed 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a,
+005b, 007b, 003a, 008a, 007c — sortert på tidsstempel, ikke på migrasjonsnummer, og de seks
+siste filene bærer de seks laveste bokstavnumrene.
 
-Databaselaget teller nå 1182 pgTAP-assertions over 36 testfiler.
+Databaselaget teller nå 1216 pgTAP-assertions over 37 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1513,15 +1523,21 @@ rettighet som allerede finnes, lesbar for den som har den.
 Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
 
 1. **Enum kontra oppslagstabell — utsatt, og gjort billigere å utsette.** Det finnes
-   38 enum-typer, fordelt på de tretten migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
-   007, 008, 007a, 005a, 005b og 007b — i filrekkefølge, ikke i nummerrekkefølge — med
-   henholdsvis 1, 6, 11, 7, 10, 2, 0, 0, 1, 0, 0, 0 og 0. Tallet er kontrollert mot
-   kilden (`grep -cE '^create type ' supabase/migrations/*.sql`) og mot databasen.
-   Alle tretten ledd er nå oppgitt eksplisitt framfor å la de siste hvile på restpåstanden i
-   `scripts/verify-counts.sh`; det er den formen vakten kontrollerer strengest. Verken
-   005a, 005b eller 007b legger til enum-typer: den første registrerer én rad i et register
-   som allerede finnes, den andre knytter og tildeler, og den tredje projiserer to
-   eksisterende vokabularer som `text` slik resten av `api` gjør.
+   38 enum-typer, fordelt på de seksten migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
+   007, 008, 007a, 005a, 005b, 007b, 003a, 008a og 007c — i filrekkefølge, ikke i
+   nummerrekkefølge — med henholdsvis 1, 6, 11, 7, 10, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0 og 0.
+   Tallet er kontrollert mot kilden (`grep -cE '^create type ' supabase/migrations/*.sql`) og
+   mot databasen. Alle seksten ledd er nå oppgitt eksplisitt framfor å la de siste hvile på
+   restpåstanden i `scripts/verify-counts.sh`; det er den formen vakten kontrollerer
+   strengest. Verken 005a, 005b, 007b eller 003a legger til enum-typer: den første
+   registrerer én rad i et register som allerede finnes, den andre knytter og tildeler, den
+   tredje projiserer to eksisterende vokabularer som `text` slik resten av `api` gjør, og den
+   fjerde legger til en kolonne. 008a legger heller ikke til en enum-*type* — den utvider
+   vokabularet til en type migrasjon 008 allerede opprettet, med `ALTER TYPE ... ADD VALUE`,
+   som `^create type ` ikke fanger og ikke skal fange: det er en ny verdi, ikke en ny type.
+   007c oppretter ingen egen enum-type av samme grunn som 007, 007a og 007b: den kaster
+   eksisterende vokabularer til `text` i parameterlisten, av en grunn den selv forklarer
+   (§74.23).
    Viewene caster enum-kolonner til `text`, så den offentlige kontrakten er en streng
    fra et dokumentert vokabular, ikke PostgreSQL-typen. Et senere bytte til
    oppslagstabeller er dermed ikke en brytende API-endring. Castingen sparer også
@@ -3427,6 +3443,113 @@ kallet uten `scope` og bekreftet at nettopp den testen feiler.
 (DATABASE_ARCHITECTURE.md §43, §48) — er ikke bygget. Spor 2 (verifikasjon og godkjenning) er
 heller ikke rørt. Milepæl B mangler fortsatt de samme fire tingene den har gjort siden §74.4:
 denne PR-en lukker ingen av dem, og er ikke ment å gjøre det.
+
+---
+
+### 74.23 Hva steg 2 av adminflyten innførte
+
+Steg 2 av «manuell adminflyt» (§29): «Editor oppretter Source» (§15), den kontrollerte
+skriveveien migrasjon 007c åpner, og et skjema over den i klienten. Ikke noe mer av kjeden —
+EvidenceItem, ClaimRevision, review og publisering hører til senere PR-er, én om gangen
+(§51). Spor 2 (verifikasjon og godkjenning) er fortsatt urørt.
+
+**Ett attribusjonshull ble funnet og lukket først (migrasjon 003a).** `knowledge.sources`
+var det eneste kunnskapsobjektet uten `created_by_actor_id`: migrasjon 005 la kolonnen til på
+`evidence_items`, `claims`, `claim_revisions`, `claim_evidence_links` og
+`evidence_assessments`, men aktørraden den selv registrerte for `agent:evidence-extraction`
+sier «Produserte kildene, kildeversjonene og evidensfunnene i migrasjon 003» — kildene var
+alltid omfattet av den setningen, bare ikke av kolonnetillegget. Uten kolonnen ville
+skriveveien enten latt en ny kilde mangle attribusjon eller måttet late som om en KI-aktør
+skrev en rad et menneske faktisk opprettet. Migrasjonen legger kolonnen til, backfyller de to
+seedede radene til samme aktør som resten av migrasjon 003, og utvider
+`220_provenance_seed_test.sql` sin attribusjonskontroll til å dekke `knowledge.sources` også.
+
+**`ALTER TYPE ... ADD VALUE` kan ikke brukes i samme fil som bruker verdien (migrasjon 008a).**
+Prøvd direkte mot denne stacken, ikke antatt: et forsøk på å legge `source_created` til
+`audit.event_operation` og utvide CASE-uttrykkene i samme migrasjonsfil feilet med `unsafe
+use of new value … (SQLSTATE 55P04)` under `supabase db reset`, fordi migrasjonsløperen
+sender hele filen som én transaksjon — ikke bare når filen selv inneholder en eksplisitt
+BEGIN/COMMIT-blokk. Verdien måtte derfor legges til i en egen, ellers tom migrasjon som
+committer alene, før migrasjon 007c kunne utvide `object_schema`/`object_table` og
+`events_snapshot_shape_check` til å bruke den. Ingen tidligere migrasjon i Antidep hadde
+utvidet en eksisterende enum-type; det har nå én, og feilmodusen er skrevet ned i migrasjonens
+hodekommentar for den neste som trenger det.
+
+**Aktøren utledes av `auth.uid()`, ikke oppgis som parameter.**
+`knowledge.assert_publisher_authorized(p_publisher_actor_id, p_topic_concept_id)` (migrasjon
+006) tar aktøren som parameter og kontrollerer at den stemmer med `auth.uid()` — det gir
+mening der, fordi tre forskjellige operasjoner (publish/replace, withdraw, rollback) deler
+samme kontrollfunksjon med samme signatur. `knowledge.assert_editor_authorized()` har bare én
+kaller og ingen klientoppgitt verdi å kontrollere mot: attribusjonen for en ny kilde kan aldri
+være noe annet enn kallerens egen aktør, så funksjonen slår den opp selv og returnerer den.
+Det fjerner en hel feilklasse — en klient som ved en feil sender en annen aktørs id — uten å
+tape noe en parameter ville gitt. En senere skrivevei som deler mønster med publiseringens tre
+operasjoner kan fortsatt velge parameterformen; det er en avgjørelse for den PR-en.
+
+**Editor-sjekken er bevisst ikke avgrenset til et klinisk begrep.**
+`workflow.user_roles.scope_id` kan avgrense en tildeling til ett innholdsområde (§47), men en
+Source er ikke selv om ett tema — den blir referert av evidensfunn som senere kan gjelde ulike
+kliniske begreper. Det finnes derfor ingen `p_topic_concept_id` å kontrollere en avgrenset
+tildeling mot, og `knowledge.assert_editor_authorized()` godtar enhver gyldig editor-tildeling,
+avgrenset eller ikke. Alternativet — å kreve en uavgrenset tildeling — ble vurdert og valgt
+bort: det ville i praksis krevd at enhver editor-tildeling var uavgrenset for at noen i det
+hele tatt kunne opprette en kilde, og det er en strengere begrensning enn det skriveveien selv
+trenger. En senere skrivevei som oppretter et objekt som *er* avgrenset (EvidenceItem knyttet
+til et endepunkt, ClaimRevision under et klinisk begrep) skal ta stilling til scope på nytt.
+
+**`p_source_type` og `p_publication_date_precision` er `text`, ikke enum-typene, i
+parameterlisten — også dette prøvd direkte, ikke antatt.** Et første forsøk med
+`knowledge.source_type`/`knowledge.date_precision` som parametertyper feilet over ekte HTTP
+mot den lokale stacken med `permission denied for schema knowledge`, kastet før EXECUTE på
+selve funksjonen engang ble kontrollert: PostgREST bygger et uttrykk som caster JSON-verdien
+til parameterens deklarerte type, skrevet schemakvalifisert, og den casten evalueres i
+kallerens egen sesjon — `authenticated` har ingen `usage` på `knowledge` (§47), uansett at
+funksjonen selv er SECURITY DEFINER. Parametrene er derfor `text`, og castingen skjer i stedet
+inne i `INSERT`-setningen, som kjører i funksjonens SECURITY DEFINER-kontekst. En ugyldig verdi
+avvises fortsatt av databasen (`22P02`), bare ett steg lenger inn.
+
+**Mutasjonstestet: fem mutasjoner på `knowledge.assert_editor_authorized()`, alle fanget av
+nøyaktig den assertionen som påstår å teste dem.** Hver regel ble fjernet enkeltvis mot den
+kjørende stacken og `370_source_creation_test.sql` kjørt på nytt:
+aktør-finnes-kontrollen fjernet felte bare «en kaller uten aktørrad avvises eksplisitt»;
+tilbaketrekkingskontrollen fjernet felte bare «en tilbaketrukket aktør avvises»;
+`role_code = 'editor'`-filteret fjernet felte bare «reviewer-rollen gir ikke rett til å
+opprette kilder»; `statement_timestamp()` byttet til `now()` felte begge de to
+`pg_sleep`-testene i del 7, og ingen andre; og audittriggeren fjernet felte
+strukturtesten («enhver innsatt kilde auditeres») og begge assertionene om den faktiske
+auditraden. Ingen mutasjon feltes av en urelatert assertion — hver av de fem er sporet til
+nøyaktig den påstanden som skal fange den.
+
+**Ingen rollegate i klienten, samme doktrine som `AccessPage.tsx` sin FELLE 4.**
+`CreateSourcePage.tsx` viser skjemaet til enhver innlogget bruker, ikke bare til en med
+editor-rolle: `api.my_roles` svarer på hva kalleren HAR, ikke hva kalleren FÅR LOV TIL, og
+skriveoperasjonen kontrollerer retten på sitt eget tidspunkt uansett. En bruker uten
+editor-rolle ser skjemaet og et avvist forsøk med databasens egen forklaring, ikke en knapp
+som er deaktivert på et løfte klienten ikke kan stå for. Innloggingssjekken alene er
+strukturell, samme mønster som `AccessPage.tsx` sin FELLE 1: skjemaet finnes ikke i treet før
+kalleren er `signed_in`.
+
+**`/sources/new` kolliderer på tegnnivå med `sourcePath('new')`, og det er meningsløst å teste
+bort.** Hvilken side adressen treffer avgjøres av at react-router selv rangerer det statiske
+segmentet foran det dynamiske `:sourceId`, uavhengig av deklarasjonsrekkefølge i `App.tsx`.
+Prøvd direkte i `App.test.tsx` framfor bare i `routes.test.ts`: en regresjon i rangeringen
+ville sendt strengen «new» inn i `SourcePage` som om den var en uuid, og bare en full rendring
+av ruteren kan fange det.
+
+**Nettleserverifisering.** Chromium (`/opt/pw-browsers/chromium`) kjørt headless med
+devtools-protokollen direkte over Node sin innebygde `WebSocket`, samme oppsett som §74.22. En
+midlertidig `preview.html`/`src/preview-main.tsx` rendret `AppLayout` i en `MemoryRouter` på
+`/sources/new` med en falsk klient, styrt fra en query-parameter, og dekket «ikke innlogget»,
+det tomme skjemaet, en vellykket opprettelse (skjemaet fylt ut og sendt av rigget selv, med
+Reacts native-verdisetter-teknikk) og en avvist opprettelse — på både mobil- (390px) og
+skrivebordsbredde (1280px), pluss forsiden for å bekrefte at den nye navigasjonslenken finnes
+der. Ingen konsollfeil og ingen kastet unntak i noen av dem. Begge filene er slettet før
+commit, som instruert.
+
+**Hva som gjenstår.** Milepæl B mangler fortsatt de samme fire tingene den har gjort siden
+§74.4: denne PR-en lukker ingen av dem. Resten av §15 sin admin-workflow —
+EvidenceItem-registrering, ClaimRevision, evidensverifikasjon og claim-verifikasjon,
+review-beslutning, publisering — er ikke bygget, og hver del hører til sin egen PR (§51).
 
 ---
 

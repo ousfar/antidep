@@ -31,8 +31,8 @@ create function pg_temp.extraction_actor() returns uuid language sql stable as $
   select id from provenance.actors where actor_key = 'agent:evidence-extraction'
 $$;
 
-insert into knowledge.sources (source_type, title, authors_or_issuer)
-values ('journal_article', 'Serialiseringstestkilde', 'Testforfatter S');
+insert into knowledge.sources (source_type, title, authors_or_issuer, created_by_actor_id)
+values ('journal_article', 'Serialiseringstestkilde', 'Testforfatter S', pg_temp.extraction_actor());
 
 -- To fritekstfelter som ligger ved siden av hverandre i kanoniseringen.
 -- Alle andre felter er like, slik at forskjellen mellom radene er nøyaktig der
