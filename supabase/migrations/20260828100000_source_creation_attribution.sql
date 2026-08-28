@@ -45,6 +45,38 @@
 -- append-only (en kilde kan oppdateres, jf. migrasjon 003), så en vanlig UPDATE
 -- er nok, og updated_at bumpes riktig — raden ble faktisk endret av denne
 -- migrasjonen.
+--
+-- ----------------------------------------------------------------------------
+-- Opphavet fryses, resten av kilden forblir redigerbar
+--
+-- Migrasjon 005 slo fast prinsippet i én setning: «Opphavet er en del av
+-- identiteten og skal ikke kunne omskrives i ettertid.» På de append-only
+-- tabellene fulgte det av at raden ikke kan endres i det hele tatt; på
+-- knowledge.claims, som er muterbar, ble vernet uttrykt eksplisitt ved at
+-- created_by_actor_id ble tatt inn i knowledge.freeze_claim_identity().
+--
+-- knowledge.sources er muterbar av samme grunn som claims — en kilde er en
+-- beskrivelse som kan korrigeres, og statusen må kunne endres når kilden trekkes
+-- tilbake — men hadde fram til nå ingen frysetrigger overhodet, fordi den ikke
+-- hadde noe felt som var en del av identiteten. Den nye kolonnen er det første,
+-- og den arver derfor prinsippet framfor å hvile på at framtidige RPC-er lar
+-- feltet være i fred. En attribusjon som kan skrives om av den som blir
+-- attribuert, er ingen attribusjon (ANTIDEP_CONSTITUTION.md §14).
+--
+-- Vernet er bevisst smalt: nøyaktig identiteten og opphavet, ingenting annet.
+-- Tittel, forfattere, bibliografiske felter, status, status_note og
+-- superseded_by_source_id er livssyklus og korreksjon, ikke identitet, og skal
+-- fortsatt kunne endres — 100_knowledge_immutability_test.sql krever begge deler.
+--
+-- Raden selv er med, og det er ikke overforsiktighet: migrasjon 007c lar
+-- audit.events peke på en kilde med object_id og uten fremmednøkkel, av den
+-- grunnen DATABASE_ARCHITECTURE.md §36 gir. Migrasjon 008 måtte ta identiteten
+-- inn i workflow.freeze_role_grant() da nøyaktig den avhengigheten oppstod der,
+-- og argumentet er identisk her: en nyopprettet kilde har ennå ingen inngående
+-- fremmednøkler — verken evidensfunn, kildeversjoner eller identifikatorer —
+-- så ingenting utenfra holder primærnøkkelen på plass i det vinduet auditraden
+-- allerede finnes. En omnummerering ville etterlatt auditsporet på en rad som
+-- ikke finnes.
 -- ============================================================================
 
 alter table knowledge.sources
@@ -64,3 +96,40 @@ comment on column knowledge.sources.created_by_actor_id is
 
 create index sources_created_by_actor_id_idx
   on knowledge.sources (created_by_actor_id);
+
+-- Triggeren opprettes etter backfillen med hensikt: backfillen setter kolonnen
+-- fra NULL til aktøren, altså nøyaktig den endringen vernet skal nekte. Samme
+-- rekkefølge som i migrasjon 005, der freeze_claim_identity() ble erstattet
+-- etter at UPDATE-ene var kjørt.
+create function knowledge.freeze_source_attribution()
+  returns trigger
+  language plpgsql
+  set search_path = ''
+as $$
+begin
+  if new.id is distinct from old.id then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format('Kilde %L kan ikke skifte identitet.', old.id),
+      hint = 'Auditloggen peker på kilden med object_id og uten fremmednøkkel (DATABASE_ARCHITECTURE.md §35, §36). En omnummerering ville etterlatt auditsporet på en rad som ikke finnes.';
+  end if;
+
+  if new.created_by_actor_id is distinct from old.created_by_actor_id then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format('Opphavet til kilde %L er uforanderlig og kan ikke endres.', old.id),
+      hint = 'Hvem som registrerte kilden er en observasjon, ikke et redigerbart felt (ANTIDEP_CONSTITUTION.md §14). Tittel, forfattere, bibliografiske felter og status kan korrigeres; opphavet kan ikke skrives om i ettertid.';
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function knowledge.freeze_source_attribution() is
+  'Immutable-row guard: hindrer at identiteten og opphavet til en kilde endres etter innsetting. Alt annet på raden — tittel, forfattere, bibliografiske felter, status, status_note og superseded_by_source_id — er korreksjon og livssyklus, og forblir redigerbart. Samme prinsipp som knowledge.freeze_claim_identity() håndhever for den andre muterbare kunnskapstabellen.';
+
+revoke execute on function knowledge.freeze_source_attribution() from public;
+
+create trigger sources_freeze_attribution
+  before update on knowledge.sources
+  for each row execute function knowledge.freeze_source_attribution();

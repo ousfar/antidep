@@ -806,3 +806,14 @@ header nav a {
   color: var(--color-text-muted);
   cursor: not-allowed;
 }
+
+/* Manglende dato under en valgt presisjon. Samme form som .login-form__error:
+   kantstrek og tekst, ikke farge alene (§20 øverst i denne filen). */
+.create-source-form__problem {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-inline-start: 4px solid var(--color-text);
+  border-radius: 0.25rem;
+  font-size: 0.9375rem;
+}

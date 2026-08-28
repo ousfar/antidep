@@ -1397,7 +1397,7 @@ skrivbare medlemmet, adminflytens kontrollerte skrivevei for å opprette en Sour
 005b, 007b, 003a, 008a, 007c — sortert på tidsstempel, ikke på migrasjonsnummer, og de seks
 siste filene bærer de seks laveste bokstavnumrene.
 
-Databaselaget teller nå 1216 pgTAP-assertions over 37 testfiler.
+Databaselaget teller nå 1220 pgTAP-assertions over 37 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -3546,6 +3546,54 @@ Reacts native-verdisetter-teknikk) og en avvist opprettelse — på både mobil-
 skrivebordsbredde (1280px), pluss forsiden for å bekrefte at den nye navigasjonslenken finnes
 der. Ingen konsollfeil og ingen kastet unntak i noen av dem. Begge filene er slettet før
 commit, som instruert.
+
+**To P2-funn fra den tekniske reviewen, rettet i samme PR.**
+
+*1. Opphavet på en kilde var ikke vernet.* Migrasjon 003a la
+`created_by_actor_id` til en **muterbar** tabell uten å verne den, mens migrasjon 005 hadde
+slått fast prinsippet i én setning — «opphavet er en del av identiteten og skal ikke kunne
+omskrives i ettertid» — og håndhevet det på `knowledge.claims`, den andre muterbare
+kunnskapstabellen. Attribusjonen hvilte dermed på at framtidige RPC-er lot feltet være i fred,
+og en attribusjon som kan skrives om av den som blir attribuert, er ingen attribusjon
+(ANTIDEP_CONSTITUTION.md §14). `knowledge.freeze_source_attribution()` retter det: vernet er
+smalt, og begge sider av grensen er prøvd — tittel, forfattere, bibliografiske felter, status
+og `superseded_by_source_id` er fortsatt redigerbare, fordi det er korreksjon og livssyklus,
+ikke identitet.
+
+Raden selv er tatt med i vernet av samme grunn som migrasjon 008 tok `workflow.user_roles.id`
+inn i sitt: migrasjon 007c lar `audit.events` peke på en kilde uten fremmednøkkel (§36), og en
+nyopprettet kilde har ennå ingen inngående fremmednøkler som holder primærnøkkelen på plass i
+det vinduet auditraden allerede finnes. En omnummerering ville etterlatt auditsporet på en rad
+som ikke finnes.
+
+*2. Datohåndteringen ba brukeren kjenne databasens interne format.* `knowledge.sources` lagrer
+en årfestet dato som `YYYY-01-01` og en månedsfestet som `YYYY-MM-01`. Konvensjonen er riktig i
+databasen — den er nettopp det som hindrer falsk presisjon (§6) — men skjemaet brukte én
+`<input type="date">` og sendte verdien uendret. En redaktør som bare visste «november 2000»
+måtte dermed selv vite at det skrives som 1. november, ellers avviste databasen en ellers
+gyldig kilde med et constraint-navn.
+
+Skjemaet spør nå om presisjonen først og viser deretter det ene datofeltet den presisjonen
+faktisk rommer: et årsfelt, en `<input type="month">` eller en `<input type="date">`.
+`src/lib/publication-date.ts` **konstruerer** den avkortede datoen framfor å kontrollere at
+brukeren traff den, så en uavkortet dato kan ikke oppstå i det hele tatt. De tre feltene lever
+side om side i draften, slik at et bytte fram og tilbake ikke sletter det brukeren har skrevet.
+
+Grensen mot databasen er holdt: dette er ikke en kopi av CHECK-constraintene. Modulen svarer
+bare på «har skjemaet fått nok input til å danne en verdi?» — er svaret nei, finnes det ingen
+dato å sende. At 31. februar er umulig, er fortsatt databasens dom, og en test krever eksplisitt
+at den formen slipper gjennom kanoniseringen. Prøvd ende-til-ende over HTTP mot den lokale
+stacken: alle fire formene (år, år+måned, eksakt dag, ingen dato) godtas, og kontrollen —
+en uavkortet dato med `year`-presisjon — avvises fortsatt av
+`sources_publication_date_year_precision_check`. Constraintene er altså uendret.
+
+**Mutasjonstestet, seks mutasjoner til, alle drept av riktig assertion.** Tre på databasen:
+opphavssjekken fjernet felte den negative testen *og* kontrollen av at opphavet stod urørt;
+identitetssjekken fjernet felte bare identitetstesten; hele triggeren droppet felte i tillegg
+strukturtesten i `080`. Tre på klienten: å sende råverdien framfor den avkortede datoen felte
+både enhetstesten og sidetesten for år; å fjerne `incomplete`-vakten felte de to testene som
+krever at skjemaet sier fra og ikke sender noe; og å la `month`-grenen lese årsfeltet felte
+fire tester i begge lag. Ingen av dem ble felt av en urelatert assertion.
 
 **Hva som gjenstår.** Milepæl B mangler fortsatt de samme fire tingene den har gjort siden
 §74.4: denne PR-en lukker ingen av dem. Resten av §15 sin admin-workflow —

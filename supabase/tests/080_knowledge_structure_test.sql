@@ -16,7 +16,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(48);
+select plan(49);
 
 -- ---------------------------------------------------------------------------
 -- Tabellene i migrasjon 003
@@ -355,6 +355,10 @@ select has_trigger(
 select has_trigger(
   'knowledge', 'source_versions', 'source_versions_freeze_snapshot',
   'knowledge.source_versions har en immutable-row guard på observasjonen'
+);
+select has_trigger(
+  'knowledge', 'sources', 'sources_freeze_attribution',
+  'knowledge.sources har en immutable-row guard på identiteten og opphavet (migrasjon 003a)'
 );
 
 -- Uttømmende over schemaet, ikke en håndholdt liste: en ny funksjon i knowledge

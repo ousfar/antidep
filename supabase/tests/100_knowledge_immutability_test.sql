@@ -15,7 +15,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(26);
+select plan(29);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen
@@ -254,9 +254,50 @@ select lives_ok(
 );
 
 -- ---------------------------------------------------------------------------
--- knowledge.sources er ikke frosset: en kilde er en beskrivelse som kan
--- korrigeres, og statusen må kunne endres når en kilde trekkes tilbake
+-- knowledge.sources er bare delvis frosset (migrasjon 003a)
+--
+-- Vernet er smalt med hensikt, og begge sidene av grensen prøves: identiteten og
+-- opphavet kan ikke endres, mens beskrivelsen kan korrigeres og statusen kan
+-- endres når kilden trekkes tilbake. En test på bare den ene siden ville ikke
+-- skilt et riktig avgrenset vern fra et som overblokkerer.
+--
+-- Den negative testen er den viktigste: uten den hviler «opphavet kan ikke
+-- skrives om» på at framtidige skriveveier lar feltet være i fred, og en
+-- attribusjon som kan skrives om av den som blir attribuert, er ingen
+-- attribusjon (ANTIDEP_CONSTITUTION.md §14).
+--
+-- Aktøren det forsøkes byttet til er en annen ekte aktør, ikke en oppdiktet
+-- uuid: ellers ville fremmednøkkelen kunnet avvise forsøket før triggeren kjørte,
+-- og testen ville målt feil lag.
 -- ---------------------------------------------------------------------------
+select throws_ok(
+  $$
+    update knowledge.sources
+    set created_by_actor_id =
+      (select id from provenance.actors where actor_key = 'agent:claim-synthesis')
+    where title = 'Immutabilitetstestkilde'
+  $$,
+  '23001', null,
+  'opphavet til en kilde kan ikke byttes til en annen aktør'
+);
+select throws_ok(
+  $$
+    update knowledge.sources set id = gen_random_uuid()
+    where title = 'Immutabilitetstestkilde'
+  $$,
+  '23001', null,
+  'en kilde kan ikke skifte identitet; auditloggen peker på den uten fremmednøkkel'
+);
+-- Kontroll av at de to over ikke er stille sanne: raden finnes, og den er
+-- attribuert til ekstraksjonsaktøren slik fiksturen satte den.
+select is(
+  (select a.actor_key from knowledge.sources s
+     join provenance.actors a on a.id = s.created_by_actor_id
+   where s.title = 'Immutabilitetstestkilde'),
+  'agent:evidence-extraction',
+  'de avviste forsøkene lot opphavet stå urørt'
+);
+
 select lives_ok(
   $$update knowledge.sources set title = 'Immutabilitetstestkilde, rettet tittel'
     where title = 'Immutabilitetstestkilde'$$,

@@ -28,12 +28,18 @@
 import { useId, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { createSource } from '../../lib/create-source'
-import { SOURCE_TYPES, DATE_PRECISIONS } from '../../types/api'
+import {
+  canonicalPublicationDate,
+  EMPTY_PUBLICATION_DATE,
+  PUBLICATION_DATE_CHOICES,
+} from '../../lib/publication-date'
+import { SOURCE_TYPES } from '../../types/api'
 import { useAntidepClient } from '../antidep-client'
 import { useAuthSession, type AuthSessionState } from '../use-auth-session'
 import { usePageTitle } from '../use-page-title'
 import { accessPath, sourcePath } from '../routes'
 import type { CreateSourceResult } from '../../lib/create-source'
+import type { PublicationDateChoice, PublicationDateDraft } from '../../lib/publication-date'
 import type { Uuid } from '../../types/api'
 
 function CreateSourceLoading() {
@@ -77,8 +83,7 @@ interface FormState {
   readonly volume: string
   readonly issue: string
   readonly pages: string
-  readonly publicationDate: string
-  readonly publicationDatePrecision: string
+  readonly publicationDate: PublicationDateDraft
 }
 
 const EMPTY_FORM: FormState = {
@@ -89,8 +94,114 @@ const EMPTY_FORM: FormState = {
   volume: '',
   issue: '',
   pages: '',
-  publicationDate: '',
-  publicationDatePrecision: '',
+  publicationDate: EMPTY_PUBLICATION_DATE,
+}
+
+// ----------------------------------------------------------------------------
+// Publiseringsdato: presisjonen først, så nøyaktig så mye dato som den rommer
+//
+// Databasen lagrer en årfestet dato som `YYYY-01-01` og en månedsfestet som
+// `YYYY-MM-01` (migrasjon 003). Det er riktig representasjon, men det er
+// databasens representasjon: en redaktør som vet at kilden er fra «november
+// 2000» skal ikke måtte vite at det skrives som 1. november for å slippe forbi
+// en CHECK. Skjemaet spør derfor om presisjonen først og viser deretter det ene
+// datofeltet den presisjonen faktisk rommer — et årsfelt, en månedsvelger eller
+// en datovelger. Kanoniseringen skjer i `publication-date.ts`, som konstruerer
+// den avkortede datoen framfor å kontrollere at brukeren traff den.
+// ----------------------------------------------------------------------------
+
+const DATE_CHOICE_LABELS: Record<PublicationDateChoice, string> = {
+  none: 'Ingen dato er oppgitt i kilden',
+  year: 'Bare året er kjent',
+  month: 'Måned og år er kjent',
+  day: 'Nøyaktig dato er kjent',
+}
+
+function PublicationDateFields({
+  draft,
+  onChange,
+  problem,
+}: {
+  readonly draft: PublicationDateDraft
+  readonly onChange: (draft: PublicationDateDraft) => void
+  readonly problem: string | null
+}) {
+  const choiceId = useId()
+  const valueId = useId()
+  const problemId = useId()
+
+  return (
+    <>
+      <div className="create-source-form__field">
+        <label htmlFor={choiceId}>Publiseringsdato</label>
+        <select
+          id={choiceId}
+          onChange={(event) =>
+            onChange({ ...draft, choice: event.target.value as PublicationDateChoice })
+          }
+          value={draft.choice}
+        >
+          {PUBLICATION_DATE_CHOICES.map((choice) => (
+            <option key={choice} value={choice}>
+              {DATE_CHOICE_LABELS[choice]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Ett felt om gangen, styrt av presisjonen. De tre verdiene lever side om
+          side i draften, så et bytte fram og tilbake ikke sletter det brukeren
+          allerede har skrevet. */}
+      {draft.choice === 'year' ? (
+        <div className="create-source-form__field">
+          <label htmlFor={valueId}>År</label>
+          <input
+            aria-describedby={problem === null ? undefined : problemId}
+            id={valueId}
+            inputMode="numeric"
+            max="9999"
+            min="1000"
+            onChange={(event) => onChange({ ...draft, year: event.target.value })}
+            step="1"
+            type="number"
+            value={draft.year}
+          />
+        </div>
+      ) : null}
+
+      {draft.choice === 'month' ? (
+        <div className="create-source-form__field">
+          <label htmlFor={valueId}>Måned og år</label>
+          <input
+            aria-describedby={problem === null ? undefined : problemId}
+            id={valueId}
+            onChange={(event) => onChange({ ...draft, month: event.target.value })}
+            type="month"
+            value={draft.month}
+          />
+        </div>
+      ) : null}
+
+      {draft.choice === 'day' ? (
+        <div className="create-source-form__field">
+          <label htmlFor={valueId}>Dato</label>
+          <input
+            aria-describedby={problem === null ? undefined : problemId}
+            id={valueId}
+            onChange={(event) => onChange({ ...draft, day: event.target.value })}
+            type="date"
+            value={draft.day}
+          />
+        </div>
+      ) : null}
+
+      {problem === null ? null : (
+        <p className="create-source-form__problem" id={problemId} role="alert">
+          {problem}
+        </p>
+      )}
+    </>
+  )
 }
 
 type SubmitStatus = 'idle' | 'submitting'
@@ -114,6 +225,7 @@ function CreateSourceForm() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [status, setStatus] = useState<SubmitStatus>('idle')
   const [result, setResult] = useState<CreateSourceResult | null>(null)
+  const [dateProblem, setDateProblem] = useState<string | null>(null)
   const sourceTypeId = useId()
   const titleId = useId()
   const authorsId = useId()
@@ -121,14 +233,26 @@ function CreateSourceForm() {
   const volumeId = useId()
   const issueId = useId()
   const pagesId = useId()
-  const dateId = useId()
-  const precisionId = useId()
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (availability.status !== 'ready') {
       return
     }
+
+    // Datoen kanoniseres før kallet, ikke validert mot databasens regler:
+    // `canonicalPublicationDate()` *bygger* den avkortede datoen presisjonen
+    // krever. Er den `incomplete`, har brukeren valgt en presisjon uten å fylle
+    // ut datoen — da finnes det ingen verdi å sende, og skjemaet sier fra
+    // framfor å la databasen avvise en halv dato med sitt eget constraint-navn.
+    // Alt annet er fortsatt databasens dom (§43, §48).
+    const publicationDate = canonicalPublicationDate(form.publicationDate)
+    if (publicationDate.status === 'incomplete') {
+      setDateProblem(publicationDate.message)
+      return
+    }
+    setDateProblem(null)
+
     setStatus('submitting')
     // Databasens CHECK-constraints på knowledge.sources er fasiten (migrasjon
     // 003); skjemaet gjetter ikke på dem selv (oppgaveteksten, felle 4). Det
@@ -142,8 +266,8 @@ function CreateSourceForm() {
       volume: blankToNull(form.volume),
       issue: blankToNull(form.issue),
       pages: blankToNull(form.pages),
-      publicationDate: blankToNull(form.publicationDate),
-      publicationDatePrecision: blankToNull(form.publicationDatePrecision),
+      publicationDate: publicationDate.date,
+      publicationDatePrecision: publicationDate.precision,
     })
     setStatus('idle')
     setResult(outcome)
@@ -241,31 +365,11 @@ function CreateSourceForm() {
           />
         </div>
 
-        <div className="create-source-form__field">
-          <label htmlFor={dateId}>Publiseringsdato (valgfritt)</label>
-          <input
-            id={dateId}
-            onChange={(event) => setForm({ ...form, publicationDate: event.target.value })}
-            type="date"
-            value={form.publicationDate}
-          />
-        </div>
-
-        <div className="create-source-form__field">
-          <label htmlFor={precisionId}>Datopresisjon (påkrevd sammen med dato)</label>
-          <select
-            id={precisionId}
-            onChange={(event) => setForm({ ...form, publicationDatePrecision: event.target.value })}
-            value={form.publicationDatePrecision}
-          >
-            <option value="">Ikke oppgitt</option>
-            {DATE_PRECISIONS.map((precision) => (
-              <option key={precision} value={precision}>
-                {precision}
-              </option>
-            ))}
-          </select>
-        </div>
+        <PublicationDateFields
+          draft={form.publicationDate}
+          onChange={(publicationDate) => setForm({ ...form, publicationDate })}
+          problem={dateProblem}
+        />
 
         <button disabled={status === 'submitting'} type="submit">
           {status === 'submitting' ? 'Oppretter …' : 'Opprett kilde'}
@@ -297,9 +401,9 @@ export function CreateSourcePage() {
       <p className="page-kicker">Admin</p>
       <h2>Opprett kilde</h2>
       <p className="create-source-form__intro">
-        Det første leddet i admin-workflowen (MVP_IMPLEMENTATION_PLAN.md §15): en kilde må finnes
-        før evidens kan knyttes til den. Ingen del av resten av kjeden — evidensfunn, påstander,
-        review eller publisering — er bygget ennå.
+        Det første steget i redaksjonsarbeidet: en kilde må være registrert før evidens kan knyttes
+        til den. Resten av kjeden — evidensfunn, påstander, faglig godkjenning og publisering — er
+        ikke bygget ennå.
       </p>
       <CreateSourceBody authState={authState} />
     </>
