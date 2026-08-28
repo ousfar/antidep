@@ -88,7 +88,20 @@ export const TEST_USER_IDS = {
   b: '99999999-9999-4999-8999-222222222222',
 } as const
 
-function fakeAuth(options: FakeAuthOptions) {
+/**
+ * Ett registrert `signOut()`-kall, slik det faktisk ble gjort mot faken.
+ *
+ * Finnes for å teste `scope` eksplisitt: supabase-js sin standard er
+ * `'global'` — logger kalleren ut av *alle* enheter — og en «Logg ut»-knapp
+ * skal ikke ha den sideeffekten uten at det er et bevisst produktvalg. Uten en
+ * assertion på det faktiske kallet kunne `AccessPage.tsx` sluttet å sende
+ * `scope: 'local'` uten at noen test merket det.
+ */
+export interface FakeSignOutCall {
+  readonly scope?: string
+}
+
+function fakeAuth(options: FakeAuthOptions, signOutCalls: FakeSignOutCall[]) {
   let session: FakeSession | null =
     options.initialUserId == null ? null : { user: { id: options.initialUserId } }
   const listeners = new Set<FakeAuthListener>()
@@ -118,7 +131,8 @@ function fakeAuth(options: FakeAuthOptions) {
       emit('SIGNED_IN')
       return Promise.resolve({ data: { session, user: session.user }, error: null })
     },
-    signOut: () => {
+    signOut: (signOutOptions?: FakeSignOutCall) => {
+      signOutCalls.push(signOutOptions ?? {})
       session = null
       emit('SIGNED_OUT')
       return Promise.resolve({ error: null })
@@ -138,8 +152,10 @@ export function fakeClient(
 ): {
   client: AntidepClient
   queries: RecordedQuery[]
+  signOutCalls: FakeSignOutCall[]
 } {
   const queries: RecordedQuery[] = []
+  const signOutCalls: FakeSignOutCall[] = []
 
   const client = {
     from(view: string) {
@@ -174,10 +190,10 @@ export function fakeClient(
       }
       return builder
     },
-    auth: fakeAuth(authOptions),
+    auth: fakeAuth(authOptions, signOutCalls),
   }
 
-  return { client: client as unknown as AntidepClient, queries }
+  return { client: client as unknown as AntidepClient, queries, signOutCalls }
 }
 
 export interface RenderRouteOptions {
@@ -201,7 +217,7 @@ export function renderRoute(path: string, options: RenderRouteOptions = {}) {
       </MemoryRouter>
     </AntidepClientProvider>,
   )
-  return { ...result, queries: fake.queries }
+  return { ...result, queries: fake.queries, signOutCalls: fake.signOutCalls }
 }
 
 const DRUG_A = '11111111-1111-4111-8111-111111111111'

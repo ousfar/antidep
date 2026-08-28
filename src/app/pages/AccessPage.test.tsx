@@ -133,4 +133,18 @@ describe('Min tilgang — utlogging', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Logg ut' }))
     expect(await screen.findByLabelText('E-post')).toBeInTheDocument()
   })
+
+  it('logger bare ut denne økten, ikke kalleren fra alle enheter', async () => {
+    // supabase-js sin standard scope er 'global': logger kalleren ut av
+    // *alle* enheter og nettlesere kontoen er innlogget på. En knapp merket
+    // «Logg ut» skal ikke ha den sideeffekten uten et eksplisitt produktkrav
+    // — se ChatGPT-tilbakemeldingen på PR #34.
+    const { signOutCalls } = renderRoute('/access', {
+      auth: { initialUserId: TEST_USER_IDS.a },
+      api: { my_actor: [myActorRow()], my_roles: [myRoleRow()] },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Logg ut' }))
+    await screen.findByLabelText('E-post')
+    expect(signOutCalls).toEqual([{ scope: 'local' }])
+  })
 })

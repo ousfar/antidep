@@ -255,7 +255,12 @@ function SignOutButton() {
       return
     }
     setSigningOut(true)
-    await availability.client.auth.signOut()
+    // `scope: 'local'` er ikke standard i supabase-js — standarden er `global`,
+    // som logger kalleren ut av *alle* enheter og nettlesere kontoen er
+    // innlogget på. En knapp merket «Logg ut» skal bare avslutte denne
+    // sesjonen; global utlogging er en overraskende sideeffekt en vanlig
+    // utloggingsknapp ikke skal ha uten at det er et eksplisitt produktkrav.
+    await availability.client.auth.signOut({ scope: 'local' })
     // Ingen `setSigningOut(false)` her med hensikt: en vellykket utlogging
     // fanges av `useAuthSession()`s abonnement, og AccessOverview avmonteres —
     // en tilstandsoppdatering på et avmontert tre er unødvendig og kan logge en

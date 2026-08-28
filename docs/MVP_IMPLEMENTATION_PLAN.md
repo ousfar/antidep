@@ -3412,8 +3412,16 @@ testpakken. Begge filene er slettet før commit, som instruert.
 uforgrenet av innloggingsstatus felte fire av ti tester i `AccessPage.test.tsx`; å behandle
 `no_actor` som `error` felte den testen som ber om nettopp det skillet; å slutte å rendre
 tilbaketrekkingsvarselet felte både den testen og testen som krever at varselet *ikke* vises
-for en aktør som ikke er tilbaketrukket. Hele testpakken teller nå 770 passerende tester, opp
+for en aktør som ikke er tilbaketrukket. Hele testpakken teller nå 771 passerende tester, opp
 fra 740 ved sesjonsstart.
+
+**Rettelse etter teknisk review.** `SignOutButton` kalte først `client.auth.signOut()` uten
+`scope`. supabase-js sin standard er `'global'` — logger kalleren ut av *alle* enheter og
+nettlesere kontoen er innlogget på, ikke bare denne fanen — en overraskende sideeffekt for en
+knapp merket «Logg ut», og ikke et krav noe sted i denne planen. Rettet til
+`signOut({ scope: 'local' })`. Faken i `test-support.tsx` registrerer nå det faktiske
+`signOut()`-kallet, og en egen test krever `{ scope: 'local' }` — mutert til det opprinnelige
+kallet uten `scope` og bekreftet at nettopp den testen feiler.
 
 **Hva som gjenstår.** Steg 2 av adminflyten — den kontrollerte skriveveien admin-RPC-laget
 (DATABASE_ARCHITECTURE.md §43, §48) — er ikke bygget. Spor 2 (verifikasjon og godkjenning) er
