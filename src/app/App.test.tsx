@@ -47,7 +47,7 @@ describe('skallet', () => {
   })
 
   it('har en lenke til Opprett kilde i toppen, uavhengig av innloggingsstatus', () => {
-    // Steg 2 av adminflyten (§29, §74.23): ingen rollegate i lenken heller,
+    // Steg 2 av adminflyten (§29, §74.24): ingen rollegate i lenken heller,
     // se CreateSourcePage.tsx sin doc-kommentar.
     renderRoute('/')
     const banner = screen.getByRole('banner')
@@ -112,7 +112,7 @@ describe('rutingen', () => {
     ).toBeInTheDocument()
   })
 
-  it('/sources/new treffer Opprett kilde, ikke kildesidens :sourceId (§74.23)', () => {
+  it('/sources/new treffer Opprett kilde, ikke kildesidens :sourceId (§74.24)', () => {
     // Det statiske segmentet skal rangeres foran det dynamiske av react-router
     // selv — se doc-kommentaren på newSourcePath(). Prøvd direkte, ikke bare
     // antatt: en regresjon her ville sendt «new» inn i SourcePage som om det

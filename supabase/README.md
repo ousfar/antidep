@@ -26,14 +26,20 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
     men bare i miljøer der kontoen finnes i `auth.users`
   - 007b kallerens egen aktørrad og egne gjeldende rolletildelinger: `api.my_actor` og
     `api.my_roles`, med RLS-policyene og kolonnegrantene under dem
+  - 003a `created_by_actor_id` på `knowledge.sources`, uforanderlig etter opprettelsen —
+    kolonnen migrasjon 005 la til på de øvrige kunnskapsobjektene
+  - 008a `source_created` lagt til `audit.event_operation`, alene i sin egen migrasjon fordi
+    `ALTER TYPE ... ADD VALUE` ikke kan brukes i transaksjonen som legger verdien til
+  - 007c adminflytens kontrollerte skrivevei: `api.create_source(...)` med
+    `knowledge.assert_editor_authorized()` og auditskriveren over kildeopprettelse
 
   Nummereringen følger planlagt innhold i `docs/MVP_IMPLEMENTATION_PLAN.md` §18-§27, ikke
   filrekkefølge. Migrasjoner utenfor den planlagte rekken får en bokstav, slik at
   «migrasjon 007 — API-lesemodell» (§24) fortsatt betyr det samme i plan, migrasjoner og
   tester. Filrekkefølgen er derfor 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a,
-  005b, 007b: 007a og 007b er skrevet etter 008, men utvider api-lesemodellen, 005a og 005b
-  utvider aktørregisteret og medlemskapsmodellen fra 005, og nummeret 009 er
-  reservert for importfundamentet (§26).
+  005b, 007b, 003a, 008a, 007c: 007a, 007b og 007c er skrevet etter 008, men utvider
+  api-lesemodellen, 005a og 005b utvider aktørregisteret og medlemskapsmodellen fra 005, 003a
+  utvider kildetabellen fra 003, og nummeret 009 er reservert for importfundamentet (§26).
 
 - `tests/` — pgTAP-tester som kjøres med `npm run db:test`.
 - `seed.sql` — kun lokal demodata. Kontrollert vokabular og pilotdata som produksjonen
@@ -121,21 +127,27 @@ endringer i Supabase Dashboard skal ikke være kilden til produksjonsschema
 (`docs/MVP_IMPLEMENTATION_PLAN.md` §54). Eksponerte schemaer i det hostede prosjektet må
 holdes i synk med `[api].schemas` her.
 
-**Det hostede prosjektet er tomt.** Migrasjonene under er aldri kjørt mot det: dashboardets
-liste over eksponerbare schemaer inneholdt 26. august 2026 nøyaktig `graphql_public` og
-`public`, og ingen av Antideps schemaer. Synkingen over er derfor ikke mulig ennå — `api`
-dukker opp i listen først når migrasjonene er kjørt. Å kjøre dem (`supabase link` +
-`supabase db push`) er en egen oppgave som skal planlegges, ikke bare utføres; bakgrunnen og
-konsekvensene står i `docs/MVP_IMPLEMENTATION_PLAN.md` §74.18.
+**Det hostede prosjektet er migrert, og synkingen over er gjort.** Alle migrasjonene under er
+kjørt der og registrert i `supabase_migrations.schema_migrations`, og Data API-ets eksponerte
+schemaer er satt til `api, graphql_public` — samme verdi som `[api].schemas` her. Tilstanden er
+lest fra produksjonsdatabasen gjennom Management-API-et, ikke gjengitt fra dashboardet;
+kontrollen av grensen etterpå står i `docs/MVP_IMPLEMENTATION_PLAN.md` §74.23. Merk at
+`supabase link` og `supabase db push` ikke kan kjøres fra en agentsesjon: den pinnede CLI-ens
+Bun-runtime klarer ikke TLS gjennom sesjonens HTTPS-proxy (§74.23). Det er en egenskap ved
+agentmiljøet og ingen grunn til å endre pinningen.
 
 **Kjør aldri `supabase config push` mot det hostede prosjektet.** Kommandoen pusher hele
-`config.toml`, og filen her er i praksis `supabase init`-standardene for en lokal stack:
+`config.toml`, og filen her er i praksis `supabase init`-standardene for en lokal stack —
 `auth.site_url` er `http://127.0.0.1:3000`, `auth.additional_redirect_urls` peker samme sted,
-`auth.minimum_password_length` er `6`, og `db.network_restrictions.allowed_cidrs` er
-`0.0.0.0/0`. Et push ville satt produksjonens site URL til localhost, slettet de reelle
-redirect-URL-ene, senket passordkravet og åpnet nettverksgrensen. Enkeltinnstillinger settes i
-dashboardet. Å gjøre `config.toml` til reell kilde for det hostede prosjektet er en egen,
-bevisst oppgave der hver seksjon først må settes til produksjonsverdier.
+og `auth.enable_signup` er `true`, mens produksjon står på appens egen URL med registrering
+avslått. Regelen hviler likevel ikke på enkeltnøkler: bare en håndfull av filens nøkler er
+sammenlignet med produksjon, og et push skriver dem alle. Den kontrollerte sammenligningen,
+med hva som faktisk er lest og hva som ikke er det, står i
+`docs/MVP_IMPLEMENTATION_PLAN.md` §74.23.
+
+Enkeltinnstillinger settes i dashboardet eller på det ene feltet gjennom Management-API-et. Å
+gjøre `config.toml` til reell kilde for det hostede prosjektet er en egen, bevisst oppgave der
+hver seksjon først må settes til produksjonsverdier, nøkkel for nøkkel.
 
 Supabase-forutsetningene i `docs/MVP_IMPLEMENTATION_PLAN.md` §8 ble kontrollert mot
 plattformdokumentasjonen 18. august 2026, før migrasjon 001 ble skrevet.

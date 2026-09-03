@@ -29,7 +29,7 @@
 // SECURITY DEFINER-funksjon (DATABASE_ARCHITECTURE.md §43). `Tables` står tom:
 // ingen tabell er eller skal bli direkte eksponert. `Functions` fikk sitt
 // første medlem i migrasjon 007c: `create_source`, den kontrollerte skriveveien
-// for å opprette en Source (MVP_IMPLEMENTATION_PLAN.md §29, §74.23). Args-typen
+// for å opprette en Source (MVP_IMPLEMENTATION_PLAN.md §29, §74.24). Args-typen
 // speiler parametrene til api.create_source(...) i migrasjonen; to av dem er
 // `text` der den underliggende kolonnen er en enum, av samme grunn som
 // migrasjonens hodekommentar gir: PostgREST caster JSON-verdien til parameterens

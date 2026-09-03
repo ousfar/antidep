@@ -1,7 +1,7 @@
 // ============================================================================
 // Opprett kilde — `/sources/new`
 //
-// Steg 2 av «manuell adminflyt» (MVP_IMPLEMENTATION_PLAN.md §29, §74.23):
+// Steg 2 av «manuell adminflyt» (MVP_IMPLEMENTATION_PLAN.md §29, §74.24):
 // «Editor oppretter Source» (§15), det aller første leddet i admin-workflowen.
 // EvidenceItem, ClaimRevision, review og publisering hører til senere PR-er
 // (§51).

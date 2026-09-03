@@ -92,7 +92,7 @@ export function AppLayout() {
         <nav aria-label="Konto">
           <Link to={accessPath()}>Min tilgang</Link>
         </nav>
-        {/* Steg 2 av adminflyten (§29, §74.23): CreateSourcePage.tsx viser
+        {/* Steg 2 av adminflyten (§29, §74.24): CreateSourcePage.tsx viser
             skjemaet til enhver innlogget bruker og lar retten kontrolleres på
             serveren, på sitt eget tidspunkt — ingen rollegate i lenken heller
             (se sidens egen doc-kommentar). */}

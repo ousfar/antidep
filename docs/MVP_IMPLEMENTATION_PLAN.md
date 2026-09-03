@@ -1389,11 +1389,11 @@ importfundamentet (§26). Den ellevte filen er migrasjon 005a, som utvider aktø
 §20 og står utenfor rekken på nøyaktig samme måte. Det gjør også den tolvte, migrasjon
 005b, som fullfører det 005a bevisst lot stå åpent, og den trettende, migrasjon 007b, som
 utvider api-lesemodellen fra §24 slik 007a gjorde. Den fjortende filen er migrasjon 003a, som
-utvider kildetabellen fra §20 og lukker et attribusjonshull migrasjon 005 etterlot (§74.23).
+utvider kildetabellen fra §20 og lukker et attribusjonshull migrasjon 005 etterlot (§74.24).
 Den femtende, migrasjon 008a, utvider auditvokabularet fra §25 med én ny verdi. Den sekstende
 og siste, migrasjon 007c, utvider api-lesemodellen fra §24 en fjerde gang — med det første
 skrivbare medlemmet, adminflytens kontrollerte skrivevei for å opprette en Source (§29,
-§74.23). Filrekkefølgen er dermed 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a,
+§74.24). Filrekkefølgen er dermed 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a,
 005b, 007b, 003a, 008a, 007c — sortert på tidsstempel, ikke på migrasjonsnummer, og de seks
 siste filene bærer de seks laveste bokstavnumrene.
 
@@ -1485,18 +1485,24 @@ urørt. Verifikasjonene kan være agentproduserte, så lenge §10 sitt skille me
 genererte og den som kontrollerer holdes, og §11 sitt krav om at kontrollen skjer mot
 kildematerialet er innfridd. Godkjenningen kan ikke være agentprodusert.
 
-**Det som gjenstår for Milepæl B er derfor fire ting**, ikke én: en reell brukerkonto med
+**Det som gjenstod for Milepæl B var derfor fire ting**, ikke én: en reell brukerkonto med
 `reviewer`-rolle for redaktøren, ekstraksjonsverifikasjonene, claim-verifikasjonene og selve
 godkjenningen. Alt maskineri fra kilde til klientflate står ferdig og testet rundt det
-tomrommet.
+tomrommet. Den første av de fire er siden utført; se avsnittet under.
 
-**Den første av de fire er ikke lenger en kodeoppgave.** Migrasjon 005b knytter redaktørens
-aktørrad til brukerkontoen og tildeler `reviewer`-rollen, og begge grenene av den er kjørt i
-CI (§74.20). Men *utført* er den ingen steder: kontoen finnes bare i det hostede prosjektet,
-og der er ingen migrasjon kjørt (§74.18). Redaktøren har derfor fortsatt ingen rolle i noen
-database. Første gang migrasjonene kjøres mot det hostede prosjektet, blir tildelingen
-skrevet — og den oppgaven er ikke gjort. Milepæl B mangler dermed fortsatt fire ting; det som
-har endret seg, er at den første av dem venter på en kjøring og ikke på kode.
+**Den første av de fire er utført, og det som gjenstår er tre.** Migrasjon 005b knytter
+redaktørens aktørrad til brukerkontoen og tildeler `reviewer`-rollen, og begge grenene av den
+er kjørt i CI (§74.20). Migrasjonene er siden kjørt mot det hostede prosjektet, og der tok den
+den positive grenen: `workflow.user_roles` har én rad, `role_code = 'reviewer'`, uten
+scopebegrensning, uten sluttdato, gyldig nå og selvtildelt av `human:peder-holman` — lest fra
+produksjonsdatabasen, ikke antatt (§74.23). G11 sin forutsetning om konto og gyldig rolle er
+dermed innfridd. **Det som gjenstår for Milepæl B er ekstraksjonsverifikasjonene,
+claim-verifikasjonene og selve godkjenningen.**
+
+> **Avsnittet under er overhalt.** Det stod her mens rollen ennå ikke fantes noe sted, og er
+> beholdt som historikk (§71): «Men *utført* er den ingen steder: kontoen finnes bare i det
+> hostede prosjektet, og der er ingen migrasjon kjørt (§74.18). Redaktøren har derfor fortsatt
+> ingen rolle i noen database.» Begge setningene er nå usanne; se §74.23.
 
 G8 er verdt å merke seg særskilt, fordi den er lett å utelate når kravene listes opp: G9 leser
 utfallet på den gjeldende claim-verifikasjonen, mens G8 er kravet om at det finnes en i det
@@ -1566,6 +1572,8 @@ Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
    **«Endringen må synkes manuelt mot det hostede prosjektet» stod her uten forbehold, og
    var utilstrekkelig.** Det finnes ikke noe `api`-schema å eksponere der: migrasjonene er
    aldri kjørt mot det hostede prosjektet, og databasen der er tom. Se §74.18.
+   **Dette er ikke lenger tilstanden.** Migrasjonene er siden kjørt, og synkingen er gjort:
+   eksponerte schemaer i det hostede prosjektet er `api, graphql_public`. Se §74.23.
 
 ### 74.6 Invariant etablert i migrasjon 006
 
@@ -2756,6 +2764,12 @@ fortsatt kolonnekontrollen av api-kontrakten (§74.7).
 
 ### 74.18 Det hostede Supabase-prosjektet er tomt
 
+> **Overhalt av §74.23.** Migrasjonene er siden kjørt mot det hostede prosjektet, og `api` er
+> eksponert. Avsnittet er beholdt som historikk (§71). Det som fortsatt gjelder herfra, er
+> forbudet mot `supabase config push` og begrunnelsen for vei a i migrasjon 005b — men
+> begrunnelsen for *forbudet* er rettet: tabellen under sammenlignet `config.toml` med
+> produksjonsverdier ingen hadde lest. Den kontrollerte sammenligningen står i §74.23.
+
 **Funnet.** Prosjekteieren åpnet Supabase-dashboardet (Integrations → Data API → Settings →
 «Exposed schemas») for å gjøre den manuelle synkingen §74.5 punkt 3 ber om. Nedtrekkslisten
 der viser de schemaene som faktisk finnes i databasen, og den inneholdt nøyaktig to:
@@ -2830,10 +2844,20 @@ stack:
 | `auth.minimum_password_length` | `6` | senket passordkravet |
 | `db.network_restrictions.allowed_cidrs` | `["0.0.0.0/0"]` | åpnet databasen for alle adresser |
 
+> **Høyrekolonnen er ikke kontrollert, og var det aldri.** Venstre og midtre kolonne er lest
+> ut av `config.toml` og stemmer. Høyrekolonnen er en slutning om produksjonsverdier ingen
+> hadde lest på det tidspunktet — den ble skrevet 26. august 2026, samme dag som §74.18 slo
+> fast at ingen her hadde tilgang til å lese det hostede prosjektet. To av de fire radene viste
+> seg senere å beskrive en forskjell som ikke fantes. Tabellen er beholdt som historikk (§71);
+> **den kontrollerte sammenligningen mot produksjon står i §74.23**, og det er den som skal
+> brukes.
+
 Alle fire treffer autentiseringslaget og nettverksgrensen — altså nøyaktig der redaktørens
 brukerkonto ligger. Enkeltinnstillinger settes i dashboardet. Å gjøre `config.toml` til reell
 kilde for det hostede prosjektet er en egen, bevisst oppgave der hver seksjon først må settes
-til produksjonsverdier.
+til produksjonsverdier. Selve hovedregelen står uendret av rettelsen over, og hviler ikke på
+de fire radene: `config.toml` er ikke en produksjonskonfigurasjon, kommandoen pusher hele
+filen, og ingen har sammenlignet alle nøklene i den mot produksjon.
 
 **Redaktørens brukerkonto finnes, og tvinger fram et valg.** Prosjekteieren har opprettet
 kontoen i det hostede prosjektet (Authentication → Users) og oppgitt dens `uuid`:
@@ -3447,7 +3471,125 @@ denne PR-en lukker ingen av dem, og er ikke ment å gjøre det.
 
 ---
 
-### 74.23 Hva steg 2 av adminflyten innførte
+### 74.23 Det hostede prosjektet er migrert, og `api` er eksponert
+
+**Funnet, og det motsier §74.18.** Det hostede prosjektet er ikke tomt. Alle tretten
+migrasjonene fra `main` er kjørt der og registrert i `supabase_migrations.schema_migrations`,
+med nøyaktig de samme tretten versjonsnumrene og navnene som filene i `supabase/migrations/`.
+Schemaene `api`, `catalog`, `knowledge`, `workflow`, `provenance` og `audit` finnes, og `api`
+inneholder de fem viewene migrasjon 007, 007a og 007b oppretter. `supabase db push` hadde
+dermed ingenting å pushe.
+
+**Hva som er kontrollert, og hvordan.** Denne sesjonen leste tilstanden direkte fra
+produksjonsdatabasen med Supabases Management-API og prosjektets access token, som
+`read_only`-spørringer: migrasjonshistorikken, objektene per schema, og radtellingene under.
+Det er første gang en påstand om det hostede prosjektet er lest fra prosjektet selv framfor
+gjengitt fra et dashboardblikk. **Hvem som kjørte migrasjonene, og når, er ikke kjent herfra**
+— repoet registrerer det ikke, og historikktabellen bærer bare versjon og navn. Det føres som
+et åpent spørsmål, ikke som en antakelse.
+
+**Feilen appen faktisk viste, var eksponeringen — ikke migrasjonene.** `Invalid schema: api`
+kommer fra PostgREST, og Data API-ets `db_schema` i det hostede prosjektet var
+`public,graphql_public`. Det er nøyaktig den manuelle synkingen §74.5 punkt 3 ber om, og som
+§74.18 slo fast ikke var mulig ennå fordi `api` ikke fantes i menyen. Den forutsetningen falt
+bort da migrasjonene ble kjørt. Verdien er nå satt til `api,graphql_public` — den samme
+verdien `[api].schemas` i `supabase/config.toml` har hatt siden migrasjon 007, og `public` er
+ute av eksponeringen begge steder. Endringen er gjort på det ene feltet gjennom
+Management-API-et, ikke med `supabase config push`: forbudet mot den kommandoen står uendret,
+men begrunnelsen for det er rettet — se «Forbudet mot `config push`» under.
+
+**Grensen er prøvd etter endringen, ikke påstått.** Med publishable-nøkkelen og
+`Accept-Profile` mot det hostede prosjektet:
+
+| Forespørsel | Svar |
+| --- | --- |
+| `api.published_drugs`, `api.published_claims` | `200`, null rader |
+| `api.my_roles` som `anon` | `42501 permission denied for view my_roles` |
+| `catalog`, `knowledge`, `workflow`, `provenance`, `audit` | `PGRST106 Invalid schema`, «Only the following schemas are exposed: api, graphql\_public» |
+
+Null rader er riktig svar og ikke en mangel: ingenting er publisert (§74.4). Avvisningen av
+`anon` på `api.my_roles` er kolonn- og policygrensen fra migrasjon 007b som svarer — bare
+`authenticated` har granten. De fem kanoniske schemaene avvises av PostgREST før noen
+rettighetskontroll i det hele tatt, som §47 krever.
+
+**Redaktørens autorisasjon tok den positive grenen i produksjon, og det lukker den første av
+Milepæl B sine fire.** Aktørregisteret har tre rader, og `workflow.user_roles` har én:
+`role_code = 'reviewer'`, uten scopebegrensning, uten sluttdato, gyldig nå og selvtildelt av
+`human:peder-holman` — den selvtildelingen §74.17 punkt 3 valgte. Migrasjon 005b skriver bare
+når kontoen finnes i `auth.users` (§74.18, §74.20), så raden er selve beviset for at kontoen
+finnes der. §74.4 er rettet tilsvarende: **Milepæl B mangler nå tre ting**, ikke fire —
+ekstraksjonsverifikasjonene, claim-verifikasjonene og selve godkjenningen.
+`knowledge.publication_events` er tom, som ventet.
+
+**Den pinnede CLI-en kan ikke brukes fra en agentsesjon, og det er miljøet og ikke prosjektet.**
+`supabase` 2.115.0 kjører en Bun-kompilert binærfil (Bun 1.3.13). Dens `fetch` klarer ikke
+TLS-håndtrykket gjennom sesjonens HTTPS-proxy: tunnelen settes opp (`200 Connection
+Established`), og forbindelsen brytes deretter. Kontrollert ved å reprodusere feilen med samme
+Bun-versjon mot samme URL, og ved at både Node og en nyere Bun lykkes med nøyaktig samme
+forespørsel gjennom samme proxy. `supabase link` og `supabase db push` er dermed utilgjengelige
+herfra; Management-API-et er ikke det. Dette er en egenskap ved agentmiljøet, ikke ved
+CLI-pinningen, og skal ikke leses som en grunn til å endre den.
+
+**Lærdom: en påstand om et system utenfor repoet må kontrolleres på brukstidspunktet.**
+§74.18 førte funnet sitt med sin kilde — prosjekteieren i dashboardet — og det var riktig gjort.
+Men ingen vaktpost i CI ser på det hostede prosjektet, så påstanden ble usann i det øyeblikket
+noen kjørte migrasjonene, uten at noe sted i repoet merket det. Det er ikke et argument for å
+legge til enda en påstand: det er grunnen til at neste oppgave som hviler på det hostede
+prosjektets tilstand, må lese tilstanden på nytt før den handler.
+
+**Autentiseringsoppsettet er rettet, og verdiene er lest tilbake.** Da denne oppdateringen
+begynte, stod `site_url` på `http://localhost:3000`, listen over tillatte redirect-URL-er var
+tom, og registrering var åpen for hvem som helst. Prosjekteieren har rettet alle tre i
+dashboardet, og verdiene er lest tilbake fra prosjektet etterpå: `site_url` er
+`https://antidep.vercel.app`, `uri_allow_list` er `https://antidep.vercel.app/**`, og
+`disable_signup` er `true`. Innlogging i appen bruker bare passord (`signInWithPassword`) og
+var aldri avhengig av URL-oppsettet; bekreftelses- og tilbakestillingslenker på e-post er det.
+
+**Forbudet mot `config push` står — begrunnelsen for det er rettet.** §74.18 begrunnet forbudet
+med fire konkrete forskjeller mot produksjon. De var slutninger, ikke avlesninger: ingen hadde
+lest produksjonsverdiene da tabellen ble skrevet. Nå er de lest, 3. september 2026, gjennom
+Management-API-et:
+
+| Nøkkel i `config.toml` | Verdi i `config.toml` | Lest i produksjon | Hva et push ville gjort i dag |
+|---|---|---|---|
+| `auth.site_url` | `http://127.0.0.1:3000` | `https://antidep.vercel.app` | satt site URL til localhost |
+| `auth.additional_redirect_urls` | `["https://127.0.0.1:3000"]` | `https://antidep.vercel.app/**` | erstattet den reelle redirect-URL-en |
+| `auth.enable_signup` | `true` | registrering avslått | åpnet registrering igjen |
+| `auth.minimum_password_length` | `6` | `6` | ingen forskjell |
+| `db.network_restrictions.allowed_cidrs` / `_v6` | `["0.0.0.0/0"]` / `["::/0"]` | `0.0.0.0/0`, `::/0` | ingen forskjell i selve listene |
+
+To av §74.18 sine fire rader beskrev altså en forskjell som ikke fantes — passordkravet og
+nettverksgrensen er de samme på begge sider. Én rad var usann da den ble skrevet og er sann nå:
+redirect-listen var tom 26. august, og et push ville ikke slettet noe; i dag ville det erstattet
+den reelle URL-en. Og én forskjell tabellen ikke hadde, er den mest alvorlige: `enable_signup`
+er `true` i `config.toml`, så et push ville åpnet registreringen prosjekteieren nettopp lukket.
+
+**Hva som *ikke* er kontrollert, og hvorfor forbudet ikke hviler på tabellen.**
+`db.network_restrictions.enabled` er `false` i `config.toml`, og hva et push gjør med selve
+håndhevingen av nettverksgrensen — i motsetning til listene — er ikke lest og skal ikke gjettes.
+Det samme gjelder resten av filen: `config.toml` har snaut to hundre nøkler, og bare de fem over
+er sammenlignet. Hovedregelen er derfor ikke «disse radene er farlige», men den samme som før:
+**`supabase config push` skal ikke kjøres før `config.toml` bevisst er gjort til en komplett og
+korrekt produksjonskonfigurasjon**, nøkkel for nøkkel. Kommandoen pusher hele filen, og en fil
+som er `supabase init`-standardene for en lokal stack, er ikke det. Enkeltinnstillinger settes i
+dashboardet eller på det ene feltet gjennom Management-API-et.
+
+**Røyktesten er kjørt, og den leser det samme som databasen.** Prosjekteieren logget inn på
+`https://antidep.vercel.app` med redaktørkontoen og åpnet «Min tilgang». Siden viser aktøren
+«Peder Holman» med `human:peder-holman`, og én rolle: `reviewer`, «Uavgrenset», gyldig fra
+27. august 2026, «Ingen sluttdato er satt». Det er nøyaktig raden som ble lest fra
+produksjonsdatabasen over, og datoen er migrasjon 005b sin egen (`20260827090000`). Dermed er
+hele kjeden fra `auth.users` gjennom `provenance.actors` og `workflow.user_roles` til
+`api.my_actor` og `api.my_roles` prøvd i produksjon, av en innlogget bruker, og ikke bare i
+CI: innlogging, den autentiserte leseveien fra migrasjon 007b (§74.21) og klientflaten fra
+§74.22 svarer alle som ventet.
+
+**Hva som gjenstår.** Milepæl B mangler tre ting (§74.4): ekstraksjonsverifikasjonene,
+claim-verifikasjonene og selve godkjenningen.
+
+---
+
+### 74.24 Hva steg 2 av adminflyten innførte
 
 Steg 2 av «manuell adminflyt» (§29): «Editor oppretter Source» (§15), den kontrollerte
 skriveveien migrasjon 007c åpner, og et skjema over den i klienten. Ikke noe mer av kjeden —
@@ -3595,10 +3737,38 @@ både enhetstesten og sidetesten for år; å fjerne `incomplete`-vakten felte de
 krever at skjemaet sier fra og ikke sender noe; og å la `month`-grenen lese årsfeltet felte
 fire tester i begge lag. Ingen av dem ble felt av en urelatert assertion.
 
-**Hva som gjenstår.** Milepæl B mangler fortsatt de samme fire tingene den har gjort siden
-§74.4: denne PR-en lukker ingen av dem. Resten av §15 sin admin-workflow —
-EvidenceItem-registrering, ClaimRevision, evidensverifikasjon og claim-verifikasjon,
-review-beslutning, publisering — er ikke bygget, og hver del hører til sin egen PR (§51).
+**Ingen konto har `editor` ennå, og skriveveien er derfor stengt for alle — også i
+produksjon.** `api.create_source(...)` krever gjennom `knowledge.assert_editor_authorized()`
+en gyldig tildeling med `role_code = 'editor'`. Migrasjon 005b tildeler `reviewer`, og bare
+den; ingen migrasjon tildeler `editor` til noen. Et søk gjennom `supabase/migrations/` gir to
+treff på `'editor'` — enum-definisjonen i migrasjon 001 og filteret i 007c — og ingen
+`insert`. I det hostede prosjektet har `workflow.user_roles` nøyaktig én rad, og den er
+`reviewer` (§74.23). Redaktøren vil derfor møte «Brukeren har ikke gyldig editor-rolle» på
+`/sources/new`, og det er kontrollen som virker framfor en feil i den: `reviewer` er faglig
+godkjenningsrett, og skal ikke implisitt gi rett til å registrere kilder. At CI ikke fanger
+dette, er ventet og ikke et hull i testene: `370_source_creation_test.sql` tildeler rollen
+selv i sin egen transaksjon, så testene beviser at kontrollen virker — ikke at noen består
+den.
+
+**Selve tildelingen hører til sin egen PR (§51).** Den er ikke lagt til her, av tre grunner.
+For det første ville denne PR-en da både satt opp porten og delt ut nøkkelen i samme endring,
+og de to bør kunne vurderes hver for seg. For det andre er en rolletildeling en
+governance-handling med sin egen begrunnelse: `reviewer` hviler på ANTIDEP_CONSTITUTION.md §12
+og ble skrevet ut i migrasjon 005b sin `grant_reason`; `editor` er en annen rett — å registrere
+kilder og evidens som *forslag*, som passerer review før noe kan publiseres — og terskelen for
+den skal skrives ut som sin egen tekst, ikke arves. For det tredje er tildelingen avhengig av
+en konto i `auth.users`, altså miljøspesifikk tilstand, og må følge vei a fra §74.18: betinget
+av at kontoen finnes, idempotent, og uten å gjeninnføre en avsluttet tildeling
+(DATABASE_ARCHITECTURE.md §46). Neste PR er dermed én migrasjon som følger mønsteret fra 005b
+— en `workflow.ensure_named_editor_authorization()`-liknende funksjon som returnerer status
+framfor å skrive blindt — med pgTAP-dekning av begge grenene, og deretter `supabase db push`
+mot det hostede prosjektet. Ført som GitHub-issue 36 slik at den ikke bare står i prosa her.
+
+**Hva som gjenstår.** Milepæl B mangler tre ting (§74.4): ekstraksjonsverifikasjonene,
+claim-verifikasjonene og selve godkjenningen. Denne PR-en lukker ingen av dem. Resten av §15
+sin admin-workflow — EvidenceItem-registrering, ClaimRevision, evidensverifikasjon og
+claim-verifikasjon, review-beslutning, publisering — er ikke bygget, og hver del hører til sin
+egen PR (§51).
 
 ---
 

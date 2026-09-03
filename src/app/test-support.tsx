@@ -45,7 +45,7 @@ export interface FakeApi {
   readonly published_claim_evidence?: FakeOutcome<PublishedClaimEvidenceRow>
   readonly my_actor?: FakeOutcome<MyActorRow>
   readonly my_roles?: FakeOutcome<MyRoleRow>
-  /** Steg 2 av adminflyten (§29, §74.23): `api.create_source(...)`. */
+  /** Steg 2 av adminflyten (§29, §74.24): `api.create_source(...)`. */
   readonly create_source?: FakeRpcOutcome<string>
 }
 
@@ -170,7 +170,7 @@ export function fakeClient(
   const rpcCalls: RecordedRpcCall[] = []
 
   const client = {
-    // Steg 2 av adminflyten (§29, §74.23): den eneste skriveveien, `api.create_source(...)`.
+    // Steg 2 av adminflyten (§29, §74.24): den eneste skriveveien, `api.create_source(...)`.
     // Bare `create_source` er kjent i dag; en ukjent funksjon feiler høyt
     // framfor å svare stille, slik at en glemt fikstur ikke ser ut som en
     // vellykket opprettelse.

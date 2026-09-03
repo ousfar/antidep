@@ -95,7 +95,7 @@ export function sourcePath(sourceId: Uuid): string {
 }
 
 /**
- * Opprett kilde (MVP_IMPLEMENTATION_PLAN.md §29, §74.23): steg 2 av
+ * Opprett kilde (MVP_IMPLEMENTATION_PLAN.md §29, §74.24): steg 2 av
  * adminflyten, «Editor oppretter Source» (§15). Det statiske segmentet `new`
  * rangeres foran det dynamiske `:sourceId` av react-router selv, uavhengig av
  * rekkefølgen rutene er deklarert i (`App.tsx`) — en kilde kan derfor aldri få

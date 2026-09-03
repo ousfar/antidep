@@ -1,7 +1,7 @@
 // ============================================================================
 // Den kontrollerte skriveveien for å opprette en Source
 //
-// Steg 2 av «manuell adminflyt» (MVP_IMPLEMENTATION_PLAN.md §29, §74.23):
+// Steg 2 av «manuell adminflyt» (MVP_IMPLEMENTATION_PLAN.md §29, §74.24):
 // «Editor oppretter Source» (§15). Ett kall til `api.create_source(...)`
 // (migrasjon 007c) — ingen egen validering her utover det formen selv samler
 // inn, fordi databasens CHECK-constraints på `knowledge.sources` er fasiten
