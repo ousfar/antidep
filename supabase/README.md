@@ -121,12 +121,14 @@ endringer i Supabase Dashboard skal ikke være kilden til produksjonsschema
 (`docs/MVP_IMPLEMENTATION_PLAN.md` §54). Eksponerte schemaer i det hostede prosjektet må
 holdes i synk med `[api].schemas` her.
 
-**Det hostede prosjektet er tomt.** Migrasjonene under er aldri kjørt mot det: dashboardets
-liste over eksponerbare schemaer inneholdt 26. august 2026 nøyaktig `graphql_public` og
-`public`, og ingen av Antideps schemaer. Synkingen over er derfor ikke mulig ennå — `api`
-dukker opp i listen først når migrasjonene er kjørt. Å kjøre dem (`supabase link` +
-`supabase db push`) er en egen oppgave som skal planlegges, ikke bare utføres; bakgrunnen og
-konsekvensene står i `docs/MVP_IMPLEMENTATION_PLAN.md` §74.18.
+**Det hostede prosjektet er migrert, og synkingen over er gjort.** Alle migrasjonene under er
+kjørt der og registrert i `supabase_migrations.schema_migrations`, og Data API-ets eksponerte
+schemaer er satt til `api, graphql_public` — samme verdi som `[api].schemas` her. Tilstanden er
+lest fra produksjonsdatabasen gjennom Management-API-et, ikke gjengitt fra dashboardet;
+kontrollen av grensen etterpå står i `docs/MVP_IMPLEMENTATION_PLAN.md` §74.23. Merk at
+`supabase link` og `supabase db push` ikke kan kjøres fra en agentsesjon: den pinnede CLI-ens
+Bun-runtime klarer ikke TLS gjennom sesjonens HTTPS-proxy (§74.23). Det er en egenskap ved
+agentmiljøet og ingen grunn til å endre pinningen.
 
 **Kjør aldri `supabase config push` mot det hostede prosjektet.** Kommandoen pusher hele
 `config.toml`, og filen her er i praksis `supabase init`-standardene for en lokal stack:

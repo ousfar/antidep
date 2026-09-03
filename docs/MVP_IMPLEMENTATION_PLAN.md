@@ -1549,6 +1549,8 @@ Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
    **«Endringen må synkes manuelt mot det hostede prosjektet» stod her uten forbehold, og
    var utilstrekkelig.** Det finnes ikke noe `api`-schema å eksponere der: migrasjonene er
    aldri kjørt mot det hostede prosjektet, og databasen der er tom. Se §74.18.
+   **Dette er ikke lenger tilstanden.** Migrasjonene er siden kjørt, og synkingen er gjort:
+   eksponerte schemaer i det hostede prosjektet er `api, graphql_public`. Se §74.23.
 
 ### 74.6 Invariant etablert i migrasjon 006
 
@@ -2739,6 +2741,10 @@ fortsatt kolonnekontrollen av api-kontrakten (§74.7).
 
 ### 74.18 Det hostede Supabase-prosjektet er tomt
 
+> **Overhalt av §74.23.** Migrasjonene er siden kjørt mot det hostede prosjektet, og `api` er
+> eksponert. Avsnittet er beholdt som historikk (§71); det som fortsatt gjelder herfra, er
+> advarselen mot `supabase config push` og begrunnelsen for vei a i migrasjon 005b.
+
 **Funnet.** Prosjekteieren åpnet Supabase-dashboardet (Integrations → Data API → Settings →
 «Exposed schemas») for å gjøre den manuelle synkingen §74.5 punkt 3 ber om. Nedtrekkslisten
 der viser de schemaene som faktisk finnes i databasen, og den inneholdt nøyaktig to:
@@ -3427,6 +3433,83 @@ kallet uten `scope` og bekreftet at nettopp den testen feiler.
 (DATABASE_ARCHITECTURE.md §43, §48) — er ikke bygget. Spor 2 (verifikasjon og godkjenning) er
 heller ikke rørt. Milepæl B mangler fortsatt de samme fire tingene den har gjort siden §74.4:
 denne PR-en lukker ingen av dem, og er ikke ment å gjøre det.
+
+---
+
+### 74.23 Det hostede prosjektet er migrert, og `api` er eksponert
+
+**Funnet, og det motsier §74.18.** Det hostede prosjektet er ikke tomt. Alle tretten
+migrasjonene fra `main` er kjørt der og registrert i `supabase_migrations.schema_migrations`,
+med nøyaktig de samme tretten versjonsnumrene og navnene som filene i `supabase/migrations/`.
+Schemaene `api`, `catalog`, `knowledge`, `workflow`, `provenance` og `audit` finnes, og `api`
+inneholder de fem viewene migrasjon 007, 007a og 007b oppretter. `supabase db push` hadde
+dermed ingenting å pushe.
+
+**Hva som er kontrollert, og hvordan.** Denne sesjonen leste tilstanden direkte fra
+produksjonsdatabasen med Supabases Management-API og prosjektets access token, som
+`read_only`-spørringer: migrasjonshistorikken, objektene per schema, og radtellingene under.
+Det er første gang en påstand om det hostede prosjektet er lest fra prosjektet selv framfor
+gjengitt fra et dashboardblikk. **Hvem som kjørte migrasjonene, og når, er ikke kjent herfra**
+— repoet registrerer det ikke, og historikktabellen bærer bare versjon og navn. Det føres som
+et åpent spørsmål, ikke som en antakelse.
+
+**Feilen appen faktisk viste, var eksponeringen — ikke migrasjonene.** `Invalid schema: api`
+kommer fra PostgREST, og Data API-ets `db_schema` i det hostede prosjektet var
+`public,graphql_public`. Det er nøyaktig den manuelle synkingen §74.5 punkt 3 ber om, og som
+§74.18 slo fast ikke var mulig ennå fordi `api` ikke fantes i menyen. Den forutsetningen falt
+bort da migrasjonene ble kjørt. Verdien er nå satt til `api,graphql_public` — den samme
+verdien `[api].schemas` i `supabase/config.toml` har hatt siden migrasjon 007, og `public` er
+ute av eksponeringen begge steder. Endringen er gjort på det ene feltet gjennom
+Management-API-et, ikke med `supabase config push`: advarselen i §74.18 om den kommandoen står
+uendret.
+
+**Grensen er prøvd etter endringen, ikke påstått.** Med publishable-nøkkelen og
+`Accept-Profile` mot det hostede prosjektet:
+
+| Forespørsel | Svar |
+| --- | --- |
+| `api.published_drugs`, `api.published_claims` | `200`, null rader |
+| `api.my_roles` som `anon` | `42501 permission denied for view my_roles` |
+| `catalog`, `knowledge`, `workflow`, `provenance`, `audit` | `PGRST106 Invalid schema`, «Only the following schemas are exposed: api, graphql\_public» |
+
+Null rader er riktig svar og ikke en mangel: ingenting er publisert (§74.4). Avvisningen av
+`anon` på `api.my_roles` er kolonn- og policygrensen fra migrasjon 007b som svarer — bare
+`authenticated` har granten. De fem kanoniske schemaene avvises av PostgREST før noen
+rettighetskontroll i det hele tatt, som §47 krever.
+
+**Redaktørens autorisasjon tok den positive grenen i produksjon.** Aktørregisteret har tre
+rader og `workflow.user_roles` har én. Migrasjon 005b skriver bare når kontoen finnes i
+`auth.users` (§74.18, §74.20), så raden er selve beviset for at kontoen finnes der.
+`knowledge.publication_events` er tom, som ventet.
+
+**Den pinnede CLI-en kan ikke brukes fra en agentsesjon, og det er miljøet og ikke prosjektet.**
+`supabase` 2.115.0 kjører en Bun-kompilert binærfil (Bun 1.3.13). Dens `fetch` klarer ikke
+TLS-håndtrykket gjennom sesjonens HTTPS-proxy: tunnelen settes opp (`200 Connection
+Established`), og forbindelsen brytes deretter. Kontrollert ved å reprodusere feilen med samme
+Bun-versjon mot samme URL, og ved at både Node og en nyere Bun lykkes med nøyaktig samme
+forespørsel gjennom samme proxy. `supabase link` og `supabase db push` er dermed utilgjengelige
+herfra; Management-API-et er ikke det. Dette er en egenskap ved agentmiljøet, ikke ved
+CLI-pinningen, og skal ikke leses som en grunn til å endre den.
+
+**Lærdom: en påstand om et system utenfor repoet må kontrolleres på brukstidspunktet.**
+§74.18 førte funnet sitt med sin kilde — prosjekteieren i dashboardet — og det var riktig gjort.
+Men ingen vaktpost i CI ser på det hostede prosjektet, så påstanden ble usann i det øyeblikket
+noen kjørte migrasjonene, uten at noe sted i repoet merket det. Det er ikke et argument for å
+legge til enda en påstand: det er grunnen til at neste oppgave som hviler på det hostede
+prosjektets tilstand, må lese tilstanden på nytt før den handler.
+
+**Gjeld: åpen registrering i produksjon.** `disable_signup` er `false` i det hostede
+prosjektet, altså kan hvem som helst opprette en konto. Klientflaten har ingen
+registreringsflate, og en fersk konto får ikke mer enn `anon` har — `api.my_actor` og
+`api.my_roles` svarer bare på kallerens egne rader, og de finnes ikke uten en aktørrad — så
+det er ingen lesevei inn i kunnskapsbasen. Det er likevel ikke tilstanden et redaksjonelt
+verktøy skal stå i, og hører til sammen med resten av autentiseringsoppsettet.
+
+**Hva som gjenstår.** Auth URL Configuration i det hostede prosjektet peker fortsatt på
+`http://localhost:3000`, med tom liste over tillatte redirect-URL-er. Innlogging i appen bruker
+bare passord (`signInWithPassword`) og er ikke avhengig av den, men bekreftelses- og
+tilbakestillingslenker på e-post er det. Røyktesten av innlogging og «Min tilgang» mot det
+hostede prosjektet er ikke gjort. Milepæl B mangler fortsatt de samme fire tingene (§74.4).
 
 ---
 
