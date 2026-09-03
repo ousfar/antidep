@@ -131,13 +131,17 @@ Bun-runtime klarer ikke TLS gjennom sesjonens HTTPS-proxy (§74.23). Det er en e
 agentmiljøet og ingen grunn til å endre pinningen.
 
 **Kjør aldri `supabase config push` mot det hostede prosjektet.** Kommandoen pusher hele
-`config.toml`, og filen her er i praksis `supabase init`-standardene for en lokal stack:
+`config.toml`, og filen her er i praksis `supabase init`-standardene for en lokal stack —
 `auth.site_url` er `http://127.0.0.1:3000`, `auth.additional_redirect_urls` peker samme sted,
-`auth.minimum_password_length` er `6`, og `db.network_restrictions.allowed_cidrs` er
-`0.0.0.0/0`. Et push ville satt produksjonens site URL til localhost, slettet de reelle
-redirect-URL-ene, senket passordkravet og åpnet nettverksgrensen. Enkeltinnstillinger settes i
-dashboardet. Å gjøre `config.toml` til reell kilde for det hostede prosjektet er en egen,
-bevisst oppgave der hver seksjon først må settes til produksjonsverdier.
+og `auth.enable_signup` er `true`, mens produksjon står på appens egen URL med registrering
+avslått. Regelen hviler likevel ikke på enkeltnøkler: bare en håndfull av filens nøkler er
+sammenlignet med produksjon, og et push skriver dem alle. Den kontrollerte sammenligningen,
+med hva som faktisk er lest og hva som ikke er det, står i
+`docs/MVP_IMPLEMENTATION_PLAN.md` §74.23.
+
+Enkeltinnstillinger settes i dashboardet eller på det ene feltet gjennom Management-API-et. Å
+gjøre `config.toml` til reell kilde for det hostede prosjektet er en egen, bevisst oppgave der
+hver seksjon først må settes til produksjonsverdier, nøkkel for nøkkel.
 
 Supabase-forutsetningene i `docs/MVP_IMPLEMENTATION_PLAN.md` §8 ble kontrollert mot
 plattformdokumentasjonen 18. august 2026, før migrasjon 001 ble skrevet.

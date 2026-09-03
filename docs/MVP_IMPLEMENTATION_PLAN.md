@@ -2748,8 +2748,10 @@ fortsatt kolonnekontrollen av api-kontrakten (§74.7).
 ### 74.18 Det hostede Supabase-prosjektet er tomt
 
 > **Overhalt av §74.23.** Migrasjonene er siden kjørt mot det hostede prosjektet, og `api` er
-> eksponert. Avsnittet er beholdt som historikk (§71); det som fortsatt gjelder herfra, er
-> advarselen mot `supabase config push` og begrunnelsen for vei a i migrasjon 005b.
+> eksponert. Avsnittet er beholdt som historikk (§71). Det som fortsatt gjelder herfra, er
+> forbudet mot `supabase config push` og begrunnelsen for vei a i migrasjon 005b — men
+> begrunnelsen for *forbudet* er rettet: tabellen under sammenlignet `config.toml` med
+> produksjonsverdier ingen hadde lest. Den kontrollerte sammenligningen står i §74.23.
 
 **Funnet.** Prosjekteieren åpnet Supabase-dashboardet (Integrations → Data API → Settings →
 «Exposed schemas») for å gjøre den manuelle synkingen §74.5 punkt 3 ber om. Nedtrekkslisten
@@ -2825,10 +2827,20 @@ stack:
 | `auth.minimum_password_length` | `6` | senket passordkravet |
 | `db.network_restrictions.allowed_cidrs` | `["0.0.0.0/0"]` | åpnet databasen for alle adresser |
 
+> **Høyrekolonnen er ikke kontrollert, og var det aldri.** Venstre og midtre kolonne er lest
+> ut av `config.toml` og stemmer. Høyrekolonnen er en slutning om produksjonsverdier ingen
+> hadde lest på det tidspunktet — den ble skrevet 26. august 2026, samme dag som §74.18 slo
+> fast at ingen her hadde tilgang til å lese det hostede prosjektet. To av de fire radene viste
+> seg senere å beskrive en forskjell som ikke fantes. Tabellen er beholdt som historikk (§71);
+> **den kontrollerte sammenligningen mot produksjon står i §74.23**, og det er den som skal
+> brukes.
+
 Alle fire treffer autentiseringslaget og nettverksgrensen — altså nøyaktig der redaktørens
 brukerkonto ligger. Enkeltinnstillinger settes i dashboardet. Å gjøre `config.toml` til reell
 kilde for det hostede prosjektet er en egen, bevisst oppgave der hver seksjon først må settes
-til produksjonsverdier.
+til produksjonsverdier. Selve hovedregelen står uendret av rettelsen over, og hviler ikke på
+de fire radene: `config.toml` er ikke en produksjonskonfigurasjon, kommandoen pusher hele
+filen, og ingen har sammenlignet alle nøklene i den mot produksjon.
 
 **Redaktørens brukerkonto finnes, og tvinger fram et valg.** Prosjekteieren har opprettet
 kontoen i det hostede prosjektet (Authentication → Users) og oppgitt dens `uuid`:
@@ -3466,8 +3478,8 @@ kommer fra PostgREST, og Data API-ets `db_schema` i det hostede prosjektet var
 bort da migrasjonene ble kjørt. Verdien er nå satt til `api,graphql_public` — den samme
 verdien `[api].schemas` i `supabase/config.toml` har hatt siden migrasjon 007, og `public` er
 ute av eksponeringen begge steder. Endringen er gjort på det ene feltet gjennom
-Management-API-et, ikke med `supabase config push`: advarselen i §74.18 om den kommandoen står
-uendret.
+Management-API-et, ikke med `supabase config push`: forbudet mot den kommandoen står uendret,
+men begrunnelsen for det er rettet — se «Forbudet mot `config push`» under.
 
 **Grensen er prøvd etter endringen, ikke påstått.** Med publishable-nøkkelen og
 `Accept-Profile` mot det hostede prosjektet:
@@ -3508,18 +3520,46 @@ noen kjørte migrasjonene, uten at noe sted i repoet merket det. Det er ikke et 
 legge til enda en påstand: det er grunnen til at neste oppgave som hviler på det hostede
 prosjektets tilstand, må lese tilstanden på nytt før den handler.
 
-**Gjeld: åpen registrering i produksjon.** `disable_signup` er `false` i det hostede
-prosjektet, altså kan hvem som helst opprette en konto. Klientflaten har ingen
-registreringsflate, og en fersk konto får ikke mer enn `anon` har — `api.my_actor` og
-`api.my_roles` svarer bare på kallerens egne rader, og de finnes ikke uten en aktørrad — så
-det er ingen lesevei inn i kunnskapsbasen. Det er likevel ikke tilstanden et redaksjonelt
-verktøy skal stå i, og hører til sammen med resten av autentiseringsoppsettet.
+**Autentiseringsoppsettet er rettet, og verdiene er lest tilbake.** Da denne oppdateringen
+begynte, stod `site_url` på `http://localhost:3000`, listen over tillatte redirect-URL-er var
+tom, og registrering var åpen for hvem som helst. Prosjekteieren har rettet alle tre i
+dashboardet, og verdiene er lest tilbake fra prosjektet etterpå: `site_url` er
+`https://antidep.vercel.app`, `uri_allow_list` er `https://antidep.vercel.app/**`, og
+`disable_signup` er `true`. Innlogging i appen bruker bare passord (`signInWithPassword`) og
+var aldri avhengig av URL-oppsettet; bekreftelses- og tilbakestillingslenker på e-post er det.
 
-**Hva som gjenstår.** Auth URL Configuration i det hostede prosjektet peker fortsatt på
-`http://localhost:3000`, med tom liste over tillatte redirect-URL-er. Innlogging i appen bruker
-bare passord (`signInWithPassword`) og er ikke avhengig av den, men bekreftelses- og
-tilbakestillingslenker på e-post er det. Røyktesten av innlogging og «Min tilgang» mot det
-hostede prosjektet er ikke gjort. Milepæl B mangler tre ting (§74.4).
+**Forbudet mot `config push` står — begrunnelsen for det er rettet.** §74.18 begrunnet forbudet
+med fire konkrete forskjeller mot produksjon. De var slutninger, ikke avlesninger: ingen hadde
+lest produksjonsverdiene da tabellen ble skrevet. Nå er de lest, 3. september 2026, gjennom
+Management-API-et:
+
+| Nøkkel i `config.toml` | Verdi i `config.toml` | Lest i produksjon | Hva et push ville gjort i dag |
+|---|---|---|---|
+| `auth.site_url` | `http://127.0.0.1:3000` | `https://antidep.vercel.app` | satt site URL til localhost |
+| `auth.additional_redirect_urls` | `["https://127.0.0.1:3000"]` | `https://antidep.vercel.app/**` | erstattet den reelle redirect-URL-en |
+| `auth.enable_signup` | `true` | registrering avslått | åpnet registrering igjen |
+| `auth.minimum_password_length` | `6` | `6` | ingen forskjell |
+| `db.network_restrictions.allowed_cidrs` / `_v6` | `["0.0.0.0/0"]` / `["::/0"]` | `0.0.0.0/0`, `::/0` | ingen forskjell i selve listene |
+
+To av §74.18 sine fire rader beskrev altså en forskjell som ikke fantes — passordkravet og
+nettverksgrensen er de samme på begge sider. Én rad var usann da den ble skrevet og er sann nå:
+redirect-listen var tom 26. august, og et push ville ikke slettet noe; i dag ville det erstattet
+den reelle URL-en. Og én forskjell tabellen ikke hadde, er den mest alvorlige: `enable_signup`
+er `true` i `config.toml`, så et push ville åpnet registreringen prosjekteieren nettopp lukket.
+
+**Hva som *ikke* er kontrollert, og hvorfor forbudet ikke hviler på tabellen.**
+`db.network_restrictions.enabled` er `false` i `config.toml`, og hva et push gjør med selve
+håndhevingen av nettverksgrensen — i motsetning til listene — er ikke lest og skal ikke gjettes.
+Det samme gjelder resten av filen: `config.toml` har snaut to hundre nøkler, og bare de fem over
+er sammenlignet. Hovedregelen er derfor ikke «disse radene er farlige», men den samme som før:
+**`supabase config push` skal ikke kjøres før `config.toml` bevisst er gjort til en komplett og
+korrekt produksjonskonfigurasjon**, nøkkel for nøkkel. Kommandoen pusher hele filen, og en fil
+som er `supabase init`-standardene for en lokal stack, er ikke det. Enkeltinnstillinger settes i
+dashboardet eller på det ene feltet gjennom Management-API-et.
+
+**Hva som gjenstår.** Røyktesten av innlogging og «Min tilgang» mot det hostede prosjektet er
+ikke gjort — den krever redaktørens passord og hører til prosjekteieren. Milepæl B mangler tre
+ting (§74.4).
 
 ---
 
