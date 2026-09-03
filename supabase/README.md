@@ -32,14 +32,17 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
     `ALTER TYPE ... ADD VALUE` ikke kan brukes i transaksjonen som legger verdien til
   - 007c adminflytens kontrollerte skrivevei: `api.create_source(...)` med
     `knowledge.assert_editor_authorized()` og auditskriveren over kildeopprettelse
+  - 005c `editor`-rollen tildelt redaktørkontoen, altså retten til å registrere kilder og
+    evidens som forslag — men bare i miljøer der kontoen finnes i `auth.users`
 
   Nummereringen følger planlagt innhold i `docs/MVP_IMPLEMENTATION_PLAN.md` §18-§27, ikke
   filrekkefølge. Migrasjoner utenfor den planlagte rekken får en bokstav, slik at
   «migrasjon 007 — API-lesemodell» (§24) fortsatt betyr det samme i plan, migrasjoner og
   tester. Filrekkefølgen er derfor 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a,
-  005b, 007b, 003a, 008a, 007c: 007a, 007b og 007c er skrevet etter 008, men utvider
-  api-lesemodellen, 005a og 005b utvider aktørregisteret og medlemskapsmodellen fra 005, 003a
-  utvider kildetabellen fra 003, og nummeret 009 er reservert for importfundamentet (§26).
+  005b, 007b, 003a, 008a, 007c, 005c: 007a, 007b og 007c er skrevet etter 008, men utvider
+  api-lesemodellen, 005a, 005b og 005c utvider aktørregisteret og medlemskapsmodellen fra 005,
+  003a utvider kildetabellen fra 003, og nummeret 009 er reservert for importfundamentet
+  (§26).
 
 - `tests/` — pgTAP-tester som kjøres med `npm run db:test`.
 - `seed.sql` — kun lokal demodata. Kontrollert vokabular og pilotdata som produksjonen
@@ -127,14 +130,19 @@ endringer i Supabase Dashboard skal ikke være kilden til produksjonsschema
 (`docs/MVP_IMPLEMENTATION_PLAN.md` §54). Eksponerte schemaer i det hostede prosjektet må
 holdes i synk med `[api].schemas` her.
 
-**Det hostede prosjektet er migrert, og synkingen over er gjort.** Alle migrasjonene under er
-kjørt der og registrert i `supabase_migrations.schema_migrations`, og Data API-ets eksponerte
-schemaer er satt til `api, graphql_public` — samme verdi som `[api].schemas` her. Tilstanden er
-lest fra produksjonsdatabasen gjennom Management-API-et, ikke gjengitt fra dashboardet;
-kontrollen av grensen etterpå står i `docs/MVP_IMPLEMENTATION_PLAN.md` §74.23. Merk at
+**Det hostede prosjektet henger etter `main`, og synkingen av eksponerte schemaer er gjort.**
+Data API-ets eksponerte schemaer er satt til `api, graphql_public` — samme verdi som
+`[api].schemas` her. Men `supabase_migrations.schema_migrations` stopper på
+`20260828090000_api_caller_authorization` (007b): migrasjonene 003a, 008a, 007c og 005c er
+merget i `main` og aldri kjørt der. I produksjon finnes derfor verken `api.create_source(...)`,
+`knowledge.assert_editor_authorized()`, `knowledge.sources.created_by_actor_id` eller
+auditverdien `source_created`. Ett `supabase db push` kjører de fire i tidsstempelrekkefølge.
+Tilstanden er lest fra produksjonsdatabasen gjennom Management-API-et 3. september 2026, ikke
+gjengitt fra dashboardet; kontrollen av grensen etter forrige synking står i
+`docs/MVP_IMPLEMENTATION_PLAN.md` §74.23, og avlesningen over i §74.25. Merk at
 `supabase link` og `supabase db push` ikke kan kjøres fra en agentsesjon: den pinnede CLI-ens
-Bun-runtime klarer ikke TLS gjennom sesjonens HTTPS-proxy (§74.23). Det er en egenskap ved
-agentmiljøet og ingen grunn til å endre pinningen.
+Bun-runtime klarer ikke TLS gjennom sesjonens HTTPS-proxy — prøvd på nytt, og feilen står
+(§74.23). Det er en egenskap ved agentmiljøet og ingen grunn til å endre pinningen.
 
 **Kjør aldri `supabase config push` mot det hostede prosjektet.** Kommandoen pusher hele
 `config.toml`, og filen her er i praksis `supabase init`-standardene for en lokal stack —
@@ -308,6 +316,40 @@ selvtildeling, så `grant_reason` er hele sikringen.
 selve godkjenningen mangler fortsatt (`docs/MVP_IMPLEMENTATION_PLAN.md` §74.4).
 `350_editor_authorization_test.sql` kjører begge grenene av migrasjonen og prøver begge
 påstandene framfor å telle dem.
+
+### `editor`-rollen: retten til å registrere, og bare den
+
+Migrasjon 005c tildeler samme konto en uscopet `editor`-rolle. Den er forutsetningen for
+`api.create_source(...)` (migrasjon 007c), som krever en gyldig `editor`-tildeling gjennom
+`knowledge.assert_editor_authorized()`. Uten den svarer skjemaet «Opprett kilde» med
+«Brukeren har ikke gyldig editor-rolle» for enhver innlogget bruker.
+
+Logikken ligger i `workflow.ensure_editor_role_grant()`, som er en egen funksjon og ikke en
+parameter på 005b sin: en parameterisert utgave ville vært en generell «gi denne kontoen
+hvilken som helst rolle»-funksjon, der `publisher` og `admin` var like tilgjengelige som
+`editor`.
+
+```sql
+select workflow.ensure_editor_role_grant();
+```
+
+Kallet er idempotent og har samme fem svar, med samme betydning, som funksjonen over. To ting
+skiller den:
+
+- **Den setter ikke koblingen mellom aktørrad og brukerkonto.** Den er migrasjon 005b sin, og
+  005c _krever_ at den finnes. Mangler den mens kontoen finnes, feiler kallet høyt framfor å
+  skrive en rettighet skriveveien uansett ville avvist.
+- **Begrunnelsen er `editor`-rollens egen.** `editor` gir rett til å registrere kilder og
+  evidens som _forslag_ (`docs/CONTENT_GOVERNANCE.md` §8). Den gir verken faglig
+  godkjenningsrett (`reviewer`) eller publiseringsrett (`publisher`), og alt som registreres
+  må gjennom verifikasjon, menneskelig godkjenning og publiseringsgaten før det kan nå en
+  kliniker. Terskelen for å selvtildele den er derfor en annen enn for `reviewer`, og
+  `380_source_registration_role_test.sql` krever at ordlyden faktisk er en annen tekst.
+
+**Rollegrensen er prøvd fra begge sider.** Med `editor` alene avvises både en reviewbeslutning
+og publiseringskontrollen, mens `api.create_source(...)` fortsatt virker — kalt gjennom
+klientrollen `authenticated`, med redaktørkontoens eget JWT-subjekt, framfor gjennom
+kontrollfunksjonen alene.
 
 ## API-lesemodellen
 
