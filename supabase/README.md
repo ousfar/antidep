@@ -26,14 +26,20 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
     men bare i miljøer der kontoen finnes i `auth.users`
   - 007b kallerens egen aktørrad og egne gjeldende rolletildelinger: `api.my_actor` og
     `api.my_roles`, med RLS-policyene og kolonnegrantene under dem
+  - 003a `created_by_actor_id` på `knowledge.sources`, uforanderlig etter opprettelsen —
+    kolonnen migrasjon 005 la til på de øvrige kunnskapsobjektene
+  - 008a `source_created` lagt til `audit.event_operation`, alene i sin egen migrasjon fordi
+    `ALTER TYPE ... ADD VALUE` ikke kan brukes i transaksjonen som legger verdien til
+  - 007c adminflytens kontrollerte skrivevei: `api.create_source(...)` med
+    `knowledge.assert_editor_authorized()` og auditskriveren over kildeopprettelse
 
   Nummereringen følger planlagt innhold i `docs/MVP_IMPLEMENTATION_PLAN.md` §18-§27, ikke
   filrekkefølge. Migrasjoner utenfor den planlagte rekken får en bokstav, slik at
   «migrasjon 007 — API-lesemodell» (§24) fortsatt betyr det samme i plan, migrasjoner og
   tester. Filrekkefølgen er derfor 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a,
-  005b, 007b: 007a og 007b er skrevet etter 008, men utvider api-lesemodellen, 005a og 005b
-  utvider aktørregisteret og medlemskapsmodellen fra 005, og nummeret 009 er
-  reservert for importfundamentet (§26).
+  005b, 007b, 003a, 008a, 007c: 007a, 007b og 007c er skrevet etter 008, men utvider
+  api-lesemodellen, 005a og 005b utvider aktørregisteret og medlemskapsmodellen fra 005, 003a
+  utvider kildetabellen fra 003, og nummeret 009 er reservert for importfundamentet (§26).
 
 - `tests/` — pgTAP-tester som kjøres med `npm run db:test`.
 - `seed.sql` — kun lokal demodata. Kontrollert vokabular og pilotdata som produksjonen

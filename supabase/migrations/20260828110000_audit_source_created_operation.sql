@@ -1,0 +1,34 @@
+-- ============================================================================
+-- Migrasjon 008a — audit.event_operation får verdien source_created
+--
+-- Utvider auditvokabularet fra migrasjon 008 (§25) på samme måte 003a og 005a
+-- utvidet sine schemaer, og får derfor en bokstav.
+--
+-- ----------------------------------------------------------------------------
+-- Hvorfor denne ene setningen er sin egen migrasjon
+--
+-- 20260828120000_create_source.sql trenger denne verdien: en kilde opprettet
+-- gjennom skriveveien skal auditeres, og migrasjon 008 sitt vokabular er
+-- uttømmende med hensikt («en enum-verdi som legges til uten at CASE-uttrykket
+-- utvides, gir NULL og dermed en feilende innsetting»).
+--
+-- ALTER TYPE ... ADD VALUE kan ikke brukes i samme transaksjon som verdien
+-- den legger til: PostgreSQL krever at verdien er committet før den kan
+-- forekomme i et uttrykk, også i en CASE-gren, også i en CHECK-definisjon.
+-- Prøvd direkte mot denne stacken: et forsøk på å skrive `alter type … add
+-- value 'source_created'` og deretter bruke verdien i samme migrasjonsfil
+-- feiler med `unsafe use of new value … (SQLSTATE 55P04)` under `supabase db
+-- reset`, fordi migrasjonsløperen sender hele filen som én transaksjon —
+-- ikke bare når setningene selv står i en eksplisitt BEGIN/COMMIT-blokk.
+-- Verdien må derfor legges til i en migrasjon for seg, som committer alene,
+-- før 20260828120000_create_source.sql kan utvide CASE-uttrykkene og
+-- CHECK-constrainten som bruker den.
+--
+-- Migrasjonen gjør ingenting annet: ingen CASE-gren utvides her, og
+-- audit.events kan derfor ikke motta en rad med denne operasjonen før neste
+-- migrasjon har kjørt — object_schema og object_table ville gitt NULL og
+-- feilet på sin egen NOT NULL, nøyaktig som migrasjon 008 sin kommentar
+-- beskriver.
+-- ============================================================================
+
+alter type audit.event_operation add value 'source_created';

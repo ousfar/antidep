@@ -377,6 +377,11 @@ header h1 a:hover {
   border-inline-start-style: solid;
 }
 
+.knowledge-notice--ok {
+  border-inline-start-width: 4px;
+  border-inline-start-style: double;
+}
+
 .knowledge-notice__lead {
   margin: 0;
   font-weight: 600;
@@ -752,4 +757,63 @@ header nav a {
 
 .access-sign-out {
   margin-block-start: 1.5rem;
+}
+
+/* ==========================================================================
+   Opprett kilde — steg 2 av adminflyten (§29, §74.23)
+
+   Gjenbruker feltoppsettet fra .login-form-familien over: samme innrykk, samme
+   inputstil. Egen klasse fordi skjemaet har flere felt og et eget bruk av
+   .knowledge-notice--ok, som .login-form ikke trenger.
+   ========================================================================== */
+
+.create-source-form {
+  max-width: 28rem;
+}
+
+.create-source-form__intro {
+  max-width: 40rem;
+}
+
+.create-source-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-block-end: 1rem;
+}
+
+.create-source-form__field input,
+.create-source-form__field select {
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  color: var(--color-text);
+  background: var(--color-background);
+  font: inherit;
+}
+
+.create-source-form button {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  color: var(--color-text);
+  background: var(--color-background);
+  font: inherit;
+  cursor: pointer;
+}
+
+.create-source-form button:disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+/* Manglende dato under en valgt presisjon. Samme form som .login-form__error:
+   kantstrek og tekst, ikke farge alene (§20 øverst i denne filen). */
+.create-source-form__problem {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-inline-start: 4px solid var(--color-text);
+  border-radius: 0.25rem;
+  font-size: 0.9375rem;
 }

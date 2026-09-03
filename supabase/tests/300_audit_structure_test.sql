@@ -13,7 +13,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(41);
+select plan(43);
 
 -- ---------------------------------------------------------------------------
 -- Tabellen og §35 sitt minimumsfeltsett
@@ -156,9 +156,9 @@ select enum_has_labels(
   'audit', 'event_operation',
   array[
     'claim_published', 'claim_publication_replaced', 'claim_publication_withdrawn',
-    'claim_publication_rolled_back', 'role_granted', 'role_ended'
+    'claim_publication_rolled_back', 'role_granted', 'role_ended', 'source_created'
   ],
-  'audit.event_operation dekker publiseringshandlingene og rolleforvaltningen'
+  'audit.event_operation dekker publiseringshandlingene, rolleforvaltningen og kildeopprettelse (migrasjon 008a)'
 );
 
 -- De fire publiseringsverdiene skal svare én-til-én til
@@ -232,12 +232,19 @@ select has_trigger(
   'workflow', 'user_roles', 'user_roles_record_end_audit_event',
   'avslutning av en rolletildeling auditeres'
 );
+select has_trigger(
+  'knowledge', 'sources', 'sources_record_creation_audit_event',
+  'kildeopprettelse auditeres (migrasjon 007c)'
+);
 
 select has_function(
   'audit', 'record_publication_event', 'audit.record_publication_event() finnes'
 );
 select has_function(
   'audit', 'record_user_role_event', 'audit.record_user_role_event() finnes'
+);
+select has_function(
+  'audit', 'record_source_event', 'audit.record_source_event() finnes'
 );
 
 -- En auditskriver som er mer privilegert enn operasjonen den registrerer, er en
@@ -280,11 +287,12 @@ select is_empty(
   $$
     select f.function_name
     from (values ('audit.record_publication_event()'),
-                 ('audit.record_user_role_event()'))
+                 ('audit.record_user_role_event()'),
+                 ('audit.record_source_event()'))
            as f(function_name)
     where coalesce(obj_description(f.function_name::regprocedure, 'pg_proc'), '') = ''
   $$,
-  'begge auditskriverne er dokumentert'
+  'alle tre auditskriverne er dokumentert'
 );
 -- Primærnøkkelen er unntatt, som overalt ellers i schemaene: den er en
 -- databasegenerert uuid uten egen betydning.

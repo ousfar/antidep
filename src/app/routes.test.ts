@@ -4,6 +4,7 @@ import {
   claimEvidencePath,
   drugPath,
   homePath,
+  newSourcePath,
   sourcePath,
   topicPath,
   ROUTE_PATTERNS,
@@ -47,12 +48,21 @@ describe('adressene', () => {
     expect(accessPath()).toBe('/access')
   })
 
+  it('opprett kilde har ingen parameter', () => {
+    // Adressen kolliderer på tegnnivå med sourcePath('new'), og det er nettopp
+    // poenget: hvilken side den treffer avgjøres av ruterens rangering av det
+    // statiske segmentet foran :sourceId, prøvd direkte i App.test.tsx
+    // («/sources/new treffer Opprett kilde»), ikke her.
+    expect(newSourcePath()).toBe('/sources/new')
+  })
+
   it('mønstrene og byggerne beskriver samme adresser', () => {
     // Et mønster som drifter fra byggeren gir lenker ruteren ikke kjenner.
     expect(ROUTE_PATTERNS.drug).toBe('/drugs/:drugSlug')
     expect(ROUTE_PATTERNS.topic).toBe('/topics/:topicSlug')
     expect(ROUTE_PATTERNS.claimEvidence).toBe('/claims/:claimId/evidence')
     expect(ROUTE_PATTERNS.source).toBe('/sources/:sourceId')
+    expect(ROUTE_PATTERNS.sourceNew).toBe(newSourcePath())
     expect(ROUTE_PATTERNS.access).toBe(accessPath())
     expect(ROUTE_PATTERNS.home).toBe(homePath())
   })

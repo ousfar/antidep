@@ -397,10 +397,11 @@ insert into fixture (name, id) select 'rich_rev', id from inserted;
 with inserted as (
   insert into knowledge.sources
     (source_type, title, authors_or_issuer, publisher_or_journal,
-     publication_date, publication_date_precision, source_status, status_note)
+     publication_date, publication_date_precision, source_status, status_note,
+     created_by_actor_id)
   values ('journal_article', 'Rik testkilde for 340', 'Testforfatter A; Testforfatter B',
           'Testtidsskriftet', date '2024-03-01', 'month', 'outdated',
-          'Nyere testkunnskap finnes.')
+          'Nyere testkunnskap finnes.', (select id from fixture where name = 'extraction'))
   returning id
 )
 insert into fixture (name, id) select 'rich_source', id from inserted;
@@ -491,8 +492,9 @@ insert into fixture (name, id) select 'lean_rev', id from inserted;
 
 with inserted as (
   insert into knowledge.sources
-    (source_type, title, authors_or_issuer, source_status)
-  values ('journal_article', 'Minimal testkilde for 340', 'Testforfatter C', 'active')
+    (source_type, title, authors_or_issuer, source_status, created_by_actor_id)
+  values ('journal_article', 'Minimal testkilde for 340', 'Testforfatter C', 'active',
+          (select id from fixture where name = 'extraction'))
   returning id
 )
 insert into fixture (name, id) select 'lean_source', id from inserted;
