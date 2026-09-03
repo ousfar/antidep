@@ -3557,9 +3557,18 @@ korrekt produksjonskonfigurasjon**, nøkkel for nøkkel. Kommandoen pusher hele 
 som er `supabase init`-standardene for en lokal stack, er ikke det. Enkeltinnstillinger settes i
 dashboardet eller på det ene feltet gjennom Management-API-et.
 
-**Hva som gjenstår.** Røyktesten av innlogging og «Min tilgang» mot det hostede prosjektet er
-ikke gjort — den krever redaktørens passord og hører til prosjekteieren. Milepæl B mangler tre
-ting (§74.4).
+**Røyktesten er kjørt, og den leser det samme som databasen.** Prosjekteieren logget inn på
+`https://antidep.vercel.app` med redaktørkontoen og åpnet «Min tilgang». Siden viser aktøren
+«Peder Holman» med `human:peder-holman`, og én rolle: `reviewer`, «Uavgrenset», gyldig fra
+27. august 2026, «Ingen sluttdato er satt». Det er nøyaktig raden som ble lest fra
+produksjonsdatabasen over, og datoen er migrasjon 005b sin egen (`20260827090000`). Dermed er
+hele kjeden fra `auth.users` gjennom `provenance.actors` og `workflow.user_roles` til
+`api.my_actor` og `api.my_roles` prøvd i produksjon, av en innlogget bruker, og ikke bare i
+CI: innlogging, den autentiserte leseveien fra migrasjon 007b (§74.21) og klientflaten fra
+§74.22 svarer alle som ventet.
+
+**Hva som gjenstår.** Milepæl B mangler tre ting (§74.4): ekstraksjonsverifikasjonene,
+claim-verifikasjonene og selve godkjenningen.
 
 ---
 
