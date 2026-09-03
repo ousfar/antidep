@@ -1340,6 +1340,7 @@ PR G  db: add publication events and gate                                  (#15)
       docs: record that the hosted project is migrated and api is exposed  (#37)  merget   ingen migrasjon
       feat: add the controlled write path for creating a Source            (#35)  merget   migrasjon 003a, 008a, 007c
       docs: mark #34, #35 and #37 as merged in the PR log                  (#38)  merget   ingen migrasjon
+      db: grant the editor role for source registration                    (#39)  åpen     migrasjon 005c
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
