@@ -53,6 +53,35 @@ describe('Opprett kilde — innlogget, ingen rollegate i klienten', () => {
     ])
   })
 
+  it('kildetypen vises med norsk etikett, men sendes som den kanoniske verdien', async () => {
+    // De to må kontrolleres sammen. En test på bare etiketten ville overlevd at
+    // <option value> også ble byttet til norsk tekst, og da hadde databasen fått
+    // en verdi den ikke kjenner (22P02) — for brukeren en uforståelig feil på et
+    // skjema som så riktig ut.
+    const { rpcCalls } = renderRoute('/sources/new', { auth: { initialUserId: TEST_USER_IDS.a } })
+    await screen.findByLabelText('Tittel')
+
+    // Ingen interne enum-verdier i det brukeren leser.
+    const options = screen.getAllByRole('option')
+    const visible = options.map((option) => option.textContent)
+    expect(visible).toContain('Fagfellevurdert artikkel')
+    expect(visible).toContain('Preparatomtale (SPC)')
+    expect(visible).not.toContain('journal_article')
+    expect(visible).not.toContain('summary_of_product_characteristics')
+
+    // Valgt på etiketten, sendt som den kanoniske verdien.
+    fireEvent.change(screen.getByLabelText('Kildetype'), {
+      target: { value: 'summary_of_product_characteristics' },
+    })
+    expect(screen.getByLabelText('Kildetype')).toHaveDisplayValue('Preparatomtale (SPC)')
+
+    fillRequiredFields()
+    fireEvent.click(screen.getByRole('button', { name: 'Opprett kilde' }))
+    await screen.findByText(/Kilden er opprettet/)
+
+    expect(lastCallArgs(rpcCalls)?.['p_source_type']).toBe('summary_of_product_characteristics')
+  })
+
   it('en avvisning fra databasen vises med databasens egen tekst, og skjemaet blir stående utfylt', async () => {
     renderRoute('/sources/new', {
       auth: { initialUserId: TEST_USER_IDS.a },

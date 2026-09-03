@@ -3753,6 +3753,16 @@ plass — én på at bekreftelsen ikke har noen lenke, én bredere på at ingen 
 til kildevisningen for den nye kilden — og lenken satt tilbake felte nøyaktig de to og ingen
 andre.
 
+**Kildetypen vises med etikett, ikke med enum-verdien.** Nedtrekkslista skrev først ut
+`SOURCE_TYPES` direkte, altså `journal_article` og `summary_of_product_characteristics` — den
+kanoniske verdien databasen krever, men ikke tekst for et menneske. Etikettene fantes allerede:
+`SOURCE_TYPE_LABELS` i `vocabulary-labels.ts` dekker nøyaktig det samme vokabularet og brukes av
+`SourceDetails`, så rettelsen er å lese den framfor å lage en ny tabell ved siden av.
+`<option value>` er uendret, og RPC-kallet får fortsatt den kanoniske verdien. Testen krever
+begge deler i samme assertion, fordi en test på bare etiketten ville overlevd at også verdien
+ble byttet til norsk tekst — og da hadde databasen svart `22P02` på et skjema som så riktig ut.
+Begge mutasjonene, å vise verdien og å sende etiketten, felte nøyaktig den ene testen.
+
 **Ingen konto har `editor` ennå, og skriveveien er derfor stengt for alle — også i
 produksjon.** `api.create_source(...)` krever gjennom `knowledge.assert_editor_authorized()`
 en gyldig tildeling med `role_code = 'editor'`. Migrasjon 005b tildeler `reviewer`, og bare

@@ -52,6 +52,7 @@ import {
   EMPTY_PUBLICATION_DATE,
   PUBLICATION_DATE_CHOICES,
 } from '../../lib/publication-date'
+import { SOURCE_TYPE_LABELS } from '../../components/vocabulary-labels'
 import { SOURCE_TYPES } from '../../types/api'
 import { useAntidepClient } from '../antidep-client'
 import { useAuthSession, type AuthSessionState } from '../use-auth-session'
@@ -327,9 +328,15 @@ function CreateSourceForm() {
             required
             value={form.sourceType}
           >
+            {/* Verdien er den kanoniske enum-verdien databasen krever; teksten er
+                den norske etiketten fra `vocabulary-labels.ts`, den samme
+                `SourceDetails` viser. Oppslaget er direkte og ikke via
+                `termText()`: her itereres det over klientens egen konstant, så
+                enhver verdi har en etikett — og en ny kildetype uten etikett blir
+                en typefeil framfor en engelsk streng i skjermbildet. */}
             {SOURCE_TYPES.map((type) => (
               <option key={type} value={type}>
-                {type}
+                {SOURCE_TYPE_LABELS[type]}
               </option>
             ))}
           </select>
