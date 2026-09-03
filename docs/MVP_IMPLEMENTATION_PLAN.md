@@ -1474,18 +1474,24 @@ urørt. Verifikasjonene kan være agentproduserte, så lenge §10 sitt skille me
 genererte og den som kontrollerer holdes, og §11 sitt krav om at kontrollen skjer mot
 kildematerialet er innfridd. Godkjenningen kan ikke være agentprodusert.
 
-**Det som gjenstår for Milepæl B er derfor fire ting**, ikke én: en reell brukerkonto med
+**Det som gjenstod for Milepæl B var derfor fire ting**, ikke én: en reell brukerkonto med
 `reviewer`-rolle for redaktøren, ekstraksjonsverifikasjonene, claim-verifikasjonene og selve
 godkjenningen. Alt maskineri fra kilde til klientflate står ferdig og testet rundt det
-tomrommet.
+tomrommet. Den første av de fire er siden utført; se avsnittet under.
 
-**Den første av de fire er ikke lenger en kodeoppgave.** Migrasjon 005b knytter redaktørens
-aktørrad til brukerkontoen og tildeler `reviewer`-rollen, og begge grenene av den er kjørt i
-CI (§74.20). Men *utført* er den ingen steder: kontoen finnes bare i det hostede prosjektet,
-og der er ingen migrasjon kjørt (§74.18). Redaktøren har derfor fortsatt ingen rolle i noen
-database. Første gang migrasjonene kjøres mot det hostede prosjektet, blir tildelingen
-skrevet — og den oppgaven er ikke gjort. Milepæl B mangler dermed fortsatt fire ting; det som
-har endret seg, er at den første av dem venter på en kjøring og ikke på kode.
+**Den første av de fire er utført, og det som gjenstår er tre.** Migrasjon 005b knytter
+redaktørens aktørrad til brukerkontoen og tildeler `reviewer`-rollen, og begge grenene av den
+er kjørt i CI (§74.20). Migrasjonene er siden kjørt mot det hostede prosjektet, og der tok den
+den positive grenen: `workflow.user_roles` har én rad, `role_code = 'reviewer'`, uten
+scopebegrensning, uten sluttdato, gyldig nå og selvtildelt av `human:peder-holman` — lest fra
+produksjonsdatabasen, ikke antatt (§74.23). G11 sin forutsetning om konto og gyldig rolle er
+dermed innfridd. **Det som gjenstår for Milepæl B er ekstraksjonsverifikasjonene,
+claim-verifikasjonene og selve godkjenningen.**
+
+> **Avsnittet under er overhalt.** Det stod her mens rollen ennå ikke fantes noe sted, og er
+> beholdt som historikk (§71): «Men *utført* er den ingen steder: kontoen finnes bare i det
+> hostede prosjektet, og der er ingen migrasjon kjørt (§74.18). Redaktøren har derfor fortsatt
+> ingen rolle i noen database.» Begge setningene er nå usanne; se §74.23.
 
 G8 er verdt å merke seg særskilt, fordi den er lett å utelate når kravene listes opp: G9 leser
 utfallet på den gjeldende claim-verifikasjonen, mens G8 er kravet om at det finnes en i det
@@ -3477,9 +3483,13 @@ Null rader er riktig svar og ikke en mangel: ingenting er publisert (§74.4). Av
 `authenticated` har granten. De fem kanoniske schemaene avvises av PostgREST før noen
 rettighetskontroll i det hele tatt, som §47 krever.
 
-**Redaktørens autorisasjon tok den positive grenen i produksjon.** Aktørregisteret har tre
-rader og `workflow.user_roles` har én. Migrasjon 005b skriver bare når kontoen finnes i
-`auth.users` (§74.18, §74.20), så raden er selve beviset for at kontoen finnes der.
+**Redaktørens autorisasjon tok den positive grenen i produksjon, og det lukker den første av
+Milepæl B sine fire.** Aktørregisteret har tre rader, og `workflow.user_roles` har én:
+`role_code = 'reviewer'`, uten scopebegrensning, uten sluttdato, gyldig nå og selvtildelt av
+`human:peder-holman` — den selvtildelingen §74.17 punkt 3 valgte. Migrasjon 005b skriver bare
+når kontoen finnes i `auth.users` (§74.18, §74.20), så raden er selve beviset for at kontoen
+finnes der. §74.4 er rettet tilsvarende: **Milepæl B mangler nå tre ting**, ikke fire —
+ekstraksjonsverifikasjonene, claim-verifikasjonene og selve godkjenningen.
 `knowledge.publication_events` er tom, som ventet.
 
 **Den pinnede CLI-en kan ikke brukes fra en agentsesjon, og det er miljøet og ikke prosjektet.**
@@ -3509,7 +3519,7 @@ verktøy skal stå i, og hører til sammen med resten av autentiseringsoppsettet
 `http://localhost:3000`, med tom liste over tillatte redirect-URL-er. Innlogging i appen bruker
 bare passord (`signInWithPassword`) og er ikke avhengig av den, men bekreftelses- og
 tilbakestillingslenker på e-post er det. Røyktesten av innlogging og «Min tilgang» mot det
-hostede prosjektet er ikke gjort. Milepæl B mangler fortsatt de samme fire tingene (§74.4).
+hostede prosjektet er ikke gjort. Milepæl B mangler tre ting (§74.4).
 
 ---
 
