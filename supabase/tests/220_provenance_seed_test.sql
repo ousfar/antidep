@@ -193,7 +193,7 @@ select is_empty(
   $$,
   'alle evidensfunn er attribuert til ekstraksjonsrollen som produserte dem i migrasjon 003'
 );
--- Migrasjon 003c la created_by_actor_id til knowledge.sources i etterkant
+-- Migrasjon 003a la created_by_actor_id til knowledge.sources i etterkant
 -- (et hull migrasjon 005 etterlot, se migrasjonens hodekommentar) og
 -- backfyller de to seedede radene med samme aktør: aktørens egen beskrivelse
 -- sier allerede at den «Produserte kildene, kildeversjonene og evidensfunnene

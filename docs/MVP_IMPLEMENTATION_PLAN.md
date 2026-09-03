@@ -3737,6 +3737,22 @@ både enhetstesten og sidetesten for år; å fjerne `incomplete`-vakten felte de
 krever at skjemaet sier fra og ikke sender noe; og å la `month`-grenen lese årsfeltet felte
 fire tester i begge lag. Ingen av dem ble felt av en urelatert assertion.
 
+**Bekreftelsen etter en opprettelse lenker ingen steder, og det er en rettelse.**
+Suksessmeldingen tilbød først «Se kilden» med lenke til `/sources/:sourceId`. Den siden er en
+klinikerflate bygget på `api.published_claim_evidence` — den eneste kildeprojeksjonen `api`
+har (§74.15) — så den kan bare vise en kilde som allerede inngår i publisert kunnskap. En
+kilde som nettopp er opprettet i dette steget har per definisjon ingen: evidensfunnet,
+påstanden, godkjenningen og publiseringen ligger alle etter det i §15 sin kjede. Lenken ville
+altså i normaltilfellet ført til fraværsmeldingen på kildesiden, og lest som om opprettelsen
+hadde gått galt. Den er fjernet. Bekreftelsen oppgir i stedet kildens id som tekst — det
+eneste håndtaket på raden som ble skrevet, og det neste ledd i kjeden vil trenge — og sier at
+kilden ennå ikke er synlig i klinikerflaten. En admin-visning av *upubliserte* kilder er ikke
+bygget her: den trenger sin egen projeksjon i `api` med sine egne grants, og hører til den
+PR-en som får bruk for den (§51). To tester i `CreateSourcePage.test.tsx` holder rettelsen på
+plass — én på at bekreftelsen ikke har noen lenke, én bredere på at ingen lenke på siden peker
+til kildevisningen for den nye kilden — og lenken satt tilbake felte nøyaktig de to og ingen
+andre.
+
 **Ingen konto har `editor` ennå, og skriveveien er derfor stengt for alle — også i
 produksjon.** `api.create_source(...)` krever gjennom `knowledge.assert_editor_authorized()`
 en gyldig tildeling med `role_code = 'editor'`. Migrasjon 005b tildeler `reviewer`, og bare

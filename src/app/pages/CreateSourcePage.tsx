@@ -23,6 +23,25 @@
 // `AccessPage.tsx` sin FELLE 1: skjemaet finnes ikke i treet før kalleren er
 // `signed_in`, og monteres friskt (med `userId` som `key`) ved hver innlogging
 // eller brukerbytte.
+//
+// ----------------------------------------------------------------------------
+// Bekreftelsen lenker ingen steder, og det er et krav framfor en mangel
+//
+// `SourcePage` (`/sources/:sourceId`) er en klinikerflate bygget på
+// `api.published_claim_evidence` — den eneste kildeprojeksjonen `api` har — så
+// den kan bare vise en kilde som *allerede inngår i publisert kunnskap*
+// (§74.15). En kilde som nettopp er opprettet her har per definisjon ingen
+// publiserte påstander knyttet til seg: evidensfunnet, påstanden, godkjenningen
+// og publiseringen ligger alle etter dette steget i §15 sin kjede. En lenke dit
+// fra bekreftelsen ville derfor i normaltilfellet ført til fraværsmeldingen på
+// den siden, og lest som om noe hadde gått galt med opprettelsen.
+//
+// Bekreftelsen viser derfor id-en som tekst og sier hvorfor kilden ennå ikke er
+// synlig, framfor å tilby en vei videre som ikke finnes. En admin-visning av
+// kilder som *ikke* er publisert er en egen sak: den trenger en egen projeksjon
+// i `api` med sine egne grants, og hører til den PR-en som får bruk for den
+// (§51). `CreateSourcePage.test.tsx` krever at bekreftelsen ikke har noen lenke,
+// slik at den ikke kommer tilbake.
 // ============================================================================
 
 import { useId, useState, type FormEvent } from 'react'
@@ -37,7 +56,7 @@ import { SOURCE_TYPES } from '../../types/api'
 import { useAntidepClient } from '../antidep-client'
 import { useAuthSession, type AuthSessionState } from '../use-auth-session'
 import { usePageTitle } from '../use-page-title'
-import { accessPath, sourcePath } from '../routes'
+import { accessPath } from '../routes'
 import type { CreateSourceResult } from '../../lib/create-source'
 import type { PublicationDateChoice, PublicationDateDraft } from '../../lib/publication-date'
 import type { Uuid } from '../../types/api'
@@ -211,12 +230,25 @@ type SubmitStatus = 'idle' | 'submitting'
  * av, slik at neste kilde kan registreres uten en ekstra handling — men
  * bekreftelsen for den forrige blir stående til en ny opprettelse erstatter
  * den, ikke bare til neste tastetrykk.
+ *
+ * Ingen lenke til `/sources/:sourceId` herfra — se «Bekreftelsen lenker ingen
+ * steder» i hodekommentaren. Id-en vises som tekst i stedet: den er det eneste
+ * håndtaket på raden som nettopp ble skrevet, og den neste operasjonen i kjeden
+ * vil trenge den.
  */
 function CreatedNotice({ sourceId }: { readonly sourceId: Uuid }) {
   return (
-    <p className="knowledge-notice knowledge-notice--ok" role="status">
-      Kilden er opprettet. <Link to={sourcePath(sourceId)}>Se kilden</Link>.
-    </p>
+    <div className="knowledge-notice knowledge-notice--ok" role="status">
+      <p className="knowledge-notice__lead">Kilden er opprettet.</p>
+      <p className="knowledge-notice__detail">
+        Kildens id: <code>{sourceId}</code>
+      </p>
+      <p className="knowledge-notice__detail">
+        Kilden er ikke synlig i klinikerflaten ennå. Den vises der først når den er brukt i
+        publisert kunnskap, og neste ledd i kjeden — å registrere evidens fra kilden — er ikke
+        bygget.
+      </p>
+    </div>
   )
 }
 

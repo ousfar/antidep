@@ -16,7 +16,7 @@ create extension if not exists pgtap with schema extensions;
 select plan(31);
 
 -- ===========================================================================
--- Del 1 — Kontrakten: hva migrasjon 003c, 008a og 009 faktisk åpnet
+-- Del 1 — Kontrakten: hva migrasjon 003a, 008a og 007c faktisk åpnet
 -- ===========================================================================
 
 select col_not_null(

@@ -69,6 +69,37 @@ describe('Opprett kilde — innlogget, ingen rollegate i klienten', () => {
     expect(screen.getByLabelText('Tittel')).toHaveValue('Testkilde fra skjema')
   })
 
+  it('bekreftelsen lenker ikke videre, og oppgir kildens id', async () => {
+    // `SourcePage` leser bare api.published_claim_evidence, så en kilde som
+    // nettopp er opprettet — og altså ikke er publisert — ville møtt
+    // fraværsmeldingen der. Bekreftelsen skal derfor ikke tilby en vei dit; se
+    // «Bekreftelsen lenker ingen steder» i CreateSourcePage.tsx.
+    renderRoute('/sources/new', { auth: { initialUserId: TEST_USER_IDS.a } })
+    await screen.findByLabelText('Tittel')
+    fillRequiredFields()
+    fireEvent.click(screen.getByRole('button', { name: 'Opprett kilde' }))
+
+    const notice = await screen.findByRole('status')
+    expect(notice).toHaveTextContent('Kilden er opprettet.')
+    expect(notice.querySelector('a')).toBeNull()
+    // Id-en er det eneste håndtaket på raden som ble skrevet.
+    expect(notice).toHaveTextContent('00000000-0000-4000-8000-999999999999')
+  })
+
+  it('ingen lenke noe sted på siden peker til kildevisningen for den nye kilden', async () => {
+    // Bredere enn testen over, og den som faktisk fanger en lenke plassert
+    // utenfor bekreftelsen: ingenting på siden skal navigere til
+    // /sources/<uuid> etter en opprettelse.
+    renderRoute('/sources/new', { auth: { initialUserId: TEST_USER_IDS.a } })
+    await screen.findByLabelText('Tittel')
+    fillRequiredFields()
+    fireEvent.click(screen.getByRole('button', { name: 'Opprett kilde' }))
+    await screen.findByText(/Kilden er opprettet/)
+
+    const targets = screen.getAllByRole('link').map((link) => link.getAttribute('href'))
+    expect(targets).not.toContain('/sources/00000000-0000-4000-8000-999999999999')
+  })
+
   it('skjemaet nullstilles etter en vellykket opprettelse', async () => {
     renderRoute('/sources/new', { auth: { initialUserId: TEST_USER_IDS.a } })
     await screen.findByLabelText('Tittel')
