@@ -1338,6 +1338,7 @@ PR G  db: add publication events and gate                                  (#15)
       docs: mark #32 as merged in the PR log                               (#33)  merget   ingen migrasjon
       feat: add sign-in and my access                                      (#34)  merget   ingen migrasjon
       docs: record that the hosted project is migrated and api is exposed  (#37)  merget   ingen migrasjon
+      docs: mark #34 and #37 as merged in the PR log                       (#38)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1369,7 +1370,7 @@ samtidig #34 stående som `åpen` selv om den var merget. Vaktposten fanget det 
 ikke: den krever bare at hver rad *unntatt den nyeste* står som `merget`, og den nyeste raden
 var nettopp #34. En rad som aldri blir skrevet, står ikke under noen — den er utenfor
 kontrollen på samme måte som et tall som bare finnes i en hand-off (§74.18). Denne PR-en
-etterfører raden og retter #34.
+etterfører raden, retter #34, og fører sin egen rad slik konvensjonen sier.
 
 **Hoppet fra #34 til #37 er ikke et hull.** #35 er fortsatt åpen og fører sin egen rad når den
 merges, etter konvensjonen over; #36 er en issue og ikke en PR. Rekkefølgen i tabellen er
