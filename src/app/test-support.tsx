@@ -36,12 +36,17 @@ import type {
 export type FakeOutcome<Row> =
   readonly Row[] | { readonly error: string } | { readonly pending: true }
 
+/** Hva ett RPC-kall svarer: en verdi, eller en feil — aldri rader. */
+export type FakeRpcOutcome<Data> = { readonly data: Data } | { readonly error: string }
+
 export interface FakeApi {
   readonly published_drugs?: FakeOutcome<PublishedDrugRow>
   readonly published_claims?: FakeOutcome<PublishedClaimRow>
   readonly published_claim_evidence?: FakeOutcome<PublishedClaimEvidenceRow>
   readonly my_actor?: FakeOutcome<MyActorRow>
   readonly my_roles?: FakeOutcome<MyRoleRow>
+  /** Steg 2 av adminflyten (§29, §74.24): `api.create_source(...)`. */
+  readonly create_source?: FakeRpcOutcome<string>
 }
 
 interface RecordedQuery {
@@ -140,6 +145,11 @@ function fakeAuth(options: FakeAuthOptions, signOutCalls: FakeSignOutCall[]) {
   }
 }
 
+export interface RecordedRpcCall {
+  readonly name: string
+  readonly args: unknown
+}
+
 /**
  * En klient som oppfører seg som PostgREST på de tre tingene lesemodellen
  * bruker: kolonnevalg, `eq`-filtre og sortering. Filtrene anvendes faktisk, så
@@ -153,11 +163,31 @@ export function fakeClient(
   client: AntidepClient
   queries: RecordedQuery[]
   signOutCalls: FakeSignOutCall[]
+  rpcCalls: RecordedRpcCall[]
 } {
   const queries: RecordedQuery[] = []
   const signOutCalls: FakeSignOutCall[] = []
+  const rpcCalls: RecordedRpcCall[] = []
 
   const client = {
+    // Steg 2 av adminflyten (§29, §74.24): den eneste skriveveien, `api.create_source(...)`.
+    // Bare `create_source` er kjent i dag; en ukjent funksjon feiler høyt
+    // framfor å svare stille, slik at en glemt fikstur ikke ser ut som en
+    // vellykket opprettelse.
+    rpc(name: string, args: unknown) {
+      rpcCalls.push({ name, args })
+      if (name !== 'create_source') {
+        throw new Error(`fakeClient.rpc(): ukjent funksjon «${name}».`)
+      }
+      const outcome = api.create_source ?? {
+        data: '00000000-0000-4000-8000-999999999999' as string,
+      }
+      return Promise.resolve(
+        'error' in outcome
+          ? { data: null, error: { message: outcome.error } }
+          : { data: outcome.data, error: null },
+      )
+    },
     from(view: string) {
       const recorded: RecordedQuery = { view, filters: [], orders: [] }
       const builder = {
@@ -193,7 +223,7 @@ export function fakeClient(
     auth: fakeAuth(authOptions, signOutCalls),
   }
 
-  return { client: client as unknown as AntidepClient, queries, signOutCalls }
+  return { client: client as unknown as AntidepClient, queries, signOutCalls, rpcCalls }
 }
 
 export interface RenderRouteOptions {
@@ -217,7 +247,12 @@ export function renderRoute(path: string, options: RenderRouteOptions = {}) {
       </MemoryRouter>
     </AntidepClientProvider>,
   )
-  return { ...result, queries: fake.queries, signOutCalls: fake.signOutCalls }
+  return {
+    ...result,
+    queries: fake.queries,
+    signOutCalls: fake.signOutCalls,
+    rpcCalls: fake.rpcCalls,
+  }
 }
 
 const DRUG_A = '11111111-1111-4111-8111-111111111111'

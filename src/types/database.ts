@@ -26,16 +26,26 @@
 //
 // Viewene er lesemodell, så de har `Row` og ingen `Insert`/`Update`: forsøk på
 // å skrive gjennom dem blir en typefeil. Skriveveien er og blir en kontrollert
-// SECURITY DEFINER-funksjon (DATABASE_ARCHITECTURE.md §43), og `Tables` og
-// `Functions` står tomme til den første faktisk eksponeres i `api`.
+// SECURITY DEFINER-funksjon (DATABASE_ARCHITECTURE.md §43). `Tables` står tom:
+// ingen tabell er eller skal bli direkte eksponert. `Functions` fikk sitt
+// første medlem i migrasjon 007c: `create_source`, den kontrollerte skriveveien
+// for å opprette en Source (MVP_IMPLEMENTATION_PLAN.md §29, §74.24). Args-typen
+// speiler parametrene til api.create_source(...) i migrasjonen; to av dem er
+// `text` der den underliggende kolonnen er en enum, av samme grunn som
+// migrasjonens hodekommentar gir: PostgREST caster JSON-verdien til parameterens
+// deklarerte type i kallerens egen sesjon, og authenticated har ikke usage på
+// knowledge — en enum-typet parameter ville derfor gjort funksjonen ukjørbar
+// for klientrollen, uansett at selve funksjonen er SECURITY DEFINER.
 // ============================================================================
 
 import type {
+  DateText,
   MyActorRow,
   MyRoleRow,
   PublishedClaimEvidenceRow,
   PublishedClaimRow,
   PublishedDrugRow,
+  Uuid,
 } from './api'
 
 export type Database = {
@@ -65,6 +75,21 @@ export type Database = {
         Relationships: []
       }
     }
-    Functions: { [_ in never]: never }
+    Functions: {
+      create_source: {
+        Args: {
+          p_source_type: string
+          p_title: string
+          p_authors_or_issuer: string
+          p_publisher_or_journal?: string | null
+          p_volume?: string | null
+          p_issue?: string | null
+          p_pages?: string | null
+          p_publication_date?: DateText | null
+          p_publication_date_precision?: string | null
+        }
+        Returns: Uuid
+      }
+    }
   }
 }

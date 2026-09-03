@@ -29,15 +29,15 @@ create function pg_temp.extraction_actor() returns uuid language sql stable as $
   select id from provenance.actors where actor_key = 'agent:evidence-extraction'
 $$;
 
-insert into knowledge.sources (source_type, title, authors_or_issuer)
-values ('journal_article', 'Testkilde om vektendring', 'Testforfatter T');
+insert into knowledge.sources (source_type, title, authors_or_issuer, created_by_actor_id)
+values ('journal_article', 'Testkilde om vektendring', 'Testforfatter T', pg_temp.extraction_actor());
 
 insert into knowledge.source_versions (source_id, retrieved_at, retrieved_from)
 select id, now(), 'https://example.invalid/testkilde'
 from knowledge.sources where title = 'Testkilde om vektendring';
 
-insert into knowledge.sources (source_type, title, authors_or_issuer)
-values ('journal_article', 'Annen testkilde', 'Testforfatter A');
+insert into knowledge.sources (source_type, title, authors_or_issuer, created_by_actor_id)
+values ('journal_article', 'Annen testkilde', 'Testforfatter A', pg_temp.extraction_actor());
 
 -- Kortform for et gyldig evidensfunn, slik at hver negativ test bare varierer
 -- den ene kolonnen den handler om.
@@ -115,25 +115,27 @@ $$;
 -- knowledge.sources — bibliografisk identitet
 -- ---------------------------------------------------------------------------
 select lives_ok(
-  $$insert into knowledge.sources (source_type, title, authors_or_issuer)
-    values ('clinical_guideline', 'Gyldig testretningslinje', 'Testutgiver')$$,
+  $$insert into knowledge.sources (source_type, title, authors_or_issuer, created_by_actor_id)
+    values ('clinical_guideline', 'Gyldig testretningslinje', 'Testutgiver',
+            pg_temp.extraction_actor())$$,
   'en gyldig kilde kan registreres'
 );
 select throws_ok(
-  $$insert into knowledge.sources (source_type, title, authors_or_issuer)
-    values ('journal_article', '', 'Testforfatter')$$,
+  $$insert into knowledge.sources (source_type, title, authors_or_issuer, created_by_actor_id)
+    values ('journal_article', '', 'Testforfatter', pg_temp.extraction_actor())$$,
   '23514', null,
   'en kilde uten tittel avvises'
 );
 select throws_ok(
-  $$insert into knowledge.sources (source_type, title, authors_or_issuer)
-    values ('journal_article', '  ledende blanktegn  ', 'Testforfatter')$$,
+  $$insert into knowledge.sources (source_type, title, authors_or_issuer, created_by_actor_id)
+    values ('journal_article', '  ledende blanktegn  ', 'Testforfatter',
+            pg_temp.extraction_actor())$$,
   '23514', null,
   'en tittel med omkringliggende blanktegn avvises'
 );
 select throws_ok(
-  $$insert into knowledge.sources (source_type, title, authors_or_issuer)
-    values ('preprint', 'Ukjent kildetype', 'Testforfatter')$$,
+  $$insert into knowledge.sources (source_type, title, authors_or_issuer, created_by_actor_id)
+    values ('preprint', 'Ukjent kildetype', 'Testforfatter', pg_temp.extraction_actor())$$,
   '22P02', null,
   'en kildetype utenfor det kontrollerte vokabularet avvises'
 );
@@ -142,46 +144,52 @@ select throws_ok(
 -- enn den er belagt for (ANTIDEP_CONSTITUTION.md §6).
 select lives_ok(
   $$insert into knowledge.sources
-      (source_type, title, authors_or_issuer, publication_date, publication_date_precision)
+      (source_type, title, authors_or_issuer, publication_date, publication_date_precision,
+       created_by_actor_id)
     values ('journal_article', 'Kilde med årpresisjon', 'Testforfatter',
-            date '2005-01-01', 'year')$$,
+            date '2005-01-01', 'year', pg_temp.extraction_actor())$$,
   'en kilde som bare er årfestet kan registreres med årpresisjon'
 );
 select throws_ok(
   $$insert into knowledge.sources
-      (source_type, title, authors_or_issuer, publication_date)
-    values ('journal_article', 'Dato uten presisjon', 'Testforfatter', date '2005-04-07')$$,
+      (source_type, title, authors_or_issuer, publication_date, created_by_actor_id)
+    values ('journal_article', 'Dato uten presisjon', 'Testforfatter', date '2005-04-07',
+            pg_temp.extraction_actor())$$,
   '23514', null,
   'en publiseringsdato uten presisjonsnivå avvises'
 );
 select throws_ok(
   $$insert into knowledge.sources
-      (source_type, title, authors_or_issuer, publication_date_precision)
-    values ('journal_article', 'Presisjon uten dato', 'Testforfatter', 'year')$$,
+      (source_type, title, authors_or_issuer, publication_date_precision, created_by_actor_id)
+    values ('journal_article', 'Presisjon uten dato', 'Testforfatter', 'year',
+            pg_temp.extraction_actor())$$,
   '23514', null,
   'et presisjonsnivå uten dato avvises'
 );
 select throws_ok(
   $$insert into knowledge.sources
-      (source_type, title, authors_or_issuer, publication_date, publication_date_precision)
+      (source_type, title, authors_or_issuer, publication_date, publication_date_precision,
+       created_by_actor_id)
     values ('journal_article', 'Falsk årpresisjon', 'Testforfatter',
-            date '2005-04-07', 'year')$$,
+            date '2005-04-07', 'year', pg_temp.extraction_actor())$$,
   '23514', null,
   'en dato som ikke er avkortet til årpresisjon avvises som falsk presisjon'
 );
 select throws_ok(
   $$insert into knowledge.sources
-      (source_type, title, authors_or_issuer, publication_date, publication_date_precision)
+      (source_type, title, authors_or_issuer, publication_date, publication_date_precision,
+       created_by_actor_id)
     values ('journal_article', 'Falsk månedspresisjon', 'Testforfatter',
-            date '2005-04-07', 'month')$$,
+            date '2005-04-07', 'month', pg_temp.extraction_actor())$$,
   '23514', null,
   'en dato som ikke er avkortet til månedspresisjon avvises'
 );
 select lives_ok(
   $$insert into knowledge.sources
-      (source_type, title, authors_or_issuer, publication_date, publication_date_precision)
+      (source_type, title, authors_or_issuer, publication_date, publication_date_precision,
+       created_by_actor_id)
     values ('journal_article', 'Ekte dagpresisjon', 'Testforfatter',
-            date '2005-04-07', 'day')$$,
+            date '2005-04-07', 'day', pg_temp.extraction_actor())$$,
   'en dato med reell dagpresisjon er tillatt'
 );
 
