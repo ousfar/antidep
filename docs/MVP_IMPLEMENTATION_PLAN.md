@@ -1243,10 +1243,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ## 74. Status etter kildevisningen
 
-**Oppdatert:** 27. august 2026 (etter `db: authorize the named qualified editor`, som
-knytter redaktørens brukerkonto til aktørraden og tildeler `reviewer`-rollen — se §74.20;
-forrige oppdatering etter `test: verify the api column contract`, som binder radtypene i
-`src/types/` til databasens kolonner, §74.19)
+**Oppdatert:** 3. september 2026 (etter `db: grant the editor role for source registration`,
+som tildeler redaktørkontoen `editor`-rollen slik at «Opprett kilde» faktisk kan brukes — se
+§74.25; forrige oppdatering etter `feat: add the controlled write path for creating a Source`,
+som åpnet den skriveveien, §74.24)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1339,7 +1339,7 @@ PR G  db: add publication events and gate                                  (#15)
       feat: add sign-in and my access                                      (#34)  merget   ingen migrasjon
       docs: record that the hosted project is migrated and api is exposed  (#37)  merget   ingen migrasjon
       feat: add the controlled write path for creating a Source            (#35)  merget   migrasjon 003a, 008a, 007c
-      docs: mark #34, #35 and #37 as merged in the PR log                  (#38)  åpen     ingen migrasjon
+      docs: mark #34, #35 and #37 as merged in the PR log                  (#38)  merget   ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1408,14 +1408,19 @@ importfundamentet (§26). Den ellevte filen er migrasjon 005a, som utvider aktø
 005b, som fullfører det 005a bevisst lot stå åpent, og den trettende, migrasjon 007b, som
 utvider api-lesemodellen fra §24 slik 007a gjorde. Den fjortende filen er migrasjon 003a, som
 utvider kildetabellen fra §20 og lukker et attribusjonshull migrasjon 005 etterlot (§74.24).
-Den femtende, migrasjon 008a, utvider auditvokabularet fra §25 med én ny verdi. Den sekstende
-og siste, migrasjon 007c, utvider api-lesemodellen fra §24 en fjerde gang — med det første
-skrivbare medlemmet, adminflytens kontrollerte skrivevei for å opprette en Source (§29,
-§74.24). Filrekkefølgen er dermed 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a,
-005b, 007b, 003a, 008a, 007c — sortert på tidsstempel, ikke på migrasjonsnummer, og de seks
-siste filene bærer de seks laveste bokstavnumrene.
+Den femtende, migrasjon 008a, utvider auditvokabularet fra §25 med én ny verdi. Den sekstende,
+migrasjon 007c, utvider api-lesemodellen fra §24 en fjerde gang — med det første skrivbare
+medlemmet, adminflytens kontrollerte skrivevei for å opprette en Source (§29, §74.24). Den
+syttende og siste, migrasjon 005c, utvider medlemskapsmodellen fra §20 slik 005b gjorde, og
+tildeler den `editor`-rollen den skriveveien krever (§74.25). Filrekkefølgen er dermed 001,
+002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a, 005b, 007b, 003a, 008a, 007c, 005c —
+sortert på tidsstempel, ikke på migrasjonsnummer, og de sju siste filene bærer alle et
+bokstavnummer, altså et nummer utenfor den planlagte rekken. (Setningen sa tidligere at «de
+seks siste filene bærer de seks laveste bokstavnumrene». Det stemte ikke mot listen over —
+006a og 007a har lavere bokstavnumre enn flere av dem — så den er erstattet med den påstanden
+listen faktisk bærer.)
 
-Databaselaget teller nå 1220 pgTAP-assertions over 37 testfiler.
+Databaselaget teller nå 1256 pgTAP-assertions over 38 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1548,11 +1553,11 @@ rettighet som allerede finnes, lesbar for den som har den.
 Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
 
 1. **Enum kontra oppslagstabell — utsatt, og gjort billigere å utsette.** Det finnes
-   38 enum-typer, fordelt på de seksten migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
-   007, 008, 007a, 005a, 005b, 007b, 003a, 008a og 007c — i filrekkefølge, ikke i
-   nummerrekkefølge — med henholdsvis 1, 6, 11, 7, 10, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0 og 0.
+   38 enum-typer, fordelt på de sytten migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
+   007, 008, 007a, 005a, 005b, 007b, 003a, 008a, 007c og 005c — i filrekkefølge, ikke i
+   nummerrekkefølge — med henholdsvis 1, 6, 11, 7, 10, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 og 0.
    Tallet er kontrollert mot kilden (`grep -cE '^create type ' supabase/migrations/*.sql`) og
-   mot databasen. Alle seksten ledd er nå oppgitt eksplisitt framfor å la de siste hvile på
+   mot databasen. Alle sytten ledd er nå oppgitt eksplisitt framfor å la de siste hvile på
    restpåstanden i `scripts/verify-counts.sh`; det er den formen vakten kontrollerer
    strengest. Verken 005a, 005b, 007b eller 003a legger til enum-typer: den første
    registrerer én rad i et register som allerede finnes, den andre knytter og tildeler, den
@@ -1562,7 +1567,8 @@ Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
    som `^create type ` ikke fanger og ikke skal fange: det er en ny verdi, ikke en ny type.
    007c oppretter ingen egen enum-type av samme grunn som 007, 007a og 007b: den kaster
    eksisterende vokabularer til `text` i parameterlisten, av en grunn den selv forklarer
-   (§74.23).
+   (§74.23). 005c oppretter heller ingen: den skriver én rad i medlemskapsmodellen og bruker
+   `workflow.app_role`, som migrasjon 001 opprettet.
    Viewene caster enum-kolonner til `text`, så den offentlige kontrakten er en streng
    fra et dokumentert vokabular, ikke PostgreSQL-typen. Et senere bytte til
    oppslagstabeller er dermed ikke en brytende API-endring. Castingen sparer også
@@ -1634,7 +1640,7 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Katalogstatusen på et virkestoff vises ikke i klinikerflaten | `api.published_drugs.status` bærer `active`, `historical` eller `withdrawn`, men beskriver Antideps forvaltning av virkestoffet og ikke markedsstatus i Norge — det står eksplisitt i kommentaren på `catalog.drug_status`. «Aktiv» ved siden av et virkestoffnavn ville blitt lest som det siste, og §58 holder workflow-status utenfor klinikerflaten, så verdien er utelatt. Prisen er at en kliniker ikke kan se at Antidep ikke lenger vedlikeholder et virkestoff det står publiserte påstander om | Det første virkestoffet med publiserte påstander og status ulik `active`. Da må vokabularet lukkes og få kjøretidskontroll (§74.12 punkt 3), og ordlyden må navngi Antidep som subjekt framfor å se ut som en markedsstatus |
 | `api.my_roles` kan ikke skille en utløpt rolletildeling fra ingen tildeling | Viewet viser bare tildelinger som gjelder nå, og det er riktig som autorisasjonssvar: begge tilfellene betyr «ingen rettighet nå». Som *forklaring* er de forskjellige. En reviewer hvis tildeling utløp i går, får se «du har ingen roller» uten at noe sier hvorfor, og kan ikke skille det fra aldri å ha hatt en. Radgrensen i RLS er allerede eierskap og ikke gyldighet, nettopp for at en historikkprojeksjon skal være mulig senere uten å røre policyen | Den første adminskjermen som skal forklare hvorfor en rettighet mangler. Da hører det til et eget `api`-view over kallerens egen rollehistorikk, ikke til en oppmyking av `api.my_roles`: å blande gjeldende og utløpte rettigheter i ett svar er nettopp den sammenblandingen viewet finnes for å hindre |
 | `api.my_roles.scope_id` kan ikke slås opp til en etikett | En avgrenset rolletildeling viser hvilken *type* den er avgrenset til (`scope_type`), men ikke hvilket klinisk begrep. `catalog.clinical_concepts` er bare lesbar for klientrollene gjennom publiseringspredikatet i migrasjon 007, så et begrep uten publiserte påstander under seg ville gitt en tom etikett ved siden av en reell avgrensning — altså en avgrensning som så ut som ingen, og det er den farligste retningen å ta feil i. Derfor er etiketten utelatt framfor å være noen ganger tom. Prisen er at en klient foreløpig ikke kan navngi avgrensningen. Samme form som `superseded_by_source_id` over: en identitet klienten ikke kan slå opp, er ikke et svar | Den første avgrensede rolletildelingen i faktisk bruk — i dag er redaktørens tildeling uavgrenset (§74.20). Migrasjonen må ta stilling til hva som vises når begrepet ikke er lesbar for kalleren, og det er en tilgangsbeslutning og ikke en projeksjonsdetalj |
-| Kompetansekravet for redaktørrollen er ikke definert, og redaktøren er utpekt av seg selv | `ANTIDEP_CONSTITUTION.md` §12 krever en «navngitt kvalifisert redaktør», men ingenting definerer hva som gjør noen kvalifisert. `CONTENT_GOVERNANCE.md` §11 legger nettopp det til Clinical Lead — «definere hvilke kompetansekrav som gjelder for reviewer-scope» — og Antidep har ingen Clinical Lead. Migrasjon 005a registrerer derfor en redaktør hvis utpeking hviler på prosjekteierrollen, ikke på et kontrollert kompetansekrav, og som er utpekt av seg selv. Samme person er dessuten prosjekteier og eneste faglige godkjenner; §45 og §46 ber om at en slik profesjonell binding registreres, og modellen har ingen kolonne for det noe sted. `workflow.user_roles.grant_reason` er i dag det eneste feltet en kvalifikasjon kan skrives i, og det er fritekst på tildelingen og ikke på personen. §72 sitt krav om at høyrisikoinnhold reviewes av noen som ikke var hovedforfatter, er innfridd bare fordi forfatteren er en KI-aktør | Beslutningen om hvem som er Clinical Lead, og migrasjonen som tildeler `reviewer`-rollen: den må skrive kvalifikasjonen inn i `grant_reason` uansett, og er dermed første sted hullet blir konkret. Skal lukkes før den første publiseringen av klinisk innhold — en godkjenning gitt under et udefinert kompetansekrav er ikke etterprøvbar (§14) |
+| Kompetansekravet for redaktørrollen er ikke definert, og redaktøren er utpekt av seg selv | `ANTIDEP_CONSTITUTION.md` §12 krever en «navngitt kvalifisert redaktør», men ingenting definerer hva som gjør noen kvalifisert. `CONTENT_GOVERNANCE.md` §11 legger nettopp det til Clinical Lead — «definere hvilke kompetansekrav som gjelder for reviewer-scope» — og Antidep har ingen Clinical Lead. Migrasjon 005a registrerer derfor en redaktør hvis utpeking hviler på prosjekteierrollen, ikke på et kontrollert kompetansekrav, og som er utpekt av seg selv. Samme person er dessuten prosjekteier og eneste faglige godkjenner; §45 og §46 ber om at en slik profesjonell binding registreres, og modellen har ingen kolonne for det noe sted. `workflow.user_roles.grant_reason` er i dag det eneste feltet en kvalifikasjon kan skrives i, og det er fritekst på tildelingen og ikke på personen. §72 sitt krav om at høyrisikoinnhold reviewes av noen som ikke var hovedforfatter, er innfridd bare fordi forfatteren er en KI-aktør. Migrasjon 005c gjør den delen konkret: med `editor` ved siden av `reviewer` kan redaktøren selv være forfatter av innholdet vedkommende er eneste godkjenner for, og da hviler `CONTENT_GOVERNANCE.md` §5 ikke lenger på at forfatteren tilfeldigvis er en maskin | Beslutningen om hvem som er Clinical Lead, og migrasjonene som tildeler rollene: begge må skrive kvalifikasjonen inn i `grant_reason` uansett, og er dermed første sted hullet blir konkret. `reviewer` ble tildelt i 005b, `editor` i 005c, og begge begrunnelsene viser til denne gjeldsposten framfor å påstå en kvalifikasjon Antidep har kontrollert. Skal lukkes før den første publiseringen av klinisk innhold — en godkjenning gitt under et udefinert kompetansekrav er ikke etterprøvbar (§14) |
 
 ### 74.8 Gjeld innfridd i korreksjonsmigrasjon 006a
 
@@ -3813,6 +3819,118 @@ claim-verifikasjonene og selve godkjenningen. Denne PR-en lukker ingen av dem. R
 sin admin-workflow — EvidenceItem-registrering, ClaimRevision, evidensverifikasjon og
 claim-verifikasjon, review-beslutning, publisering — er ikke bygget, og hver del hører til sin
 egen PR (§51).
+
+---
+
+### 74.25 Hva tildelingen av editor-rollen innførte
+
+Migrasjon 005c tildeler redaktørkontoen en uscopet `editor`-rolle — retten til å registrere
+kilder og evidens som *forslag*. Det er den ene raden som manglet for at den kontrollerte
+skriveveien fra migrasjon 007c skulle kunne brukes av noen (GitHub-issue 36, §74.24). Ikke noe
+mer av kjeden: EvidenceItem, ClaimRevision, verifikasjon, review og publisering hører fortsatt
+til hver sin senere PR (§51).
+
+**Begrunnelsen for selvtildelingen er skrevet på nytt, ikke arvet fra 005b.** `reviewer` er
+faglig godkjenningsrett, og selvtildelingen av den hviler på ANTIDEP_CONSTITUTION.md §12:
+prosjekteieren *er* den navngitte kvalifiserte redaktøren, og det finnes ingen høyere
+menneskelig instans i basen. `editor` er en annen rett med en annen terskel, og terskelen
+følger av hva rollen kan utrette alene: ingenting. En editor kan registrere, men ikke godkjenne
+og ikke publisere — `workflow.enforce_reviewer_qualification()` leser `reviewer`,
+`knowledge.assert_publisher_authorized(uuid, uuid)` leser `publisher`, og publiseringsgaten i
+migrasjon 006 stiller sju krav ingen rolletildeling kan innfri. En selvtildelt `editor` utvider
+altså ikke den faglige autoriteten prosjekteieren allerede har. Begrunnelsen står i
+`grant_reason` på raden, og `380_source_registration_role_test.sql` krever at den er en annen
+tekst enn reviewer-tildelingens: en tildeling som arver en begrunnelse, er en tildeling ingen
+har tatt stilling til.
+
+**Det tildelingen gjør synlig, og ikke lukker.** Samme person har nå både `editor` og
+`reviewer`, altså er forfatter og godkjenner samme menneske for alt denne redaktøren selv
+registrerer. CONTENT_GOVERNANCE.md §5 krever at høyrisikoinnhold godkjennes av noen som ikke
+var hovedforfatter, og det kravet har til nå vært innfridd nærmest ved et uhell: det eneste
+innholdet i basen er skrevet av en KI-aktør. Gjeldsposten i §74.7 om det udefinerte
+kompetansekravet er utvidet med dette framfor å få en ny rad ved siden av seg — det er samme
+mangel, gjort konkret — og utløsende hendelse er fortsatt «før første publisering av klinisk
+innhold».
+
+**En ny funksjon, ikke en parameter på 005b sin.** `workflow.ensure_editor_role_grant()` gjør
+nesten det samme som `workflow.ensure_named_editor_authorization()`, og fristelsen var å gi den
+siste en `p_role`-parameter. Migrasjon 005b avviste nettopp den formen, og begrunnelsen holder
+her: en parameterisert utgave ville vært en generell «gi denne kontoen hvilken som helst
+rolle»-funksjon, altså en rettighetseskalering med et vennlig navn, der `publisher` og `admin`
+var like tilgjengelige som `editor`. Prisen er at de fire tilstandene er skrevet ned to steder.
+Den er lavere enn den ser ut: 005b eier i tillegg koblingen mellom aktørraden og brukerkontoen,
+og den er ikke gjentatt — 005c *krever* at koblingen finnes og feiler høyt hvis den ikke gjør
+det, framfor å skrive en andre kopi av logikken som kunne drevet fra originalen.
+
+**Begge grenene kjøres i CI, som for 005b.** Tildelingen er miljøavhengig etter «vei a»
+(§74.18): den skriver bare når kontoen finnes i `auth.users`, og gir ellers en `notice` og
+statusen `account_missing`. `380_source_registration_role_test.sql` kjører den negative grenen
+slik den faktisk står i en fersk stack, og den positive ved å opprette kontoen inne i
+transaksjonen som rulles tilbake — i produksjonens egen rekkefølge, med 005b sin kobling først.
+
+**Den viktigste assertionen er ikke om funksjonen, men om det den åpner.** Alt det andre kan
+være sant samtidig som redaktøren fortsatt møter «Brukeren har ikke gyldig editor-rolle» på
+`/sources/new`. Testen kaller derfor `api.create_source(...)` gjennom klientrollen
+`authenticated`, med redaktørkontoens eget JWT-subjekt, og krever at kilden blir opprettet og
+attribuert til redaktørens egen aktør. Rollegrensen prøves fra begge sider i samme del:
+reviewer-tildelingen fjernes, og med `editor` alene avvises både en reviewbeslutning og
+publiseringskontrollen, mens skriveveien fortsatt virker. Uten det siste ville de tre
+avvisningene vært forenlige med at det var `reviewer` som åpnet skjemaet.
+
+**Mutasjonstestet: fjorten mutasjoner, alle drept av den assertionen som påstår å teste dem.**
+Rollefilteret fjernet felte den som krever at reviewer, publisher og admin ikke teller som
+editor; `statement_timestamp()` byttet til `now()` felte bare `pg_sleep`-testen;
+`scope_id is null` fjernet felte bare de to om den avgrensede tildelingen; `role_ended`-grenen
+fjernet felte bare de to om at en tilbakekalling ikke gjeninnføres; koblingssjekken fjernet
+felte de to om en konto uten aktør; `auth.users`-sjekken fjernet felte den negative grenen;
+aktørsjekken fjernet felte den om en brutt migrasjonskjede; `role_not_yet_valid` fjernet felte
+bare den framtidige tildelingen; en ombyttet presedens felte de fire som skiller «gyldig nå»
+fra «har hatt»; `reviewer` skrevet i stedet for `editor` felte hele den positive stien; en
+begrunnelse uten «Selvtildeling» felte ordlydstesten; **reviewer-tildelingens begrunnelse
+kopiert inn felte nøyaktig de to assertionene som krever en egen begrunnelse**; en avgrenset
+tildeling felte den om at raden er uavgrenset; og en KI-aktør som tildeler felte de to om
+attribusjon og auditrad.
+
+**Vaktposten i `280_content_hash_serialization_test.sql` fanget en reell feil i denne PR-en.**
+Kommentaren på den nye funksjonen viste først til `api.create_source(...)` med bokstavelige
+tre punktum. Vakten som krever at enhver funksjonsreferanse i en kommentar lar seg slå opp med
+`to_regprocedure()`, leste det som en signatur og stoppet på syntaksfeil. Referansen er nå
+skrevet med full signatur, slik `knowledge.assert_publisher_authorized(uuid, uuid)` allerede er
+det andre steder. Feilen var vår, ikke vaktens: en kommentar som navngir en funksjon som ikke
+finnes, er nettopp det vakten er til for.
+
+**Det hostede prosjektet er tre migrasjoner bak `main`, og det er lest fra prosjektet selv.**
+§74.23 sin lærdom er at en påstand om et system utenfor repoet må kontrolleres på
+brukstidspunktet, og den kontrollen ga et annet svar enn ventet:
+`supabase_migrations.schema_migrations` har tretten rader og stopper på
+`20260828090000_api_caller_authorization` (007b). Migrasjonene fra `feat: add the controlled
+write path for creating a Source` — 003a, 008a og 007c — er merget i `main`, men aldri kjørt
+der. I produksjon finnes derfor verken `api.create_source(...)`,
+`knowledge.assert_editor_authorized()`, `knowledge.sources.created_by_actor_id` eller
+auditverdien `source_created`; kontrollert med `to_regprocedure()` og katalogoppslag, ikke
+antatt. `provenance.actors` har fortsatt tre rader med redaktøren knyttet til kontoen, og
+`workflow.user_roles` har fortsatt nøyaktig én rad — den uscopede `reviewer`-tildelingen fra
+005b.
+
+**Konsekvensen er at denne migrasjonen ikke alene gjør «Opprett kilde» brukbar i produksjon.**
+Fire migrasjoner må kjøres der, i tidsstempelrekkefølge — 003a, 008a, 007c og 005c — og ett
+`supabase db push` gjør alle fire i riktig rekkefølge. 005c tar da den positive grenen, fordi
+kontoen og koblingen allerede finnes. Ingenting er kjørt mot produksjon fra denne PR-en:
+migrasjonen skal være den kanoniske endringen, og en migrasjon som ennå ikke er reviewet, hører
+ikke hjemme i produksjon. `supabase db push` kan fortsatt ikke kjøres fra en agentsesjon —
+prøvd på nytt her, og den pinnede CLI-ens Bun-runtime feiler fortsatt TLS gjennom sesjonens
+HTTPS-proxy (§74.23) — så pushet må gjøres av prosjekteieren eller av en jobb med nettverk til
+`api.supabase.com`.
+
+**Bokføringen.** Raden for #38 var ført som `åpen` og er rettet til `merget`, slik konvensjonen
+i §74.2 sier at den PR-en som legger til raden under, skal gjøre. Denne PR-en fører sin egen rad
+i en egen commit, etter at PR-nummeret finnes. Setningen om filrekkefølgen er samtidig rettet:
+den påstod at «de seks siste filene bærer de seks laveste bokstavnumrene», og det stemte ikke
+mot listen den selv står ved siden av.
+
+**Hva som gjenstår.** Milepæl B mangler fortsatt tre ting (§74.4): ekstraksjonsverifikasjonene,
+claim-verifikasjonene og selve godkjenningen. Denne PR-en lukker ingen av dem, og åpner ikke
+publiseringsgaten.
 
 ---
 
