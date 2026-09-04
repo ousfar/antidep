@@ -52,7 +52,7 @@ describe('canonicalNumber', () => {
   it('leser et tall når statusen sier at kilden oppgir det', () => {
     expect(canonicalNumber({ availability: 'reported_value', value: '1.7' }, MISSING)).toEqual({
       status: 'ok',
-      value: 1.7,
+      value: '1.7',
     })
   })
 
@@ -60,15 +60,25 @@ describe('canonicalNumber', () => {
     // En norsk kliniker skriver 1,7. Se hodekommentaren i modulen.
     expect(canonicalNumber({ availability: 'reported_value', value: '1,7' }, MISSING)).toEqual({
       status: 'ok',
-      value: 1.7,
+      value: '1.7',
     })
   })
 
   it('godtar et negativt estimat: en reduksjon er en gyldig verdi', () => {
     expect(canonicalNumber({ availability: 'reported_value', value: '-0,8' }, MISSING)).toEqual({
       status: 'ok',
-      value: -0.8,
+      value: '-0.8',
     })
+  })
+
+  it('beholder tallet som tekst, framfor å gjøre det til et JS-tall', () => {
+    // PostgreSQL sin numeric er vilkårlig presis; en IEEE-754 double er ikke.
+    // Går verdien gjennom Number(), lagres og hashes noe annet enn det kilden
+    // oppgir. Se hodekommentaren i modulen.
+    const exact = '0.12345678901234567'
+    const result = canonicalNumber({ availability: 'reported_value', value: exact }, MISSING)
+    expect(result).toEqual({ status: 'ok', value: exact })
+    expect(Number(exact).toString()).not.toBe(exact)
   })
 
   it('sier fra når statusen lover en verdi som ikke er fylt ut', () => {
@@ -92,7 +102,7 @@ describe('canonicalNumber', () => {
     })
     expect(canonicalNumber({ ...draft, value: '240' }, { ...MISSING, whole: true })).toEqual({
       status: 'ok',
-      value: 240,
+      value: '240',
     })
   })
 
@@ -203,7 +213,7 @@ describe('canonicalConfidenceInterval', () => {
         upper: '2,5',
         level: '95',
       }),
-    ).toEqual({ status: 'ok', lower: 0.9, upper: 2.5, level: 95 })
+    ).toEqual({ status: 'ok', lower: '0.9', upper: '2.5', level: '95' })
   })
 
   it('sier fra når bare den ene grensen er fylt ut: en halv grense er ingen grense', () => {

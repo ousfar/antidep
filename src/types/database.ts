@@ -131,6 +131,13 @@ export type Database = {
       // som `text` og caster dem inne i kroppen. `extraction_method`,
       // `content_hash` og `created_by_actor_id` er ikke parametre: de eies av
       // databasen, ikke av kalleren.
+      //
+      // Også tallparametrene er `string`, selv om de er `numeric` og `integer`
+      // i SQL. PostgREST tar imot en JSON-streng og lar PostgreSQL gjøre
+      // casten, og da når et eksakt desimaltall fram uendret — et
+      // JavaScript-tall er en IEEE-754 double og ville avrundet et estimat med
+      // flere signifikante siffer enn den rommer. Verdiene er kontrollert på
+      // form i `lib/evidence-registration.ts` før de kommer hit.
       create_evidence_item: {
         Args: {
           p_source_id: Uuid
@@ -149,18 +156,18 @@ export type Database = {
           p_source_locator: string
           p_source_version_id?: Uuid | null
           p_population_id?: Uuid | null
-          p_sample_size?: number | null
+          p_sample_size?: string | null
           p_intervention_detail?: string | null
           p_comparator_drug_id?: Uuid | null
           p_comparator_detail?: string | null
           p_timepoint_min?: string | null
           p_timepoint_max?: string | null
           p_effect_measure?: string | null
-          p_estimate?: number | null
+          p_estimate?: string | null
           p_estimate_unit?: string | null
-          p_ci_lower?: number | null
-          p_ci_upper?: number | null
-          p_ci_level_percent?: number | null
+          p_ci_lower?: string | null
+          p_ci_upper?: string | null
+          p_ci_level_percent?: string | null
           p_limitations_text?: string | null
           p_source_quote?: string | null
         }

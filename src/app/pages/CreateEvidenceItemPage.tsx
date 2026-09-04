@@ -60,6 +60,7 @@ import {
   VOCABULARY_STATUS_LABELS,
   termText,
 } from '../../components/vocabulary-labels'
+import { describeClaimComparator } from '../../lib/claim-effect'
 import { createEvidenceItem } from '../../lib/create-evidence-item'
 import {
   fetchEditorDrugs,
@@ -112,6 +113,7 @@ import type { CreateEvidenceItemResult } from '../../lib/create-evidence-item'
 import type { EditorReadResult } from '../../lib/editor-read-model'
 import type {
   EditorDrugRow,
+  EditorEvidenceItemRow,
   EditorOutcomeRow,
   EditorPopulationRow,
   EditorSourceRow,
@@ -169,6 +171,7 @@ function SelectField({
   choices,
   onChange,
   required,
+  disabled,
 }: {
   readonly label: string
   readonly hint?: string | undefined
@@ -176,12 +179,14 @@ function SelectField({
   readonly choices: readonly Choice[]
   readonly onChange: (value: string) => void
   readonly required?: boolean | undefined
+  readonly disabled?: boolean | undefined
 }) {
   return (
     <Field hint={hint} label={label}>
       {(props) => (
         <select
           {...props}
+          disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
           required={required}
           value={value}
@@ -293,11 +298,55 @@ function AvailabilitySelect({
 // men det skal ikke se ut som alle andre valg.
 // ----------------------------------------------------------------------------
 
+/**
+ * Hva kildeversjonsfeltet sier når det ikke finnes en liste å velge fra.
+ *
+ * De fire tekstene er bevisst forskjellige. «Ingen registrert kildeversjon» er
+ * en påstand om kilden, og den skal ikke stå der svaret ennå er ukjent.
+ */
+const VERSION_PLACEHOLDERS = {
+  no_source: 'Velg kilden først',
+  loading: 'Henter kildeversjoner …',
+  error: 'Kildeversjonene kunne ikke hentes',
+  none: 'Ingen registrert kildeversjon',
+} as const
+
 const TIMEPOINT_UNIT_LABELS: Record<TimepointUnit, string> = {
   days: 'Dager',
   weeks: 'Uker',
   months: 'Måneder',
   years: 'År',
+}
+
+/**
+ * Komparatoren på ett registrert funn, som tekst.
+ *
+ * `comparator_drug_name` alene holder ikke: den er NULL både for placebo og for
+ * et armspesifikt funn, og de to er ikke det samme — `none` betyr at funnet
+ * gjelder én behandlingsarm, ikke at komparatoren er ukjent. En linje som
+ * utelot begge ville vist en placebokontrollert studie som armspesifikk.
+ *
+ * Avledningen er den samme `describeClaimComparator()` evidensdrilldownen
+ * bruker, med den samme kjøretidskontrollen: en kategori Antidep ikke kjenner
+ * blir en eksplisitt ukjent tilstand framfor å falle i en godartet gren.
+ */
+function comparatorText(row: EditorEvidenceItemRow): string {
+  const comparator = describeClaimComparator({
+    drug_id: row.intervention_drug_id,
+    comparator_kind: row.comparator_kind,
+    comparator_drug_id: row.comparator_drug_id,
+    comparator_drug_name: row.comparator_drug_name,
+  })
+  switch (comparator.kind) {
+    case 'drug':
+      return `mot ${comparator.drugName}`
+    case 'placebo':
+      return 'mot placebo'
+    case 'none':
+      return '(én behandlingsarm)'
+    case 'unknown':
+      return `(komparatoren er ikke tolkbar: «${comparator.rawComparatorKind}»)`
+  }
 }
 
 /**
@@ -467,8 +516,7 @@ function RegisteredFindings({ sourceId }: { readonly sourceId: Uuid }) {
             </p>
             <p className="evidence-registered__meta">
               {termText(readStudyDesign(row.study_design), STUDY_DESIGN_LABELS, 'studiedesign')} ·{' '}
-              {row.intervention_drug_name}
-              {row.comparator_drug_name === null ? '' : ` mot ${row.comparator_drug_name}`} ·{' '}
+              {row.intervention_drug_name} {comparatorText(row)} ·{' '}
               {termText(
                 readReportedDirection(row.reported_direction),
                 REPORTED_DIRECTION_LABELS,
@@ -674,20 +722,42 @@ function EvidenceItemForm({
     [lookups.populations],
   )
 
+  // Fire tilstander, og «laster» og «feilet» er to av dem.
+  //
+  // Uten skillet ville begge blitt rendret som «Ingen registrert kildeversjon»
+  // — samme tekst som når kilden faktisk ikke har noen — og en editor kunne
+  // registrert funnet med `source_version_id = null` mens et øyeblikksbilde
+  // fantes. Proveniensen ville da vært borte uten at noe sa fra, og
+  // `knowledge.evidence_items` er append-only, så feilen kan ikke rettes i
+  // raden etterpå. Samme regel som i lesemodellen ellers: laster må aldri kunne
+  // leses som tomt, og en feil må aldri kunne leses som fravær
+  // (ANTIDEP_CONSTITUTION.md §17, MVP_IMPLEMENTATION_PLAN.md §74.12).
+  const versionState = form.sourceId === NO_SELECTION ? { status: 'no_source' as const } : versions
+
   const versionChoices: readonly Choice[] =
-    form.sourceId === NO_SELECTION || versions.status !== 'ok'
-      ? [{ value: NO_SELECTION, label: 'Ingen registrert kildeversjon' }]
-      : [
+    versionState.status === 'ok'
+      ? [
           { value: NO_SELECTION, label: 'Ingen registrert kildeversjon' },
-          ...versions.rows.map((version) => ({
+          ...versionState.rows.map((version) => ({
             value: version.source_version_id,
             label: `${registeredAt(version.retrieved_at)} — ${version.retrieved_from}`,
           })),
         ]
+      : [{ value: NO_SELECTION, label: VERSION_PLACEHOLDERS[versionState.status] }]
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (availability.status !== 'ready') {
+      return
+    }
+
+    // Kildeversjonene må ha svart. En registrering mens oppslaget står på eller
+    // har feilet, ville sendt `source_version_id = null` uten at noen vet om
+    // det er sant — se kommentaren på `versionState`.
+    if (versionState.status === 'loading' || versionState.status === 'error') {
+      setProblem(
+        'Vent til kildeversjonene er hentet. Uten svaret er det ukjent om kilden har et registrert øyeblikksbilde funnet skal knyttes til.',
+      )
       return
     }
 
@@ -806,11 +876,24 @@ function EvidenceItemForm({
           />
           <SelectField
             choices={versionChoices}
+            disabled={versionState.status !== 'ok' && versionState.status !== 'none'}
             hint="Det hentede øyeblikksbildet ekstraksjonen er lest av. Er ingen registrert, står funnet uten en versjon å kontrolleres mot."
             label="Kildeversjon (valgfritt)"
             onChange={(sourceVersionId) => setForm({ ...form, sourceVersionId })}
             value={form.sourceVersionId}
           />
+          {versionState.status === 'error' ? (
+            <div className="knowledge-notice knowledge-notice--error" role="alert">
+              <p className="knowledge-notice__lead">
+                Antidep fikk ikke hentet kildeversjonene for denne kilden.
+              </p>
+              <p className="knowledge-notice__detail">Teknisk årsak: {versionState.message}</p>
+              <p className="knowledge-notice__caveat">
+                Funnet kan ikke registreres før oppslaget svarer: uten det er det ukjent om kilden
+                har et registrert øyeblikksbilde å knytte funnet til.
+              </p>
+            </div>
+          ) : null}
           <TextField
             hint="Side, tabell, figur eller avsnitt. Uten den kan ikke funnet kontrolleres mot originalen."
             label="Hvor i kilden står funnet?"

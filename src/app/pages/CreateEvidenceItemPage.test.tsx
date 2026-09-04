@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import {
   TEST_EDITOR_IDS,
@@ -33,10 +33,31 @@ function lastCallArgs(calls: readonly RecordedRpcCall[]): Record<string, unknown
   return calls.at(-1)?.args as Record<string, unknown> | undefined
 }
 
-function fillRequiredFields() {
+/**
+ * Velger kilden, venter til kildeversjonsoppslaget har svart, og fyller ut
+ * resten av de påkrevde feltene.
+ *
+ * Ventingen er ikke testrigging for sin egen skyld: skjemaet blokkerer
+ * innsending mens oppslaget står på, fordi et funn registrert med
+ * `source_version_id = null` før svaret er kommet, ville påstått noe ingen vet
+ * — og evidensfunn er uforanderlige.
+ */
+async function fillRequiredFields() {
+  selectSource()
+  await waitFor(() => {
+    expect(screen.getByLabelText('Kildeversjon (valgfritt)')).not.toBeDisabled()
+  })
+  fillFieldsBesidesSource()
+}
+
+function selectSource() {
   fireEvent.change(screen.getByLabelText('Kilde'), {
     target: { value: TEST_EDITOR_IDS.source },
   })
+}
+
+/** Alt utenom kilden. Brukes der kildeversjonsoppslaget med hensikt står uløst. */
+function fillFieldsBesidesSource() {
   fireEvent.change(screen.getByLabelText('Hvor i kilden står funnet?'), {
     target: { value: 'Tabell 2, side 5' },
   })
@@ -132,7 +153,7 @@ describe('null/ukjent-semantikken i skjemaet', () => {
       auth: { initialUserId: TEST_USER_IDS.a },
     })
     await screen.findByLabelText('Kilde')
-    fillRequiredFields()
+    await fillRequiredFields()
     fireEvent.change(screen.getByLabelText('Antall deltakere analysen omfatter'), {
       target: { value: 'not_measured' },
     })
@@ -157,7 +178,7 @@ describe('null/ukjent-semantikken i skjemaet', () => {
       auth: { initialUserId: TEST_USER_IDS.a },
     })
     await screen.findByLabelText('Kilde')
-    fillRequiredFields()
+    await fillRequiredFields()
     fireEvent.change(screen.getByLabelText('Tallverdi for effekten'), {
       target: { value: 'reported_value' },
     })
@@ -184,7 +205,7 @@ describe('null/ukjent-semantikken i skjemaet', () => {
     expect(labels).toContain('Ikke rapportert i kilden')
     expect(labels).not.toContain('not_measured')
 
-    fillRequiredFields()
+    await fillRequiredFields()
     fireEvent.change(status, { target: { value: 'not_applicable' } })
     submit()
 
@@ -201,7 +222,7 @@ describe('oppfølgingstid og enhet', () => {
       auth: { initialUserId: TEST_USER_IDS.a },
     })
     await screen.findByLabelText('Kilde')
-    fillRequiredFields()
+    await fillRequiredFields()
     fireEvent.change(screen.getByLabelText('Oppfølgingstid'), {
       target: { value: 'reported_value' },
     })
@@ -234,7 +255,7 @@ describe('effektmål og enhet henger sammen', () => {
     fireEvent.change(screen.getByLabelText('Effektmål'), { target: { value: 'mean_difference' } })
     expect(screen.getByLabelText('Enhet')).toBeInTheDocument()
 
-    fillRequiredFields()
+    await fillRequiredFields()
     fireEvent.change(screen.getByLabelText('Enhet'), { target: { value: 'kg' } })
     fireEvent.change(screen.getByLabelText('Tallverdi for effekten'), {
       target: { value: 'reported_value' },
@@ -244,7 +265,7 @@ describe('effektmål og enhet henger sammen', () => {
 
     await screen.findByText('Evidensfunnet er registrert.')
     expect(lastCallArgs(rpcCalls)?.['p_effect_measure']).toBe('mean_difference')
-    expect(lastCallArgs(rpcCalls)?.['p_estimate']).toBe(1.7)
+    expect(lastCallArgs(rpcCalls)?.['p_estimate']).toBe('1.7')
     expect(lastCallArgs(rpcCalls)?.['p_estimate_unit']).toBe('kg')
   })
 })
@@ -261,11 +282,66 @@ describe('komparatoren', () => {
     fireEvent.change(screen.getByLabelText('Sammenlignet med'), { target: { value: 'placebo' } })
     expect(screen.queryByLabelText('Komparatorvirkestoff')).not.toBeInTheDocument()
 
-    fillRequiredFields()
+    await fillRequiredFields()
     submit()
     await screen.findByText('Evidensfunnet er registrert.')
     expect(lastCallArgs(rpcCalls)?.['p_comparator_kind']).toBe('placebo')
     expect(lastCallArgs(rpcCalls)?.['p_comparator_drug_id']).toBeNull()
+  })
+})
+
+describe('kildeversjonene må ha svart før funnet kan registreres', () => {
+  it('skiller «henter» fra «ingen registrert kildeversjon», og blokkerer innsending', async () => {
+    // De to må ikke se like ut: er oppslaget ikke ferdig, er det ukjent om
+    // kilden har et øyeblikksbilde — og et funn registrert med NULL kan ikke
+    // rettes etterpå, fordi evidensfunn er uforanderlige.
+    const { rpcCalls } = renderRoute('/evidence/new', {
+      api: { ...LOOKUPS, editor_source_versions: { pending: true } },
+      auth: { initialUserId: TEST_USER_IDS.a },
+    })
+    await screen.findByLabelText('Kilde')
+    selectSource()
+    fillFieldsBesidesSource()
+
+    const version = await screen.findByLabelText('Kildeversjon (valgfritt)')
+    expect(version).toBeDisabled()
+    expect(version).toHaveDisplayValue('Henter kildeversjoner …')
+
+    submit()
+    expect(await screen.findByText(/Vent til kildeversjonene er hentet/)).toBeInTheDocument()
+    expect(rpcCalls).toEqual([])
+  })
+
+  it('viser en feil i oppslaget som en feil, og blokkerer innsending', async () => {
+    const { rpcCalls } = renderRoute('/evidence/new', {
+      api: {
+        ...LOOKUPS,
+        editor_source_versions: { error: 'permission denied for view editor_source_versions' },
+      },
+      auth: { initialUserId: TEST_USER_IDS.a },
+    })
+    await screen.findByLabelText('Kilde')
+    selectSource()
+    fillFieldsBesidesSource()
+
+    expect(
+      await screen.findByText('Antidep fikk ikke hentet kildeversjonene for denne kilden.'),
+    ).toBeInTheDocument()
+    submit()
+    expect(await screen.findByText(/Vent til kildeversjonene er hentet/)).toBeInTheDocument()
+    expect(rpcCalls).toEqual([])
+  })
+
+  it('sier «ingen registrert kildeversjon» bare når kilden faktisk ikke har noen', async () => {
+    renderRoute('/evidence/new', {
+      api: { ...LOOKUPS, editor_source_versions: [] },
+      auth: { initialUserId: TEST_USER_IDS.a },
+    })
+    await screen.findByLabelText('Kilde')
+    selectSource()
+    const version = await screen.findByLabelText('Kildeversjon (valgfritt)')
+    expect(version).toHaveDisplayValue('Ingen registrert kildeversjon')
+    expect(version).not.toBeDisabled()
   })
 })
 
@@ -276,7 +352,7 @@ describe('bekreftelsen', () => {
       auth: { initialUserId: TEST_USER_IDS.a },
     })
     await screen.findByLabelText('Kilde')
-    fillRequiredFields()
+    await fillRequiredFields()
     submit()
 
     expect(await screen.findByText('Evidensfunnet er registrert.')).toBeInTheDocument()
@@ -290,13 +366,63 @@ describe('bekreftelsen', () => {
     expect(screen.getByText(/Registrert manuelt/)).toBeInTheDocument()
   })
 
+  it('skiller placebo fra et armspesifikt funn i listen', async () => {
+    // comparator_drug_name er NULL for begge. Uten kategorien ville en
+    // placebokontrollert studie sett ut som et armspesifikt funn.
+    renderRoute('/evidence/new', {
+      api: {
+        ...LOOKUPS,
+        editor_evidence_items: [
+          editorEvidenceItemRow({ comparator_kind: 'placebo' }),
+          editorEvidenceItemRow({
+            evidence_item_id: '66666666-6666-4666-8666-333333333333',
+            comparator_kind: 'none',
+            outcome_detail: 'Armspesifikt funn.',
+          }),
+        ],
+      },
+      auth: { initialUserId: TEST_USER_IDS.a },
+    })
+    await screen.findByLabelText('Kilde')
+    await fillRequiredFields()
+    submit()
+
+    // Avgrenset til listen: «én behandlingsarm» står også som etikett på
+    // komparatorvalget i skjemaet under, og det er en annen påstand.
+    const registered = within(await screen.findByRole('list'))
+    expect(registered.getByText(/mot placebo/)).toBeInTheDocument()
+    expect(registered.getByText(/én behandlingsarm/)).toBeInTheDocument()
+  })
+
+  it('navngir komparatorvirkestoffet når kontrasten er et virkestoff', async () => {
+    renderRoute('/evidence/new', {
+      api: {
+        ...LOOKUPS,
+        editor_evidence_items: [
+          editorEvidenceItemRow({
+            comparator_kind: 'drug',
+            comparator_drug_id: '11111111-1111-4111-8111-222222222222',
+            comparator_drug_name: 'virkestoff b',
+          }),
+        ],
+      },
+      auth: { initialUserId: TEST_USER_IDS.a },
+    })
+    await screen.findByLabelText('Kilde')
+    await fillRequiredFields()
+    submit()
+
+    const registered = within(await screen.findByRole('list'))
+    expect(registered.getByText(/mot virkestoff b/)).toBeInTheDocument()
+  })
+
   it('sier at funnet er registrert, ikke kontrollert eller publisert', async () => {
     renderRoute('/evidence/new', {
       api: { ...LOOKUPS, editor_evidence_items: [editorEvidenceItemRow()] },
       auth: { initialUserId: TEST_USER_IDS.a },
     })
     await screen.findByLabelText('Kilde')
-    fillRequiredFields()
+    await fillRequiredFields()
     submit()
 
     expect(
@@ -307,7 +433,7 @@ describe('bekreftelsen', () => {
   it('lar kilden stå valgt, slik at neste funn fra samme publikasjon er ett klikk unna', async () => {
     renderRoute('/evidence/new', { api: LOOKUPS, auth: { initialUserId: TEST_USER_IDS.a } })
     await screen.findByLabelText('Kilde')
-    fillRequiredFields()
+    await fillRequiredFields()
     submit()
 
     await screen.findByText('Evidensfunnet er registrert.')
@@ -326,7 +452,7 @@ describe('bekreftelsen', () => {
       auth: { initialUserId: TEST_USER_IDS.a },
     })
     await screen.findByLabelText('Kilde')
-    fillRequiredFields()
+    await fillRequiredFields()
     submit()
 
     expect(await screen.findByText('Evidensfunnet ble ikke registrert.')).toBeInTheDocument()
@@ -366,9 +492,7 @@ describe('kildevalget', () => {
       auth: { initialUserId: TEST_USER_IDS.a },
     })
     await screen.findByLabelText('Kilde')
-    fireEvent.change(screen.getByLabelText('Kilde'), {
-      target: { value: TEST_EDITOR_IDS.source },
-    })
+    selectSource()
 
     const version = await screen.findByLabelText('Kildeversjon (valgfritt)')
     const labels = within(version)

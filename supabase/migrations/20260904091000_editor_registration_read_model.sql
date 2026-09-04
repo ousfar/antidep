@@ -313,8 +313,10 @@ select
   s.title                   as source_title,
   e.source_version_id       as source_version_id,
   e.design_code::text       as study_design,
+  e.intervention_drug_id    as intervention_drug_id,
   d.canonical_name          as intervention_drug_name,
   e.comparator_kind::text   as comparator_kind,
+  e.comparator_drug_id      as comparator_drug_id,
   cd.canonical_name         as comparator_drug_name,
   oc.canonical_label        as outcome_label,
   e.outcome_detail          as outcome_detail,
@@ -339,7 +341,11 @@ comment on column api.editor_evidence_items.study_design is
 comment on column api.editor_evidence_items.comparator_kind is
   'Kontrasten i selve funnet, som tekst. none betyr at funnet er armspesifikt, ikke at komparatoren er ukjent.';
 comment on column api.editor_evidence_items.comparator_drug_name is
-  'Komparatorvirkestoffet, eller NULL når kontrasten ikke er et virkestoff. NULL sammen med comparator_kind = drug er umulig (evidence_items_comparator_drug_check).';
+  'Komparatorvirkestoffet, eller NULL når kontrasten ikke er et virkestoff. NULL sammen med comparator_kind = drug er umulig (evidence_items_comparator_drug_check). Et NULL her betyr derfor ikke «ingen komparator» — det leses av comparator_kind, som skiller placebo fra et armspesifikt funn.';
+comment on column api.editor_evidence_items.intervention_drug_id is
+  'Virkestoffet funnet gjelder. Identiteten og ikke bare navnet, slik at en klient kan kontrollere at komparatoren ikke er intervensjonen selv: to katalogoppføringer kan bære samme visningsnavn.';
+comment on column api.editor_evidence_items.comparator_drug_id is
+  'Komparatorvirkestoffets identitet, eller NULL. Står og faller sammen med comparator_drug_name.';
 comment on column api.editor_evidence_items.reported_direction is
   'Retningen kilden selv rapporterer, som tekst. Et annet vokabular enn påstandens retning: det har den fjerde verdien not_stated, og no_clear_difference er et resultat og ikke et fravær av data.';
 comment on column api.editor_evidence_items.source_locator is

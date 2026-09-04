@@ -696,10 +696,12 @@ export type EditorEvidenceItemRow = {
   source_version_id: Uuid | null
   /** Designet for dette funnet, ikke for dokumentet det står i. */
   study_design: StudyDesign
+  intervention_drug_id: Uuid
   intervention_drug_name: string
   /** `none` betyr at funnet er armspesifikt, ikke at komparatoren er ukjent. */
   comparator_kind: ComparatorKind
-  /** `null` når kontrasten ikke er et virkestoff. */
+  /** `null` når kontrasten ikke er et virkestoff. Da sier `comparator_kind` hva den er. */
+  comparator_drug_id: Uuid | null
   comparator_drug_name: string | null
   outcome_label: string
   outcome_detail: string

@@ -17,6 +17,17 @@
 // avgrenset editor-tildeling dekker endepunktet funnet gjelder.
 //
 // ----------------------------------------------------------------------------
+// Tallene sendes som tekst, ikke som JavaScript-tall
+//
+// `estimate`, konfidensgrensene og utvalgsstørrelsen er strenger her, og de er
+// allerede kontrollert på form av `evidence-registration.ts`. Grunnen er at
+// PostgreSQL sin `numeric` er vilkårlig presis mens et JavaScript-tall er en
+// IEEE-754 double: et estimat med flere signifikante siffer enn en double
+// rommer, ville blitt avrundet på vei inn og lagret — og hashet — som en annen
+// verdi enn kilden oppgir. PostgREST tar imot en JSON-streng for en `numeric`-
+// eller `integer`-parameter og lar PostgreSQL gjøre casten; prøvd mot stacken.
+//
+// ----------------------------------------------------------------------------
 // Fire felter finnes ikke i inputen, og det er med hensikt
 //
 //   created_by_actor_id  utledes av den innloggede brukeren, i databasen
@@ -48,7 +59,7 @@ export interface CreateEvidenceItemInput {
   readonly populationAvailability: string
   readonly populationDetail: string
 
-  readonly sampleSize: number | null
+  readonly sampleSize: string | null
   readonly sampleSizeAvailability: string
 
   readonly interventionDrugId: Uuid
@@ -65,12 +76,12 @@ export interface CreateEvidenceItemInput {
 
   readonly reportedDirection: string
   readonly effectMeasure: string | null
-  readonly estimate: number | null
+  readonly estimate: string | null
   readonly estimateUnit: string | null
   readonly estimateAvailability: string
-  readonly ciLower: number | null
-  readonly ciUpper: number | null
-  readonly ciLevelPercent: number | null
+  readonly ciLower: string | null
+  readonly ciUpper: string | null
+  readonly ciLevelPercent: string | null
   readonly confidenceIntervalAvailability: string
 
   readonly limitationsText: string | null

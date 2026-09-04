@@ -67,7 +67,7 @@ describe('createEvidenceItem', () => {
       sourceVersionId: '88888888-8888-4888-8888-222222222222',
       populationId: '77777777-7777-4777-8777-111111111111',
       populationAvailability: 'reported_value',
-      sampleSize: 240,
+      sampleSize: '240',
       sampleSizeAvailability: 'reported_value',
       interventionDetail: '50 mg daglig',
       comparatorKind: 'drug',
@@ -78,12 +78,12 @@ describe('createEvidenceItem', () => {
       timepointAvailability: 'reported_value',
       reportedDirection: 'increase',
       effectMeasure: 'mean_difference',
-      estimate: 1.7,
+      estimate: '1.7',
       estimateUnit: 'kg',
       estimateAvailability: 'reported_value',
-      ciLower: 0.9,
-      ciUpper: 2.5,
-      ciLevelPercent: 95,
+      ciLower: '0.9',
+      ciUpper: '2.5',
+      ciLevelPercent: '95',
       confidenceIntervalAvailability: 'reported_value',
       limitationsText: 'Åpen etikett i den ene armen.',
       sourceQuote: 'Mean difference 1.7 kg.',
@@ -100,7 +100,7 @@ describe('createEvidenceItem', () => {
           p_population_id: '77777777-7777-4777-8777-111111111111',
           p_population_availability: 'reported_value',
           p_population_detail: 'Populasjonen er ikke beskrevet i kilden.',
-          p_sample_size: 240,
+          p_sample_size: '240',
           p_sample_size_availability: 'reported_value',
           p_intervention_drug_id: DRUG,
           p_intervention_detail: '50 mg daglig',
@@ -114,12 +114,12 @@ describe('createEvidenceItem', () => {
           p_timepoint_availability: 'reported_value',
           p_reported_direction: 'increase',
           p_effect_measure: 'mean_difference',
-          p_estimate: 1.7,
+          p_estimate: '1.7',
           p_estimate_unit: 'kg',
           p_estimate_availability: 'reported_value',
-          p_ci_lower: 0.9,
-          p_ci_upper: 2.5,
-          p_ci_level_percent: 95,
+          p_ci_lower: '0.9',
+          p_ci_upper: '2.5',
+          p_ci_level_percent: '95',
           p_confidence_interval_availability: 'reported_value',
           p_limitations_text: 'Åpen etikett i den ene armen.',
           p_source_locator: 'Avsnitt 1',
@@ -127,6 +127,28 @@ describe('createEvidenceItem', () => {
         },
       },
     ])
+  })
+
+  it('sender tallene som tekst, slik at et eksakt desimaltall når fram uendret', async () => {
+    // Et JS-tall er en IEEE-754 double: Number('0.12345678901234567') er
+    // 0.12345678901234566, og en avrundet verdi ville blitt lagret og hashet som
+    // noe annet enn det kilden oppgir. PostgreSQL sin numeric er vilkårlig
+    // presis, og PostgREST caster en JSON-streng til den.
+    const exact = '0.12345678901234567'
+    const { client, calls } = fakeClient({ data: 'id', error: null })
+
+    await createEvidenceItem(client, {
+      ...MINIMAL_INPUT,
+      estimateAvailability: 'reported_value',
+      effectMeasure: 'mean_difference',
+      estimateUnit: 'kg',
+      estimate: exact,
+    })
+
+    const args = calls[0]?.args as Record<string, unknown>
+    expect(args['p_estimate']).toBe(exact)
+    expect(typeof args['p_estimate']).toBe('string')
+    expect(Number(exact).toString()).not.toBe(exact)
   })
 
   it('sender ingen ekstraksjonsmetode, ingen hash og ingen aktør', async () => {

@@ -38,6 +38,24 @@
 // tallet slik hen skriver det ellers, ville fått «fyll inn verdien» tilbake
 // uten å se hva som var galt. Komma og punktum godtas derfor begge, og
 // oversettes her.
+//
+// ----------------------------------------------------------------------------
+// Og tallet blir *aldri* et JavaScript-tall
+//
+// Kanoniseringen returnerer den validerte teksten, ikke resultatet av
+// `Number(...)`. Grunnen er at PostgreSQL sin `numeric` er vilkårlig presis
+// mens et JavaScript-tall er en IEEE-754 double: `Number('0.12345678901234567')`
+// er `0.12345678901234566`, og et estimat som ble avrundet på vei inn ville
+// blitt lagret — og hashet — som en annen verdi enn den kilden oppgir.
+//
+// Prøvd mot stacken, ikke antatt: PostgREST tar imot en JSON-streng for en
+// `numeric`- eller `integer`-parameter og lar PostgreSQL gjøre casten, og
+// verdien over kom da tilbake fra databasen uendret. Sendt som JSON-tall ble
+// den avrundet.
+//
+// Tallet er allerede kontrollert på form her, så strengen som sendes videre er
+// et gyldig desimaltall — ikke vilkårlig tekst. Selve tolkningen gjør
+// databasen, som den gjør for alle de andre feltene (§43, §57).
 // ============================================================================
 
 import { AVAILABILITY_PARTITION } from './evidence-item'
@@ -64,14 +82,15 @@ type Canonical<Value> =
 const DECIMAL_SHAPE = /^-?\d+(\.\d+)?$/
 const WHOLE_NUMBER_SHAPE = /^\d+$/
 
-function toDecimal(raw: string): number | null {
+/** Den validerte teksten, aldri et JS-tall. Se hodekommentaren for hvorfor. */
+function toDecimalText(raw: string): string | null {
   const normalised = raw.trim().replace(',', '.')
-  return DECIMAL_SHAPE.test(normalised) ? Number(normalised) : null
+  return DECIMAL_SHAPE.test(normalised) ? normalised : null
 }
 
-function toWholeNumber(raw: string): number | null {
+function toWholeNumberText(raw: string): string | null {
   const normalised = raw.trim()
-  return WHOLE_NUMBER_SHAPE.test(normalised) ? Number(normalised) : null
+  return WHOLE_NUMBER_SHAPE.test(normalised) ? normalised : null
 }
 
 // ----------------------------------------------------------------------------
@@ -90,7 +109,7 @@ export const EMPTY_NUMBER_DRAFT: EvidenceNumberDraft = {
   value: '',
 }
 
-export type CanonicalNumber = Canonical<{ readonly value: number | null }>
+export type CanonicalNumber = Canonical<{ readonly value: string | null }>
 
 /**
  * Tallet skjemaet skal sende, eller beskjed om at det mangler.
@@ -107,7 +126,8 @@ export function canonicalNumber(
     // stå igjen i inputen fra et tidligere valg.
     return { status: 'ok', value: null }
   }
-  const parsed = options.whole === true ? toWholeNumber(draft.value) : toDecimal(draft.value)
+  const parsed =
+    options.whole === true ? toWholeNumberText(draft.value) : toDecimalText(draft.value)
   if (parsed === null) {
     return { status: 'incomplete', message: options.missingMessage }
   }
@@ -187,7 +207,7 @@ export function canonicalTimepoint(draft: EvidenceTimepointDraft): CanonicalTime
     // (evidence_items_timepoint_pairing_check).
     return { status: 'ok', min: null, max: null }
   }
-  const from = toDecimal(draft.from)
+  const from = toDecimalText(draft.from)
   if (from === null) {
     return {
       status: 'incomplete',
@@ -198,7 +218,7 @@ export function canonicalTimepoint(draft: EvidenceTimepointDraft): CanonicalTime
     const single = `${from} ${draft.unit}`
     return { status: 'ok', min: single, max: single }
   }
-  const to = toDecimal(draft.to)
+  const to = toDecimalText(draft.to)
   if (to === null) {
     return {
       status: 'incomplete',
@@ -234,9 +254,9 @@ export const EMPTY_CONFIDENCE_INTERVAL_DRAFT: EvidenceConfidenceIntervalDraft = 
 }
 
 export type CanonicalConfidenceInterval = Canonical<{
-  readonly lower: number | null
-  readonly upper: number | null
-  readonly level: number | null
+  readonly lower: string | null
+  readonly upper: string | null
+  readonly level: string | null
 }>
 
 export function canonicalConfidenceInterval(
@@ -245,9 +265,9 @@ export function canonicalConfidenceInterval(
   if (!availabilityHasValue(draft.availability)) {
     return { status: 'ok', lower: null, upper: null, level: null }
   }
-  const lower = toDecimal(draft.lower)
-  const upper = toDecimal(draft.upper)
-  const level = toDecimal(draft.level)
+  const lower = toDecimalText(draft.lower)
+  const upper = toDecimalText(draft.upper)
+  const level = toDecimalText(draft.level)
   if (lower === null || upper === null) {
     return {
       status: 'incomplete',
