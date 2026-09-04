@@ -1244,9 +1244,9 @@ historikk (§71). **Gjeldende status står i §74.**
 ## 74. Status etter kildevisningen
 
 **Oppdatert:** 4. september 2026 (etter at de fire gjenstående migrasjonene faktisk ble kjørt
-mot det hostede prosjektet, slik at «Opprett kilde» virker i produksjon — se §74.26; forrige
-oppdatering etter `db: grant the editor role for source registration`, som tildelte
-redaktørkontoen `editor`-rollen, §74.25)
+mot det hostede prosjektet, slik at skriveveien for å opprette en kilde er deployet der og
+redaktøren er autorisert til å bruke den — se §74.26; forrige oppdatering etter `db: grant the
+editor role for source registration`, som tildelte redaktørkontoen `editor`-rollen, §74.25)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1311,37 +1311,37 @@ påstandskort til en visning som faktisk svarer.
 ### 74.2 Faktisk PR-rekkefølge
 
 ```text
-PR A  chore: bootstrap Antidep web app                                           (#9)   merget
-PR B  db: add schema and security foundation                                     (#10)  merget   migrasjon 001
-PR C  db: add drug and clinical concept catalog                                  (#11)  merget   migrasjon 002
-PR D  db: add sources and evidence items                                         (#12)  merget   migrasjon 003
-PR E  db: add claims and evidence assessments                                    (#13)  merget   migrasjon 004
-PR F  db: add review and provenance                                              (#14)  merget   migrasjon 005
-PR G  db: add publication events and gate                                        (#15)  merget   migrasjon 006
-      docs: record implementation status after migration 006                     (#16)  merget   ingen migrasjon
-      db: make evidence item content hash unambiguous                            (#17)  merget   migrasjon 006a
-      db: add api published read model                                           (#18)  merget   migrasjon 007
-      ci: verify the numeric claims in the plan                                  (#19)  merget   ingen migrasjon
-      db: add audit events                                                       (#20)  merget   migrasjon 008
-      db: expose publication and review timestamps in api                        (#21)  merget   migrasjon 007a
-      feat: add published read model client                                      (#22)  merget   ingen migrasjon
-      feat: add claim card and certainty display                                 (#23)  merget   ingen migrasjon
-      feat: add routing and first clinician pages                                (#24)  merget   ingen migrasjon
-      feat: add the claim evidence view                                          (#25)  merget   ingen migrasjon
-      feat: add the source view                                                  (#26)  merget   ingen migrasjon
-      db: register the named qualified editor                                    (#27)  merget   migrasjon 005a
-      docs: correct the record of the hosted Supabase project                    (#28)  merget   ingen migrasjon
-      test: verify the api column contract                                       (#29)  merget   ingen migrasjon
-      docs: clarify collaboration and reporting rules                            (#30)  merget   ingen migrasjon
-      db: authorize the named qualified editor                                   (#31)  merget   migrasjon 005b
-      db: expose the caller's own actor and roles                                (#32)  merget   migrasjon 007b
-      docs: mark #32 as merged in the PR log                                     (#33)  merget   ingen migrasjon
-      feat: add sign-in and my access                                            (#34)  merget   ingen migrasjon
-      docs: record that the hosted project is migrated and api is exposed        (#37)  merget   ingen migrasjon
-      feat: add the controlled write path for creating a Source                  (#35)  merget   migrasjon 003a, 008a, 007c
-      docs: mark #34, #35 and #37 as merged in the PR log                        (#38)  merget   ingen migrasjon
-      db: grant the editor role for source registration                          (#39)  merget   migrasjon 005c
-      docs: record that the hosted project is in sync and source creation works  (#41)  åpen     ingen migrasjon
+PR A  chore: bootstrap Antidep web app                                      (#9)   merget
+PR B  db: add schema and security foundation                                (#10)  merget   migrasjon 001
+PR C  db: add drug and clinical concept catalog                             (#11)  merget   migrasjon 002
+PR D  db: add sources and evidence items                                    (#12)  merget   migrasjon 003
+PR E  db: add claims and evidence assessments                               (#13)  merget   migrasjon 004
+PR F  db: add review and provenance                                         (#14)  merget   migrasjon 005
+PR G  db: add publication events and gate                                   (#15)  merget   migrasjon 006
+      docs: record implementation status after migration 006                (#16)  merget   ingen migrasjon
+      db: make evidence item content hash unambiguous                       (#17)  merget   migrasjon 006a
+      db: add api published read model                                      (#18)  merget   migrasjon 007
+      ci: verify the numeric claims in the plan                             (#19)  merget   ingen migrasjon
+      db: add audit events                                                  (#20)  merget   migrasjon 008
+      db: expose publication and review timestamps in api                   (#21)  merget   migrasjon 007a
+      feat: add published read model client                                 (#22)  merget   ingen migrasjon
+      feat: add claim card and certainty display                            (#23)  merget   ingen migrasjon
+      feat: add routing and first clinician pages                           (#24)  merget   ingen migrasjon
+      feat: add the claim evidence view                                     (#25)  merget   ingen migrasjon
+      feat: add the source view                                             (#26)  merget   ingen migrasjon
+      db: register the named qualified editor                               (#27)  merget   migrasjon 005a
+      docs: correct the record of the hosted Supabase project               (#28)  merget   ingen migrasjon
+      test: verify the api column contract                                  (#29)  merget   ingen migrasjon
+      docs: clarify collaboration and reporting rules                       (#30)  merget   ingen migrasjon
+      db: authorize the named qualified editor                              (#31)  merget   migrasjon 005b
+      db: expose the caller's own actor and roles                           (#32)  merget   migrasjon 007b
+      docs: mark #32 as merged in the PR log                                (#33)  merget   ingen migrasjon
+      feat: add sign-in and my access                                       (#34)  merget   ingen migrasjon
+      docs: record that the hosted project is migrated and api is exposed   (#37)  merget   ingen migrasjon
+      feat: add the controlled write path for creating a Source             (#35)  merget   migrasjon 003a, 008a, 007c
+      docs: mark #34, #35 and #37 as merged in the PR log                   (#38)  merget   ingen migrasjon
+      db: grant the editor role for source registration                     (#39)  merget   migrasjon 005c
+      docs: record the hosted project in sync and source creation deployed  (#41)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -3938,7 +3938,7 @@ publiseringsgaten.
 
 ---
 
-### 74.26 Det hostede prosjektet er brakt i synk, og «Opprett kilde» virker i produksjon
+### 74.26 Det hostede prosjektet er brakt i synk, og skriveveien for kilder er deployet
 
 §74.25 fant at produksjonsdatabasen stoppet på migrasjon 007b: 003a, 008a og 007c var merget i
 `main` og aldri kjørt der, og 005c kom i tillegg. Konsekvensen var at issue 36 sitt symptom
@@ -3978,20 +3978,33 @@ testene.
 | `knowledge.assert_editor_authorized()` med samme subjekt | godkjenner, og returnerer redaktørens egen aktør |
 | Et nytt kall på `workflow.ensure_editor_role_grant()` | `already_authorized`, og fortsatt to tildelinger |
 
-**Ingen testkilde er opprettet i produksjon.** Den siste kontrollen kunne vært å kalle
-`api.create_source(...)` og se raden komme, men den ville lagt en oppdiktet kilde i den
-kanoniske kunnskapsbasen — og en kilde er ikke en testrad som kan ryddes bort uten spor:
+**Hva avlesningene over beviser, og hva de ikke beviser.** De viser at skriveveien er
+*deployet* og at redaktøren er *autorisert* til å bruke den. De viser ikke at en opprettelse
+har lyktes: **ingen vellykket `api.create_source(...)` er kjørt i produksjon.**
+`knowledge.assert_editor_authorized()` er porten foran skriveveien, ikke skriveveien selv —
+etter den gjør funksjonen en `INSERT` i `knowledge.sources`, som utløser audittriggeren fra
+migrasjon 007c, og klienten når den gjennom Data API-ets RPC-flate. Ingen av de tre leddene er
+prøvd i produksjon. De er dekket av `370_source_creation_test.sql` og
+`380_source_registration_role_test.sql` mot en lokal stack, og RPC-flaten er prøvd over ekte
+HTTP lokalt (§74.24) — men et grønt CI-miljø er ikke en avlesning fra produksjon, og det er
+nettopp den forskjellen §74.23 sin lærdom handler om.
+
+**Ingen testkilde er opprettet i produksjon, og det er et valg.** Den siste kontrollen kunne
+vært å kalle `api.create_source(...)` og se raden komme, men den ville lagt en oppdiktet kilde
+i den kanoniske kunnskapsbasen — og en kilde er ikke en testrad som kan ryddes bort uten spor:
 opphavet er frosset (`knowledge.freeze_source_attribution()`), og auditraden består. Kjeden er
-derfor prøvd så langt den kan prøves uten å skrive: autorisasjonskontrollen som *er* porten
-foran skriveveien, kjørt med redaktørens eget subjekt. Den første ekte kilden hører til
-redaktøren, gjennom skjemaet.
+derfor prøvd så langt den kan prøves uten å skrive. Den første ekte kilden hører til
+redaktøren, gjennom skjemaet, og det er den opprettelsen som lukker dette hullet.
 
 **Gjelden dette etterlater.** Ingen vaktpost ser på det hostede prosjektet, og dette er tredje
 gang en påstand om det har vært usann i repoet uten at noe merket det (§74.18, §74.23, §74.25).
-At den nå er sann, endrer ikke mekanismen. Ført som GitHub-issue 40, med retningen: et steg som
-kjører `supabase db push` — eller minst leser migrasjonshistorikken og sammenligner med
-`supabase/migrations/` — i den første jobben som har nettverk til `api.supabase.com` og et
-prosjekt-token i CI.
+At den nå er sann, endrer ikke mekanismen. GitHub-issue 40 gjaldt den konkrete forekomsten —
+produksjonen var fire migrasjoner bak — og er lukket av arbeidet over. **Mekanismen er ført som
+GitHub-issue 42**, med retningen: et steg som leser migrasjonshistorikken fra det hostede
+prosjektet og sammenligner den med `supabase/migrations/`, i den første jobben som har nettverk
+til `api.supabase.com` og et prosjekt-token i CI. Om det steget også skal *kjøre*
+`supabase db push`, er en større beslutning — automatisk skriving til produksjon fra CI — og
+hører til den issuen, ikke hit.
 
 **Hva som gjenstår.** Milepæl B mangler fortsatt tre ting (§74.4): ekstraksjonsverifikasjonene,
 claim-verifikasjonene og selve godkjenningen. Ingenting her lukker noen av dem, og

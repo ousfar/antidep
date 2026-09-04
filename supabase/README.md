@@ -141,6 +141,7 @@ dashboardet.
 påstand om det er sann bare til noen endrer noe uten å oppdatere setningen — nøyaktig det som
 skjedde mellom §74.18, §74.23 og §74.25, tre ganger på rad. Les tilstanden på nytt før du
 handler på den; hvordan avlesningen ble gjort, står i `docs/MVP_IMPLEMENTATION_PLAN.md` §74.26.
+At ingenting oppdager avviket maskinelt, er ført som GitHub-issue 42.
 
 Merk at `supabase link` og `supabase db push` ikke kan kjøres fra en agentsesjon: den pinnede
 CLI-ens Bun-runtime klarer ikke TLS gjennom sesjonens HTTPS-proxy (§74.23, prøvd på nytt 3. september 2026 og feilen står). Det er en egenskap ved agentmiljøet og ingen grunn til å
