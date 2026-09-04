@@ -1311,36 +1311,37 @@ påstandskort til en visning som faktisk svarer.
 ### 74.2 Faktisk PR-rekkefølge
 
 ```text
-PR A  chore: bootstrap Antidep web app                                     (#9)   merget
-PR B  db: add schema and security foundation                               (#10)  merget   migrasjon 001
-PR C  db: add drug and clinical concept catalog                            (#11)  merget   migrasjon 002
-PR D  db: add sources and evidence items                                   (#12)  merget   migrasjon 003
-PR E  db: add claims and evidence assessments                              (#13)  merget   migrasjon 004
-PR F  db: add review and provenance                                        (#14)  merget   migrasjon 005
-PR G  db: add publication events and gate                                  (#15)  merget   migrasjon 006
-      docs: record implementation status after migration 006               (#16)  merget   ingen migrasjon
-      db: make evidence item content hash unambiguous                      (#17)  merget   migrasjon 006a
-      db: add api published read model                                     (#18)  merget   migrasjon 007
-      ci: verify the numeric claims in the plan                            (#19)  merget   ingen migrasjon
-      db: add audit events                                                 (#20)  merget   migrasjon 008
-      db: expose publication and review timestamps in api                  (#21)  merget   migrasjon 007a
-      feat: add published read model client                                (#22)  merget   ingen migrasjon
-      feat: add claim card and certainty display                           (#23)  merget   ingen migrasjon
-      feat: add routing and first clinician pages                          (#24)  merget   ingen migrasjon
-      feat: add the claim evidence view                                    (#25)  merget   ingen migrasjon
-      feat: add the source view                                            (#26)  merget   ingen migrasjon
-      db: register the named qualified editor                              (#27)  merget   migrasjon 005a
-      docs: correct the record of the hosted Supabase project              (#28)  merget   ingen migrasjon
-      test: verify the api column contract                                 (#29)  merget   ingen migrasjon
-      docs: clarify collaboration and reporting rules                      (#30)  merget   ingen migrasjon
-      db: authorize the named qualified editor                             (#31)  merget   migrasjon 005b
-      db: expose the caller's own actor and roles                          (#32)  merget   migrasjon 007b
-      docs: mark #32 as merged in the PR log                               (#33)  merget   ingen migrasjon
-      feat: add sign-in and my access                                      (#34)  merget   ingen migrasjon
-      docs: record that the hosted project is migrated and api is exposed  (#37)  merget   ingen migrasjon
-      feat: add the controlled write path for creating a Source            (#35)  merget   migrasjon 003a, 008a, 007c
-      docs: mark #34, #35 and #37 as merged in the PR log                  (#38)  merget   ingen migrasjon
-      db: grant the editor role for source registration                    (#39)  merget   migrasjon 005c
+PR A  chore: bootstrap Antidep web app                                           (#9)   merget
+PR B  db: add schema and security foundation                                     (#10)  merget   migrasjon 001
+PR C  db: add drug and clinical concept catalog                                  (#11)  merget   migrasjon 002
+PR D  db: add sources and evidence items                                         (#12)  merget   migrasjon 003
+PR E  db: add claims and evidence assessments                                    (#13)  merget   migrasjon 004
+PR F  db: add review and provenance                                              (#14)  merget   migrasjon 005
+PR G  db: add publication events and gate                                        (#15)  merget   migrasjon 006
+      docs: record implementation status after migration 006                     (#16)  merget   ingen migrasjon
+      db: make evidence item content hash unambiguous                            (#17)  merget   migrasjon 006a
+      db: add api published read model                                           (#18)  merget   migrasjon 007
+      ci: verify the numeric claims in the plan                                  (#19)  merget   ingen migrasjon
+      db: add audit events                                                       (#20)  merget   migrasjon 008
+      db: expose publication and review timestamps in api                        (#21)  merget   migrasjon 007a
+      feat: add published read model client                                      (#22)  merget   ingen migrasjon
+      feat: add claim card and certainty display                                 (#23)  merget   ingen migrasjon
+      feat: add routing and first clinician pages                                (#24)  merget   ingen migrasjon
+      feat: add the claim evidence view                                          (#25)  merget   ingen migrasjon
+      feat: add the source view                                                  (#26)  merget   ingen migrasjon
+      db: register the named qualified editor                                    (#27)  merget   migrasjon 005a
+      docs: correct the record of the hosted Supabase project                    (#28)  merget   ingen migrasjon
+      test: verify the api column contract                                       (#29)  merget   ingen migrasjon
+      docs: clarify collaboration and reporting rules                            (#30)  merget   ingen migrasjon
+      db: authorize the named qualified editor                                   (#31)  merget   migrasjon 005b
+      db: expose the caller's own actor and roles                                (#32)  merget   migrasjon 007b
+      docs: mark #32 as merged in the PR log                                     (#33)  merget   ingen migrasjon
+      feat: add sign-in and my access                                            (#34)  merget   ingen migrasjon
+      docs: record that the hosted project is migrated and api is exposed        (#37)  merget   ingen migrasjon
+      feat: add the controlled write path for creating a Source                  (#35)  merget   migrasjon 003a, 008a, 007c
+      docs: mark #34, #35 and #37 as merged in the PR log                        (#38)  merget   ingen migrasjon
+      db: grant the editor role for source registration                          (#39)  merget   migrasjon 005c
+      docs: record that the hosted project is in sync and source creation works  (#41)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1379,8 +1380,10 @@ da raden for #37 ble skrevet, og førte sin egen rad da den selv merget — ette
 over. #37 merget først (`4903d2a`), #35 etter (`f86b24d`), og rekkefølgen i tabellen er
 faktisk mergerekkefølge og ikke nummerrekke. #36 er en issue og ikke en PR.
 
-Titlene er commit-emnene ordrett. Kolonnebredden er derfor utvidet framfor å forkorte #37 sin
-tittel: en logg som gjengir noe annet enn historikken, kan ikke sammenlignes med den.
+Titlene er commit-emnene ordrett. Kolonnebredden er derfor utvidet framfor å forkorte en
+tittel: en logg som gjengir noe annet enn historikken, kan ikke sammenlignes med den. Det har
+skjedd to ganger — først for #37, så for den nyeste raden — og utvidelsen gjelder hele tabellen,
+slik at kolonnen står på samme sted i alle rader.
 
 Raden for denne PR-en selv føres i en egen commit på samme PR: PR-nummeret er ikke tildelt
 før PR-en er åpnet, og en foreløpig rad uten nummer ville vært en påstand tabellen ikke kan
