@@ -486,6 +486,91 @@ describe('kildevalget', () => {
     ).toBe(true)
   })
 
+  it('skiller to øyeblikksbilder fra samme adresse samme dag', async () => {
+    // Databasen tillater paret: `knowledge.source_versions` har ingen regel mot
+    // to hentinger fra samme adresse samme dag, og en kilde hentet før og etter
+    // en korreksjon er nettopp det. Velges feil versjon, kan koblingen ikke
+    // rettes etterpå — evidensfunn er append-only.
+    renderRoute('/evidence/new', {
+      api: {
+        ...LOOKUPS,
+        editor_source_versions: [
+          editorSourceVersionRow({
+            source_version_id: '88888888-8888-4888-8888-33330000000a',
+            retrieved_at: '2026-09-01T07:00:00Z',
+            retrieved_from: 'https://eksempel.invalid/samme',
+          }),
+          editorSourceVersionRow({
+            source_version_id: '88888888-8888-4888-8888-33330000000b',
+            retrieved_at: '2026-09-01T15:00:00Z',
+            retrieved_from: 'https://eksempel.invalid/samme',
+          }),
+        ],
+      },
+      auth: { initialUserId: TEST_USER_IDS.a },
+    })
+    await screen.findByLabelText('Kilde')
+    selectSource()
+
+    const version = await screen.findByLabelText('Kildeversjon (valgfritt)')
+    const labels = within(version)
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(new Set(labels).size).toBe(labels.length)
+    expect(labels.some((label) => label?.includes('kl. 09:00'))).toBe(true)
+    expect(labels.some((label) => label?.includes('kl. 17:00'))).toBe(true)
+  })
+
+  it('skiller to øyeblikksbilder som ellers ville vært helt like', async () => {
+    // Samme minutt, samme adresse, uten versjonsmerke og uten hash. Da er det
+    // ingenting i innholdet å skille dem på, og etiketten faller tilbake på
+    // radens egen identitet framfor å vise to identiske valg.
+    renderRoute('/evidence/new', {
+      api: {
+        ...LOOKUPS,
+        editor_source_versions: [
+          editorSourceVersionRow({ source_version_id: '88888888-8888-4888-8888-44440000000a' }),
+          editorSourceVersionRow({ source_version_id: '88888888-8888-4888-8888-44440000000b' }),
+        ],
+      },
+      auth: { initialUserId: TEST_USER_IDS.a },
+    })
+    await screen.findByLabelText('Kilde')
+    selectSource()
+
+    const version = await screen.findByLabelText('Kildeversjon (valgfritt)')
+    const labels = within(version)
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it('viser versjonsmerket og hashen når kilden oppgir dem', async () => {
+    renderRoute('/evidence/new', {
+      api: {
+        ...LOOKUPS,
+        editor_source_versions: [
+          editorSourceVersionRow({
+            external_version: 'MEDLINE DateRevised 2026-01-28',
+            content_hash: `sha256:${'a'.repeat(64)}`,
+          }),
+        ],
+      },
+      auth: { initialUserId: TEST_USER_IDS.a },
+    })
+    await screen.findByLabelText('Kilde')
+    selectSource()
+
+    const version = await screen.findByLabelText('Kildeversjon (valgfritt)')
+    const labels = within(version)
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(labels.some((label) => label?.includes('MEDLINE DateRevised 2026-01-28'))).toBe(true)
+    expect(labels.some((label) => label?.includes('sha256:aaaaaaaa'))).toBe(true)
+    // Bare begynnelsen av hashen: resten er støy i en valgliste.
+    expect(labels.some((label) => label?.includes('a'.repeat(64)))).toBe(false)
+  })
+
   it('tilbyr kildeversjonene som er registrert på den valgte kilden', async () => {
     const { queries } = renderRoute('/evidence/new', {
       api: { ...LOOKUPS, editor_source_versions: [editorSourceVersionRow()] },

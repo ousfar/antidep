@@ -5,6 +5,7 @@ import {
   formatIntervalText,
   formatNumber,
   formatTimestampAsDate,
+  formatTimestampWithClock,
 } from './norwegian-format'
 
 // Formene under er ikke oppdiktede. De er lest ut av PostgreSQL 16 med
@@ -79,6 +80,30 @@ describe('tidsstempler', () => {
 
   it('gjengir et utolkbart tidsstempel rått framfor «Invalid Date»', () => {
     expect(formatTimestampAsDate('ikke en dato')).toEqual({
+      kind: 'unrecognised',
+      text: 'ikke en dato',
+    })
+  })
+
+  it('gir klokkeslett der tidspunktet er en del av identiteten', () => {
+    // To hentinger av samme adresse samme dag er to forskjellige
+    // øyeblikksbilder. Uten klokkeslettet ville de sett like ut for den som
+    // skal velge mellom dem.
+    expect(formatTimestampWithClock('2026-08-21T09:15:00+00:00')).toEqual({
+      kind: 'formatted',
+      text: '21. august 2026 kl. 11:15',
+    })
+  })
+
+  it('bruker norsk tid også med klokkeslett', () => {
+    expect(formatTimestampWithClock('2026-08-21T22:30:00Z')).toEqual({
+      kind: 'formatted',
+      text: '22. august 2026 kl. 00:30',
+    })
+  })
+
+  it('gjengir et utolkbart tidsstempel rått også med klokkeslett', () => {
+    expect(formatTimestampWithClock('ikke en dato')).toEqual({
       kind: 'unrecognised',
       text: 'ikke en dato',
     })

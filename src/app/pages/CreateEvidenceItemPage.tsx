@@ -95,7 +95,11 @@ import {
   readStudyDesign,
   readVocabularyStatus,
 } from '../../lib/evidence-item'
-import { formatTimestampAsDate, renderedText } from '../../lib/norwegian-format'
+import {
+  formatTimestampAsDate,
+  formatTimestampWithClock,
+  renderedText,
+} from '../../lib/norwegian-format'
 import {
   COMPARATOR_KINDS,
   EFFECT_MEASURES,
@@ -304,6 +308,13 @@ function AvailabilitySelect({
  * De fire tekstene er bevisst forskjellige. «Ingen registrert kildeversjon» er
  * en påstand om kilden, og den skal ikke stå der svaret ennå er ukjent.
  */
+/**
+ * Nok av `sha256:…` til å skille to øyeblikksbilder, uten å fylle valglisten
+ * med resten av hashen. Prefikset er ikke en identitet, bare et kjennemerke;
+ * kolliderer to av dem, tar konstruksjonen under over.
+ */
+const HASH_PREFIX_LENGTH = 'sha256:'.length + 8
+
 const VERSION_PLACEHOLDERS = {
   no_source: 'Velg kilden først',
   loading: 'Henter kildeversjoner …',
@@ -358,6 +369,47 @@ function comparatorText(row: EditorEvidenceItemRow): string {
  */
 function registeredAt(raw: string): string {
   return renderedText(formatTimestampAsDate(raw), 'tidspunkt')
+}
+
+/**
+ * Etikettene på kildeversjonene, garantert innbyrdes forskjellige.
+ *
+ * Feltets formål er å velge den *eksakte* representasjonen ekstraksjonen ble
+ * lest av. To øyeblikksbilder av samme kilde er tillatt fra samme adresse samme
+ * dag — `knowledge.source_versions` har ingen regel som hindrer det, og en
+ * kilde hentet før og etter en korreksjon er nettopp et slikt par. Da må de to
+ * være til å skille fra hverandre i valglisten: velges feil versjon, kan
+ * koblingen ikke rettes i raden etterpå, fordi evidensfunn er append-only.
+ *
+ * Etiketten bærer derfor hentetidspunktet med klokkeslett, versjonsmerket
+ * kilden selv oppgir når det finnes, begynnelsen av innholdshashen når den
+ * finnes, og adressen. Skulle to etiketter *likevel* bli like — to hentinger
+ * samme minutt fra samme adresse, uten versjonsmerke og uten hash — får de
+ * kolliderende radene hele sin egen id lagt til. Hele, ikke en forkortelse:
+ * poenget med den grenen er å være entydig ved konstruksjon, og et prefiks
+ * ville flyttet antakelsen ett hakk framfor å fjerne den.
+ */
+function sourceVersionChoices(rows: readonly EditorSourceVersionRow[]): readonly Choice[] {
+  const described = rows.map((version) => ({
+    value: version.source_version_id,
+    label: [
+      renderedText(formatTimestampWithClock(version.retrieved_at), 'tidspunkt'),
+      version.external_version,
+      version.content_hash?.slice(0, HASH_PREFIX_LENGTH),
+      version.retrieved_from,
+    ]
+      .filter((part): part is string => part !== null && part !== undefined && part.length > 0)
+      .join(' — '),
+  }))
+  const seen = new Map<string, number>()
+  for (const choice of described) {
+    seen.set(choice.label, (seen.get(choice.label) ?? 0) + 1)
+  }
+  return described.map((choice) =>
+    (seen.get(choice.label) ?? 0) > 1
+      ? { ...choice, label: `${choice.label} — ${choice.value}` }
+      : choice,
+  )
 }
 
 function withStatus(name: string, status: string): string {
@@ -738,10 +790,7 @@ function EvidenceItemForm({
     versionState.status === 'ok'
       ? [
           { value: NO_SELECTION, label: 'Ingen registrert kildeversjon' },
-          ...versionState.rows.map((version) => ({
-            value: version.source_version_id,
-            label: `${registeredAt(version.retrieved_at)} — ${version.retrieved_from}`,
-          })),
+          ...sourceVersionChoices(versionState.rows),
         ]
       : [{ value: NO_SELECTION, label: VERSION_PLACEHOLDERS[versionState.status] }]
 
