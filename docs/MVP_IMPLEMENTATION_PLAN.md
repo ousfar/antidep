@@ -4249,8 +4249,12 @@ reviewbeslutning og ingen publisering er registrert — de tre som gjenstår for
 (§74.4), uendret av dette steget.
 
 **Steg 3 av «manuell adminflyt» (§29) er dermed bekreftet i produksjon, ikke bare bygget.**
-Markeringen for `First admin workflow` står fortsatt som `[~]` av samme grunn som før: de tre
-leddene som er prøvd, er de tre første av ni i §15.
+Markeringen for `First admin workflow` står fortsatt som `[~]` av samme grunn som før, og de to
+tellemåtene skal ikke blandes. «Steg 1, 2 og 3» er §29 sin leveranse `manuell adminflyt`, der
+steg 1 er «hvem er jeg, og hva har jeg lov til?» (§74.21-§74.22). Kjeden i §15 er noe annet: ti
+ledd, og den begynner med «Editor oppretter Source». Tilgangsflaten er ikke ett av dem. **Av
+§15 sine ti ledd er dermed de to første prøvd i produksjon**, og det tredje — «separat verifier
+verifiserer ekstraksjonen» — er neste.
 
 ---
 
@@ -4307,10 +4311,19 @@ governance-spørsmål og ikke et teknisk, og det føres her framfor å bli oppda
 avviser det første kallet.
 
 **Hva PR-en ikke skal gjøre.** ClaimRevision, claim-evidenslenker, claim-verifikasjon,
-EvidenceAssessment, review og publisering er de seks neste leddene i §15, og hører til hver sin
-senere PR (§51). Verifikasjonssteget lukker heller ingen av de tre som gjenstår for Milepæl B
-alene: det lukker G4 for de funnene som faktisk blir verifisert, og etterlater
-claim-verifikasjonen og godkjenningen.
+EvidenceAssessment, review og publisering er de seks neste skrivende leddene i §15, og hører til
+hver sin senere PR (§51). Det tiende og siste leddet, «kliniker-UI oppdateres», er ingen egen
+skriveoperasjon: det følger av publiseringen gjennom api-projeksjonene (§74.12).
+
+**Hva verifikasjonssteget faktisk lukker, og hva det ikke lukker.** Gaten i migrasjon 006 har
+to krav bak ekstraksjonsverifikasjonen, ikke ett: G4 krever at det *finnes* en verifikasjon for
+hvert lenket evidensfunn, og G5 krever at den *gjeldende* — den siste, sortert på `verified_at`
+— sier `verified`. En vellykket verifikasjon lukker derfor begge for det funnet. En verifikasjon
+med utfallet `needs_correction`, `rejected` eller `uncertain` lukker bare G4 og lar G5 blokkere,
+og det er hensikten: en kontroll som ikke konkluderte, er ikke en bekreftelse
+(ANTIDEP_CONSTITUTION.md §6, §11). Av de tre som gjenstår for Milepæl B (§74.4) lukker steget
+altså det første, for de funnene som faktisk blir bekreftet, og etterlater claim-verifikasjonen
+(G8/G9) og den menneskelige godkjenningen (G11/G12/G13).
 
 ---
 
