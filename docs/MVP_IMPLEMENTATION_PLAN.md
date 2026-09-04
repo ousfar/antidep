@@ -1243,10 +1243,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ## 74. Status etter kildevisningen
 
-**Oppdatert:** 4. september 2026 (etter at skriveveien for å registrere et EvidenceItem ble
-merget og kjørt mot det hostede prosjektet — se §74.28; forrige oppdatering etter at den
-første reelle kilden ble opprettet gjennom produksjons-UI-et og skriveveien for evidensfunn
-ble bygget, §74.27)
+**Oppdatert:** 4. september 2026 (etter at det første reelle evidensfunnet ble registrert
+gjennom produksjons-UI-et — se §74.29, og planen for neste ledd i §74.30; forrige oppdatering
+etter at skriveveien for å registrere et EvidenceItem ble merget og kjørt mot det hostede
+prosjektet, §74.28)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1294,8 +1294,8 @@ godkjenning. Se §74.4.
 **`First admin workflow` er flyttet fra `[!]` til `[~]`.** Tre av stegene §29 lister er nå
 bygget og prøvd: «hvem er jeg, og hva har jeg lov til?» (§74.21-§74.22), «Editor oppretter
 Source» — bekreftet i produksjon med en reell kilde (§74.24, §74.27) — og «Editor registrerer
-EvidenceItem» (§74.27). Markeringen er ikke `[x]`: verifikasjon, review og publisering
-gjenstår. Den er heller ikke lenger `[!]`: ingenting blokkerer, det gjenstår arbeid.
+EvidenceItem», nå også bekreftet i produksjon med et reelt evidensfunn (§74.27, §74.29).
+Markeringen er ikke `[x]`: verifikasjon, review og publisering gjenstår. Den er heller ikke lenger `[!]`: ingenting blokkerer, det gjenstår arbeid.
 `First published Claim` står urørt som `[!]`, av grunnene i §74.4.
 
 **Slice 2 (§30) er ferdig.** Alle fem punktene i definition of done er dekket: klinikeren kan
@@ -1350,7 +1350,7 @@ PR G  db: add publication events and gate                                   (#15
       db: grant the editor role for source registration                     (#39)  merget   migrasjon 005c
       docs: record the hosted project in sync and source creation deployed  (#41)  merget   ingen migrasjon
       feat: add the controlled write path for registering an EvidenceItem   (#43)  merget   migrasjon 008b, 007d, 007e
-      docs: record the evidence registration deployed to the hosted project (#46)  åpen     ingen migrasjon
+      docs: record the evidence registration deployed to the hosted project (#46)  merget   ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1565,12 +1565,13 @@ gatekravene i tabellen over er berørt: migrasjonen skriver ingen verifikasjon, 
 reviewbeslutning og ingen publisering, og den tildeler ingen rettighet. Den gjør bare en
 rettighet som allerede finnes, lesbar for den som har den.
 
-**Steg 2 og 3 er siden bygget, og de lukker heller ingen av de tre som gjenstår.** «Editor
-oppretter Source» (§74.24) er nå også bekreftet i produksjon: den første reelle kilden er
-opprettet gjennom skjemaet (§74.27). «Editor registrerer EvidenceItem» er bygget i samme
-omgang. Begge produserer objekter *foran* gaten: et evidensfunn er nettopp det G4 og G5 senere
-skal kreve en verifikasjon av, og verken verifikasjon, reviewbeslutning eller publisering er
-rørt.
+**Steg 2 og 3 er siden bygget og bekreftet i produksjon, og de lukker heller ingen av de tre
+som gjenstår.** «Editor oppretter Source» (§74.24): den første reelle kilden er opprettet
+gjennom skjemaet (§74.27). «Editor registrerer EvidenceItem» (§74.27): det første reelle
+evidensfunnet er registrert gjennom skjemaet (§74.29). Begge produserer objekter *foran* gaten:
+et evidensfunn er nettopp det G4 og G5 senere skal kreve en verifikasjon av, og verken
+verifikasjon, reviewbeslutning eller publisering er rørt. Neste ledd, ekstraksjonsverifikasjonen
+bak G4/G5, er planlagt i §74.30.
 
 ### 74.5 Beslutninger tatt før migrasjon 007 eksponerte verdier utad
 
@@ -4195,6 +4196,120 @@ tre kilder, to registrerte kildeversjoner, to virkestoff, ett endepunkt og én p
 to gjeldspostene §74.27 førte — issue 44 for kildeversjoner og issue 45 for katalogens
 rekkevidde — er dermed ikke teoretiske: en registrering i produksjon i dag må peke på det ene
 endepunktet som finnes.
+
+---
+
+### 74.29 Det første reelle evidensfunnet er registrert i produksjon
+
+§74.28 endte med et hull den ikke kunne lukke selv, og skrev det ut: avlesningene viste at
+skriveveien var deployet og redaktøren autorisert, men **ingen vellykket
+`api.create_evidence_item(...)` var kjørt i produksjon**. `INSERT`-en, audittriggeren og
+`content_hash`-beregningen var ingen av dem prøvd der. Ingen testrad ble opprettet for å lukke
+det: et evidensfunn er append-only og kan ikke ryddes bort uten spor.
+
+**Hullet er lukket, og det ble lukket slik det skulle: av redaktøren, gjennom skjemaet.**
+Prosjekteieren har registrert det første reelle evidensfunnet i produksjon gjennom
+`/evidence/new`. **Skriveveien for EvidenceItem er dermed bekreftet ende-til-ende**, ikke bare
+deployet — samme forskjell §74.27 slo fast for kilder, og samme lærdom som §74.23 handler om:
+bekreftelsen er en avlesning fra produksjon, ikke fra CI.
+
+**Hva funnet er.** Fava 2000 målte hvor mange som gikk opp minst 7 % i vekt under
+langtidsbehandling, men den registrerte kildeversjonen — MEDLINE-posten — oppgir ikke andelen
+for sertralin. Den oppgir bare at antallet var signifikant høyere for paroksetin. Funnet
+registrerer altså at størrelsen *ble målt* og at tallet *ikke står* der raden peker. Det er
+ikke et tomt funn: `ANTIDEP_CONSTITUTION.md` §6 og §17 krever nettopp at manglende evidens
+registreres som manglende framfor å utelates, og §19.1 sin paring av verdi og status er det
+som gjør forskjellen lagrbar. Et funn som var utelatt fordi tallet manglet, ville sett ut som
+om ingen hadde sett etter.
+
+**Hva som er lest tilbake fra produksjon etterpå, som avlesning og ikke som antakelse:**
+
+| Kontroll | Svar |
+| --- | --- |
+| Raden i `knowledge.evidence_items` | finnes, `3422c284-31eb-428e-b1a0-bebf3f616ffc` |
+| Kilde og kildeversjon | Fava 2000, knyttet til den registrerte MEDLINE-versjonen — ikke NULL |
+| `extraction_method` | `manual` |
+| `content_hash` | beregnet av databasen, med `sha256-v2:`-prefiks |
+| `raw_extraction` | sitatet, under den ene nøkkelen migrasjon 007e definerer |
+| `created_by_actor_id` | den navngitte kvalifiserte redaktøren, ikke en KI-aktør |
+| Auditraden | `evidence_item_created`, på riktig objekt, med menneskelig aktør og øyeblikksbilde |
+| Availability-parene | populasjon, utvalgsstørrelse og oppfølgingstid som `reported_value`; estimat og konfidensintervall som `not_reported` |
+
+**To av avlesningene er mer enn en kvittering.** `extraction_method` er hardkodet til `manual`
+i skriveveien og kan ikke oppgis av klienten (§74.27); at raden bærer den verdien, er derfor et
+bevis på at den kom gjennom den kontrollerte veien og ikke gjennom et direkte `INSERT`. Og
+`created_by_actor_id` er første gang et evidensfunn i basen er attribuert til et menneske: de to
+seedede funnene bærer «Antidep ekstraksjonsagent». Attribusjonskjeden §74.24 bygget, er dermed
+prøvd med en reell menneskelig aktør i den enden den ble bygget for.
+
+**Katalogen produksjonsdatabasen har nå:** tre kilder, to registrerte kildeversjoner, tre
+evidensfunn, to virkestoff, ett endepunkt og én populasjon. Ingen verifikasjon, ingen
+reviewbeslutning og ingen publisering er registrert — de tre som gjenstår for Milepæl B
+(§74.4), uendret av dette steget.
+
+**Steg 3 av «manuell adminflyt» (§29) er dermed bekreftet i produksjon, ikke bare bygget.**
+Markeringen for `First admin workflow` står fortsatt som `[~]` av samme grunn som før: de tre
+leddene som er prøvd, er de tre første av ni i §15.
+
+---
+
+### 74.30 Neste ledd: ekstraksjonsverifikasjon, og hva som må avgjøres først
+
+Neste ledd i §15 er «separat verifier verifiserer ekstraksjonen». Maskineriet finnes fra
+migrasjon 005 — `workflow.evidence_verifications` med sine invarianter — men det finnes ingen
+skrivevei inn i det, ingen redaksjonell lesemodell over det, og ingen flate. Mønsteret er gitt
+av de to foregående stegene (§74.24, §74.27) og skal ikke oppfinnes på nytt: en kontrollert
+`SECURITY DEFINER`-funksjon i `api`, autorisasjon på sitt eget kall, attribusjon, audit, og
+views med RLS-policyer under seg.
+
+**Tre ting må avgjøres i den PR-en, og alle tre er lest ut av produksjon framfor antatt.**
+
+**1. Kildeversjoner må bygges i samme PR (issue 44).** `ANTIDEP_CONSTITUTION.md` §11 forbyr å
+godkjenne en ekstraksjon på grunnlag av et annet ledds sammendrag alene, og
+`evidence_verifications_source_access_check` håndhever det: `verified` sammen med
+`derived_summary` avvises. Verifikatoren trenger altså en adresse å hente kilden på nytt fra.
+De to seedede kildeversjonene har både adresse og innholdshash, men ingen lagret kopi
+(`storage_reference` er NULL på begge), og en kilde opprettet gjennom `/sources/new` har ingen
+versjon i det hele tatt — Efexor-kilden er nettopp det tilfellet. Uten
+`api.create_source_version(...)` er verifikasjonssteget derfor bygget for et grunnlag som bare
+tilfeldigvis finnes for de tre funnene som er registrert i dag. Issue 44 sier selv at den hører
+til denne PR-en; avlesningen bekrefter det.
+
+**2. Rollen som verifiserer er `reviewer`, ikke en ny rolle.** `workflow.app_role` definerer
+`reviewer` som «faglig verifikasjon» (migrasjon 001), og redaktøren har allerede den
+tildelingen uavgrenset (§74.28). Scope-spørsmålet er avgjort på samme måte som for
+evidensregistreringen (§74.27): en ekstraksjonsverifikasjon er avgrenset til funnets endepunkt,
+så en avgrenset `reviewer`-tildeling gjelder sitt eget begrep og en uavgrenset gjelder alt.
+Ingen ny rolle, ingen ny tildeling.
+
+**3. Den ene tingen som ikke kan avgjøres i koden: hvem som verifiserer redaktørens egne
+funn.** `workflow.evidence_verifications` krever at verifikatoren er en *annen* aktør enn den
+som opprettet funnet — Konstitusjonen §11, at generering og verifikasjon er atskilte
+operasjoner, håndhevet som en CHECK og ikke som en konvensjon. §74.4 er samtidig eksplisitt på
+at verifikasjonene *kan* være agentproduserte, så lenge skillet holdes og kontrollen skjer mot
+kildematerialet. Spørsmålet er derfor ikke om regelen skal gjelde, men hvem den andre aktøren
+er i praksis. Avlesningen fra produksjon gjør konsekvensen konkret:
+
+- de to seedede funnene er opprettet av «Antidep ekstraksjonsagent», og **kan** verifiseres av
+  redaktøren gjennom skjemaet;
+- funnet redaktøren nettopp registrerte, **kan ikke** verifiseres av redaktøren selv;
+- de to KI-aktørene har ingen brukerkonto, og kan derfor ikke kalle en skrivevei som
+  autoriserer på den innloggede brukeren. En agentprodusert verifikasjon forutsetter den
+  least privilege-identiteten §16 forutser for `agent_worker`, og den finnes ikke.
+
+Det blokkerer ikke PR-en: skriveveien kan bygges og prøves fullt ut, i begge retninger, mot de
+to seedede funnene — samme mønster som `390_evidence_item_registration_test.sql` bruker på hver
+autorisasjonsgren. Det blokkerer at kjeden kjøres helt gjennom i produksjon for et funn
+redaktøren selv har registrert. Valget står mellom å registrere en andre navngitt person og å
+bygge agentidentiteten §16 forutser; det første er klart minst, men det er et
+governance-spørsmål og ikke et teknisk, og det føres her framfor å bli oppdaget når skriveveien
+avviser det første kallet.
+
+**Hva PR-en ikke skal gjøre.** ClaimRevision, claim-evidenslenker, claim-verifikasjon,
+EvidenceAssessment, review og publisering er de seks neste leddene i §15, og hører til hver sin
+senere PR (§51). Verifikasjonssteget lukker heller ingen av de tre som gjenstår for Milepæl B
+alene: det lukker G4 for de funnene som faktisk blir verifisert, og etterlater
+claim-verifikasjonen og godkjenningen.
 
 ---
 
