@@ -34,6 +34,7 @@ export const ROUTE_PATTERNS = {
   claimEvidence: '/claims/:claimId/evidence',
   source: '/sources/:sourceId',
   sourceNew: '/sources/new',
+  evidenceNew: '/evidence/new',
   access: '/access',
 } as const
 
@@ -103,4 +104,20 @@ export function sourcePath(sourceId: Uuid): string {
  */
 export function newSourcePath(): string {
   return '/sources/new'
+}
+
+/**
+ * Registrer evidensfunn (MVP_IMPLEMENTATION_PLAN.md §29): steg 3 av
+ * adminflyten, «Editor registrerer EvidenceItem» (§15).
+ *
+ * Adressen er `/evidence/new` og ikke `/sources/:sourceId/evidence/new`, selv
+ * om funnet alltid hører til én kilde. Grunnen er hvor valget faktisk tas:
+ * skjemaet lar redaktøren velge kilden i en nedtrekksliste, fordi listen over
+ * kilder er nettopp det hen trenger å se for å velge riktig — og en adresse som
+ * bakte kilden inn ville forutsatt at valget allerede var tatt et sted som ikke
+ * finnes ennå. En admin-visning av én kilde med «registrer funn herfra» er en
+ * egen sak, og den PR-en kan legge til en adresse med kilden i.
+ */
+export function newEvidenceItemPath(): string {
+  return '/evidence/new'
 }

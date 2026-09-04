@@ -34,15 +34,24 @@ Denne katalogen inneholder Antideps Supabase-utviklingsfundament, i tråd med
     `knowledge.assert_editor_authorized()` og auditskriveren over kildeopprettelse
   - 005c `editor`-rollen tildelt redaktørkontoen, altså retten til å registrere kilder og
     evidens som forslag — men bare i miljøer der kontoen finnes i `auth.users`
+  - 008b `evidence_item_created` lagt til `audit.event_operation`, alene i sin egen migrasjon
+    av samme grunn som 008a
+  - 007d den redaksjonelle lesemodellen: `api.editor_sources`, `api.editor_source_versions`,
+    `api.editor_drugs`, `api.editor_outcomes`, `api.editor_populations` og
+    `api.editor_evidence_items`, med radgrensen `workflow.caller_is_active_editor()` og
+    RLS-policyene under dem
+  - 007e adminflytens andre kontrollerte skrivevei: `api.create_evidence_item(...)` med
+    auditskriveren over evidensregistrering, og scope på
+    `knowledge.assert_editor_authorized(uuid)`
 
   Nummereringen følger planlagt innhold i `docs/MVP_IMPLEMENTATION_PLAN.md` §18-§27, ikke
   filrekkefølge. Migrasjoner utenfor den planlagte rekken får en bokstav, slik at
   «migrasjon 007 — API-lesemodell» (§24) fortsatt betyr det samme i plan, migrasjoner og
   tester. Filrekkefølgen er derfor 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a,
-  005b, 007b, 003a, 008a, 007c, 005c: 007a, 007b og 007c er skrevet etter 008, men utvider
-  api-lesemodellen, 005a, 005b og 005c utvider aktørregisteret og medlemskapsmodellen fra 005,
-  003a utvider kildetabellen fra 003, og nummeret 009 er reservert for importfundamentet
-  (§26).
+  005b, 007b, 003a, 008a, 007c, 005c, 008b, 007d, 007e: 007a til 007e er skrevet etter 008,
+  men utvider api-lesemodellen, 005a, 005b og 005c utvider aktørregisteret og
+  medlemskapsmodellen fra 005, 003a utvider kildetabellen fra 003, og nummeret 009 er
+  reservert for importfundamentet (§26).
 
 - `tests/` — pgTAP-tester som kjøres med `npm run db:test`.
 - `seed.sql` — kun lokal demodata. Kontrollert vokabular og pilotdata som produksjonen

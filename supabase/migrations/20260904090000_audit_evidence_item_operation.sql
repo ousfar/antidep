@@ -1,0 +1,25 @@
+-- ============================================================================
+-- Migrasjon 008b — audit.event_operation får verdien evidence_item_created
+--
+-- Utvider auditvokabularet fra migrasjon 008 (§25) en andre gang, slik 008a
+-- gjorde for kildeopprettelsen, og får derfor neste bokstav.
+--
+-- ----------------------------------------------------------------------------
+-- Hvorfor denne ene setningen er sin egen migrasjon
+--
+-- Nøyaktig samme grunn som i 008a, og prøvd på nytt mot denne stacken framfor
+-- å bli antatt: `ALTER TYPE ... ADD VALUE` kan ikke brukes i samme transaksjon
+-- som verdien den legger til, og migrasjonsløperen sender hver fil som én
+-- transaksjon. `20260904092000_create_evidence_item.sql` bygger om
+-- CASE-uttrykkene i audit.events sine genererte kolonner og
+-- events_snapshot_shape_check for å dekke verdien, og kan derfor ikke også
+-- innføre den.
+--
+-- Migrasjonen gjør ingenting annet. Fram til neste migrasjon har kjørt, kan
+-- audit.events ikke motta en rad med denne operasjonen: object_schema og
+-- object_table ville gitt NULL og feilet på sin egen NOT NULL, og
+-- events_snapshot_shape_check ville truffet ELSE false. Det er den samme
+-- bevisste uttømmeligheten migrasjon 008 sin kommentar beskriver.
+-- ============================================================================
+
+alter type audit.event_operation add value 'evidence_item_created';

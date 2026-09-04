@@ -59,24 +59,30 @@ import {
 } from './claim-effect'
 import {
   DATE_PRECISIONS,
+  DRUG_STATUSES,
   EFFECT_MEASURES,
   EVIDENCE_DIRECTNESS_VALUES,
   EVIDENCE_RELATIONSHIP_TYPES,
+  EXTRACTION_METHODS,
   REPORTED_DIRECTIONS,
   SOURCE_STATUSES,
   SOURCE_TYPES,
   STUDY_DESIGNS,
   VALUE_AVAILABILITIES,
+  VOCABULARY_STATUSES,
   type DatePrecision,
+  type DrugStatus,
   type EffectMeasure,
   type EstimateUnit,
   type EvidenceDirectness,
   type EvidenceRelationshipType,
+  type ExtractionMethod,
   type PublishedClaimEvidenceRow,
   type ReportedDirection,
   type SourceStatus,
   type SourceType,
   type StudyDesign,
+  type VocabularyStatus,
 } from '../types/api'
 
 // ----------------------------------------------------------------------------
@@ -118,6 +124,25 @@ export function readStudyDesign(value: string): VocabularyTerm<StudyDesign> {
 /** Dokumenttypen kilden har. Ikke studiedesignet funnet er hentet fra. */
 export function readSourceType(value: string): VocabularyTerm<SourceType> {
   return readTerm(SOURCE_TYPES, value)
+}
+
+/**
+ * Hvordan funnet ble hentet ut. Sier hvordan raden ble til, ikke om den er
+ * kontrollert: verifikasjon er en egen arbeidsflytregistrering, og generering
+ * og verifikasjon skal ikke være samme operasjon (ANTIDEP_CONSTITUTION.md §10).
+ */
+export function readExtractionMethod(value: string): VocabularyTerm<ExtractionMethod> {
+  return readTerm(EXTRACTION_METHODS, value)
+}
+
+/** Antideps forvaltningsstatus for et virkestoff. Ikke markedsstatus for et produkt. */
+export function readDrugStatus(value: string): VocabularyTerm<DrugStatus> {
+  return readTerm(DRUG_STATUSES, value)
+}
+
+/** Status for en oppføring i et kontrollert vokabular: i bruk eller utfaset. */
+export function readVocabularyStatus(value: string): VocabularyTerm<VocabularyStatus> {
+  return readTerm(VOCABULARY_STATUSES, value)
 }
 
 /**

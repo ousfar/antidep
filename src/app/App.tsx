@@ -34,13 +34,14 @@ import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router'
 import { AntidepClientProvider, resolveAntidepClient } from './antidep-client'
 import { AccessPage } from './pages/AccessPage'
 import { ClaimEvidencePage } from './pages/ClaimEvidencePage'
+import { CreateEvidenceItemPage } from './pages/CreateEvidenceItemPage'
 import { CreateSourcePage } from './pages/CreateSourcePage'
 import { DrugPage } from './pages/DrugPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { SourcePage } from './pages/SourcePage'
 import { TopicPage } from './pages/TopicPage'
-import { ROUTE_PATTERNS, accessPath, homePath, newSourcePath } from './routes'
+import { ROUTE_PATTERNS, accessPath, homePath, newEvidenceItemPath, newSourcePath } from './routes'
 
 const MAIN_ID = 'hovedinnhold'
 
@@ -92,12 +93,14 @@ export function AppLayout() {
         <nav aria-label="Konto">
           <Link to={accessPath()}>Min tilgang</Link>
         </nav>
-        {/* Steg 2 av adminflyten (§29, §74.24): CreateSourcePage.tsx viser
-            skjemaet til enhver innlogget bruker og lar retten kontrolleres på
-            serveren, på sitt eget tidspunkt — ingen rollegate i lenken heller
-            (se sidens egen doc-kommentar). */}
+        {/* Steg 2 og 3 av adminflyten (§29, §74.24): begge sidene viser
+            skjemaet sitt til enhver innlogget bruker og lar retten kontrolleres
+            på serveren, på sitt eget tidspunkt — ingen rollegate i lenkene
+            heller (se sidenes egne doc-kommentarer). Rekkefølgen er kjedens:
+            en kilde må finnes før evidens kan knyttes til den. */}
         <nav aria-label="Admin">
           <Link to={newSourcePath()}>Opprett kilde</Link>
+          <Link to={newEvidenceItemPath()}>Registrer evidensfunn</Link>
         </nav>
       </header>
       {/* tabIndex -1 gjør hovedområdet fokuserbart programmatisk, ikke med tab. */}
@@ -108,6 +111,7 @@ export function AppLayout() {
           <Route element={<TopicPage />} path={ROUTE_PATTERNS.topic} />
           <Route element={<ClaimEvidencePage />} path={ROUTE_PATTERNS.claimEvidence} />
           <Route element={<CreateSourcePage />} path={ROUTE_PATTERNS.sourceNew} />
+          <Route element={<CreateEvidenceItemPage />} path={ROUTE_PATTERNS.evidenceNew} />
           <Route element={<SourcePage />} path={ROUTE_PATTERNS.source} />
           <Route element={<AccessPage />} path={ROUTE_PATTERNS.access} />
           <Route element={<NotFoundPage />} path="*" />

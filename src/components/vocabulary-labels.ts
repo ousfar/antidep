@@ -20,12 +20,19 @@
 
 import type { EvidenceStance, VocabularyTerm } from '../lib/evidence-item'
 import type {
+  ComparatorKind,
+  DrugStatus,
   EffectMeasure,
   EstimateUnit,
   EvidenceRelationshipType,
+  ExtractionMethod,
   KnowledgeType,
+  ReportedDirection,
   SourceStatus,
   SourceType,
+  StudyDesign,
+  ValueAvailability,
+  VocabularyStatus,
 } from '../types/api'
 
 /**
@@ -116,4 +123,83 @@ export const SOURCE_STATUS_LABELS: Record<SourceStatus, string> = {
   superseded: 'Erstattet av en nyere kilde',
   retracted: 'Trukket tilbake av tidsskrift eller utgiver',
   withdrawn: 'Tatt ut av bruk av utgiveren',
+}
+
+/**
+ * Studiedesignet for ett funn. Ligger på funnet og ikke på dokumentet: én
+ * publikasjon kan rapportere flere design.
+ */
+export const STUDY_DESIGN_LABELS: Record<StudyDesign, string> = {
+  randomized_controlled_trial: 'Randomisert kontrollert studie',
+}
+
+/**
+ * Retningen kilden selv rapporterer. `not_stated` er den fjerde verdien
+ * påstandens eget retningsvokabular ikke har, og formuleringen sier eksplisitt
+ * at det er kilden som ikke oppgir noe — ikke at det ikke ble funnet noe.
+ */
+export const REPORTED_DIRECTION_LABELS: Record<ReportedDirection, string> = {
+  increase: 'Kilden rapporterer en økning',
+  decrease: 'Kilden rapporterer en reduksjon',
+  no_clear_difference: 'Kilden fant ingen klar forskjell',
+  not_stated: 'Kilden oppgir ingen retning',
+}
+
+/**
+ * Hvorfor et felt har eller ikke har en verdi.
+ *
+ * De fire fraværsgrunnene er egenskaper ved forskjellige ting — studien,
+ * publikasjonen, funnet, ekstraksjonen — og ingen av dem betyr null
+ * (ANTIDEP_CONSTITUTION.md §6, DATABASE_ARCHITECTURE.md §19.1). De to første er
+ * tilstandene der en verdi faktisk står i kolonnen.
+ *
+ * Samme oppslag brukes av visningen av et funn og av registreringsskjemaet.
+ * Det er hele grunnen til at det står her: to oversettelser av samme vokabular
+ * ville før eller siden latt «ikke målt» og «ikke rapportert» bytte plass i den
+ * ene av dem.
+ */
+export const VALUE_AVAILABILITY_LABELS: Record<ValueAvailability, string> = {
+  reported_value: 'Kilden oppgir verdien',
+  uncertain_extraction: 'Verdien er lest ut, men ekstraksjonen er usikker',
+  not_measured: 'Ikke målt i studien',
+  not_reported: 'Ikke rapportert i kilden',
+  not_applicable: 'Ikke aktuelt for dette funnet',
+  not_extractable: 'Står i kilden, men lar seg ikke lese entydig ut',
+}
+
+/**
+ * Kontrasten i selve funnet. `none` betyr at funnet gjelder én behandlingsarm,
+ * ikke at komparatoren er ukjent — uten den forskjellen ville et armspesifikt
+ * funn og et funn med ukjent sammenligning sett like ut.
+ */
+export const COMPARATOR_KIND_LABELS: Record<ComparatorKind, string> = {
+  drug: 'Et annet virkestoff',
+  placebo: 'Placebo',
+  none: 'Ingen komparator: funnet gjelder én behandlingsarm',
+}
+
+/**
+ * Hvordan et evidensfunn ble hentet ut. Formuleringene sier hvem eller hva som
+ * laget raden, ikke om den er kontrollert (ANTIDEP_CONSTITUTION.md §10, §12).
+ */
+export const EXTRACTION_METHOD_LABELS: Record<ExtractionMethod, string> = {
+  manual: 'Registrert manuelt',
+  ai_assisted: 'KI-assistert ekstraksjon',
+  deterministic_import: 'Maskinell import fra strukturert kilde',
+}
+
+/**
+ * Antideps forvaltningsstatus for et virkestoff, ikke markedsstatus for et
+ * norsk produkt.
+ */
+export const DRUG_STATUS_LABELS: Record<DrugStatus, string> = {
+  active: 'I bruk',
+  historical: 'Historisk',
+  withdrawn: 'Utgått',
+}
+
+/** Status for en oppføring i et kontrollert vokabular. */
+export const VOCABULARY_STATUS_LABELS: Record<VocabularyStatus, string> = {
+  active: 'I bruk',
+  deprecated: 'Utfaset',
 }

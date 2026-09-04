@@ -40,10 +40,13 @@ grant select on fixture to anon, authenticated;
 -- Uttømmende inventar. Et nytt objekt i api er en utvidelse av den offentlige
 -- kontrakten og skal ikke kunne gli inn uten at denne listen endres.
 --
--- De to siste kom med migrasjon 007b og er ikke del av den publiserte
--- lesemodellen denne filen ellers handler om: de projiserer kallerens egen
--- aktør og egne rolletildelinger, og prøves i 360_caller_authorization_test.sql.
--- De står her fordi inventaret er uttømmende — det er hele poenget med det.
+-- `my_actor` og `my_roles` kom med migrasjon 007b og er ikke del av den
+-- publiserte lesemodellen denne filen ellers handler om: de projiserer
+-- kallerens egen aktør og egne rolletildelinger, og prøves i
+-- 360_caller_authorization_test.sql. De seks `editor_*` kom med migrasjon 007d
+-- og er den redaksjonelle lesemodellen registreringen av et evidensfunn
+-- trenger; de prøves i 400_editor_read_model_access_test.sql. Alle åtte står
+-- her fordi inventaret er uttømmende — det er hele poenget med det.
 select set_eq(
   $$
     select c.relname || ':' || c.relkind::text
@@ -57,9 +60,15 @@ select set_eq(
            ('published_claims:v'),
            ('published_claim_evidence:v'),
            ('my_actor:v'),
-           ('my_roles:v')
+           ('my_roles:v'),
+           ('editor_sources:v'),
+           ('editor_source_versions:v'),
+           ('editor_drugs:v'),
+           ('editor_outcomes:v'),
+           ('editor_populations:v'),
+           ('editor_evidence_items:v')
   $$,
-  'api inneholder nøyaktig de fem viewene migrasjon 007 og 007b oppretter, og ingen tabeller'
+  'api inneholder nøyaktig de elleve viewene migrasjon 007, 007b og 007d oppretter, og ingen tabeller'
 );
 
 -- Lag 3: hvert view er lesbart for begge Data API-rollene, og bare lesbart.

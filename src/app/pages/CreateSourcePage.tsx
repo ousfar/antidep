@@ -12,8 +12,9 @@
 // Siden viser skjemaet til enhver innlogget bruker, ikke bare til en med
 // editor-rolle. `api.my_roles` (Steg 1, §74.21) svarer på hva kalleren HAR,
 // ikke hva kalleren FÅR LOV TIL, og en klient som brukte innholdet der til å
-// skjule skjemaet ville lovet en beslutning `knowledge.assert_editor_authorized()`
-// uansett tar på nytt, på sitt eget tidspunkt (DATABASE_ARCHITECTURE.md §43,
+// skjule skjemaet ville lovet en beslutning
+// `knowledge.assert_editor_authorized(uuid)` uansett tar på nytt, på sitt eget
+// tidspunkt (DATABASE_ARCHITECTURE.md §43,
 // §48 — samme doktrine som `AccessPage.tsx` sin FELLE 4). En bruker uten
 // editor-rolle får se skjemaet og et avvist forsøk med databasens egen
 // forklaring, ikke en knapp som er deaktivert på et løfte klienten ikke kan
@@ -152,7 +153,7 @@ function PublicationDateFields({
 
   return (
     <>
-      <div className="create-source-form__field">
+      <div className="admin-form__field">
         <label htmlFor={choiceId}>Publiseringsdato</label>
         <select
           id={choiceId}
@@ -173,7 +174,7 @@ function PublicationDateFields({
           side i draften, så et bytte fram og tilbake ikke sletter det brukeren
           allerede har skrevet. */}
       {draft.choice === 'year' ? (
-        <div className="create-source-form__field">
+        <div className="admin-form__field">
           <label htmlFor={valueId}>År</label>
           <input
             aria-describedby={problem === null ? undefined : problemId}
@@ -190,7 +191,7 @@ function PublicationDateFields({
       ) : null}
 
       {draft.choice === 'month' ? (
-        <div className="create-source-form__field">
+        <div className="admin-form__field">
           <label htmlFor={valueId}>Måned og år</label>
           <input
             aria-describedby={problem === null ? undefined : problemId}
@@ -203,7 +204,7 @@ function PublicationDateFields({
       ) : null}
 
       {draft.choice === 'day' ? (
-        <div className="create-source-form__field">
+        <div className="admin-form__field">
           <label htmlFor={valueId}>Dato</label>
           <input
             aria-describedby={problem === null ? undefined : problemId}
@@ -216,7 +217,7 @@ function PublicationDateFields({
       ) : null}
 
       {problem === null ? null : (
-        <p className="create-source-form__problem" id={problemId} role="alert">
+        <p className="admin-form__problem" id={problemId} role="alert">
           {problem}
         </p>
       )}
@@ -319,8 +320,8 @@ function CreateSourceForm() {
         </div>
       ) : null}
 
-      <form className="create-source-form" onSubmit={(event) => void handleSubmit(event)}>
-        <div className="create-source-form__field">
+      <form className="admin-form" onSubmit={(event) => void handleSubmit(event)}>
+        <div className="admin-form__field">
           <label htmlFor={sourceTypeId}>Kildetype</label>
           <select
             id={sourceTypeId}
@@ -342,7 +343,7 @@ function CreateSourceForm() {
           </select>
         </div>
 
-        <div className="create-source-form__field">
+        <div className="admin-form__field">
           <label htmlFor={titleId}>Tittel</label>
           <input
             id={titleId}
@@ -353,7 +354,7 @@ function CreateSourceForm() {
           />
         </div>
 
-        <div className="create-source-form__field">
+        <div className="admin-form__field">
           <label htmlFor={authorsId}>Forfattere eller utgiver</label>
           <input
             id={authorsId}
@@ -364,7 +365,7 @@ function CreateSourceForm() {
           />
         </div>
 
-        <div className="create-source-form__field">
+        <div className="admin-form__field">
           <label htmlFor={publisherId}>Tidsskrift eller utgiver (valgfritt)</label>
           <input
             id={publisherId}
@@ -374,7 +375,7 @@ function CreateSourceForm() {
           />
         </div>
 
-        <div className="create-source-form__field">
+        <div className="admin-form__field">
           <label htmlFor={volumeId}>Volum (valgfritt)</label>
           <input
             id={volumeId}
@@ -384,7 +385,7 @@ function CreateSourceForm() {
           />
         </div>
 
-        <div className="create-source-form__field">
+        <div className="admin-form__field">
           <label htmlFor={issueId}>Hefte (valgfritt)</label>
           <input
             id={issueId}
@@ -394,7 +395,7 @@ function CreateSourceForm() {
           />
         </div>
 
-        <div className="create-source-form__field">
+        <div className="admin-form__field">
           <label htmlFor={pagesId}>Sider (valgfritt)</label>
           <input
             id={pagesId}
@@ -439,7 +440,7 @@ export function CreateSourcePage() {
     <>
       <p className="page-kicker">Admin</p>
       <h2>Opprett kilde</h2>
-      <p className="create-source-form__intro">
+      <p className="admin-form__intro">
         Det første steget i redaksjonsarbeidet: en kilde må være registrert før evidens kan knyttes
         til den. Resten av kjeden — evidensfunn, påstander, faglig godkjenning og publisering — er
         ikke bygget ennå.

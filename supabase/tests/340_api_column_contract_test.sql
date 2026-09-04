@@ -75,7 +75,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(15);
+select plan(21);
 
 -- ===========================================================================
 -- Del 1 — Kontrakten
@@ -204,7 +204,53 @@ insert into contract (view_name, column_name, sql_type, nullable) values
   ('my_roles', 'scope_id', 'uuid', true),
   ('my_roles', 'scope_type', 'text', true),
   ('my_roles', 'valid_from', 'timestamp with time zone', false),
-  ('my_roles', 'valid_to', 'timestamp with time zone', true);
+  ('my_roles', 'valid_to', 'timestamp with time zone', true),
+
+  ('editor_sources', 'source_id', 'uuid', false),
+  ('editor_sources', 'source_type', 'text', false),
+  ('editor_sources', 'title', 'text', false),
+  ('editor_sources', 'authors_or_issuer', 'text', false),
+  ('editor_sources', 'publisher_or_journal', 'text', true),
+  ('editor_sources', 'publication_date', 'date', true),
+  ('editor_sources', 'publication_date_precision', 'text', true),
+  ('editor_sources', 'source_status', 'text', false),
+  ('editor_sources', 'status_note', 'text', true),
+
+  ('editor_source_versions', 'source_version_id', 'uuid', false),
+  ('editor_source_versions', 'source_id', 'uuid', false),
+  ('editor_source_versions', 'retrieved_at', 'timestamp with time zone', false),
+  ('editor_source_versions', 'retrieved_from', 'text', false),
+  ('editor_source_versions', 'external_version', 'text', true),
+  ('editor_source_versions', 'content_hash', 'text', true),
+
+  ('editor_drugs', 'drug_id', 'uuid', false),
+  ('editor_drugs', 'canonical_name', 'text', false),
+  ('editor_drugs', 'status', 'text', false),
+
+  ('editor_outcomes', 'outcome_concept_id', 'uuid', false),
+  ('editor_outcomes', 'canonical_label', 'text', false),
+  ('editor_outcomes', 'status', 'text', false),
+
+  ('editor_populations', 'population_id', 'uuid', false),
+  ('editor_populations', 'canonical_label', 'text', false),
+  ('editor_populations', 'status', 'text', false),
+
+  ('editor_evidence_items', 'evidence_item_id', 'uuid', false),
+  ('editor_evidence_items', 'source_id', 'uuid', false),
+  ('editor_evidence_items', 'source_title', 'text', false),
+  ('editor_evidence_items', 'source_version_id', 'uuid', true),
+  ('editor_evidence_items', 'study_design', 'text', false),
+  ('editor_evidence_items', 'intervention_drug_id', 'uuid', false),
+  ('editor_evidence_items', 'intervention_drug_name', 'text', false),
+  ('editor_evidence_items', 'comparator_kind', 'text', false),
+  ('editor_evidence_items', 'comparator_drug_id', 'uuid', true),
+  ('editor_evidence_items', 'comparator_drug_name', 'text', true),
+  ('editor_evidence_items', 'outcome_label', 'text', false),
+  ('editor_evidence_items', 'outcome_detail', 'text', false),
+  ('editor_evidence_items', 'reported_direction', 'text', false),
+  ('editor_evidence_items', 'source_locator', 'text', false),
+  ('editor_evidence_items', 'extraction_method', 'text', false),
+  ('editor_evidence_items', 'created_at', 'timestamp with time zone', false);
 
 -- ===========================================================================
 -- Del 2 — De to begrensningene i information_schema, festet som assertions
@@ -499,6 +545,15 @@ with inserted as (
 )
 insert into fixture (name, id) select 'lean_source', id from inserted;
 
+-- Et øyeblikksbilde uten versjonsmerke og uten hash. Den rike versjonen over
+-- har begge, og uten denne ville external_version og content_hash aldri vært
+-- NULL i noen probe-rad for api.editor_source_versions. Evidensfunnet under
+-- peker bevisst ikke på den: source_version_id skal også kunne være NULL.
+insert into knowledge.source_versions
+  (source_id, retrieved_at, retrieved_from, external_version, content_hash)
+values ((select id from fixture where name = 'lean_source'), now() - interval '9 days',
+        'https://eksempel.invalid/340-minimal', null, null);
+
 with inserted as (
   insert into knowledge.evidence_items (
     source_id, design_code,
@@ -756,6 +811,69 @@ select is(
 insert into probe_cell (view_name, key, value)
 select 'my_actor', j.key, j.value
 from api.my_actor v, lateral jsonb_each(to_jsonb(v)) j;
+
+reset role;
+
+-- ---------------------------------------------------------------------------
+-- Redaksjonell kaller: de seks viewene fra migrasjon 007d.
+--
+-- Samme konto som «kaller med aktør» over. Den har en editor-tildeling som
+-- gjelder nå — avgrenset til «vektendring», og en avgrenset tildeling teller
+-- for lesbarheten (migrasjon 007d) — så den ser hele registeret og ikke bare
+-- det publiserte utvalget. Nullbarheten i disse seks radene hviler derfor på
+-- den samme rike/minimale fiksturen som resten av filen: den rike kilden har
+-- utgiver, dato og statusmerknad, den minimale har ingen av dem; den rike
+-- kildeversjonen har versjonsmerke og hash, den minimale har ingen; det rike
+-- funnet har både kildeversjon og komparatorvirkestoff, det minimale har
+-- ingen av dem.
+-- ---------------------------------------------------------------------------
+select set_config('request.jwt.claims',
+                  '{"sub":"e3a40000-0000-4000-8000-000000000001"}', true);
+set local role authenticated;
+
+select is(
+  (select count(*) from api.editor_sources), 4::bigint,
+  'den redaksjonelle kalleren ser fire kilder: de to seedede, den rike og den minimale'
+);
+select is(
+  (select count(*) from api.editor_source_versions), 4::bigint,
+  'den redaksjonelle kalleren ser fire kildeversjoner: de to seedede, den rike og den minimale'
+);
+select is(
+  (select count(*) from api.editor_drugs), 3::bigint,
+  'den redaksjonelle kalleren ser tre virkestoff: de to seedede og testvirkestoffet uten ATC-kode'
+);
+select is(
+  (select count(*) from api.editor_outcomes), 1::bigint,
+  'den redaksjonelle kalleren ser det ene endepunktet i katalogen; diagnosebegrepet er ikke et endepunkt'
+);
+select is(
+  (select count(*) from api.editor_populations), 1::bigint,
+  'den redaksjonelle kalleren ser den ene populasjonen i katalogen'
+);
+select is(
+  (select count(*) from api.editor_evidence_items), 4::bigint,
+  'den redaksjonelle kalleren ser fire evidensfunn: de to seedede, det rike og det minimale'
+);
+
+insert into probe_cell (view_name, key, value)
+select 'editor_sources', j.key, j.value
+from api.editor_sources v, lateral jsonb_each(to_jsonb(v)) j;
+insert into probe_cell (view_name, key, value)
+select 'editor_source_versions', j.key, j.value
+from api.editor_source_versions v, lateral jsonb_each(to_jsonb(v)) j;
+insert into probe_cell (view_name, key, value)
+select 'editor_drugs', j.key, j.value
+from api.editor_drugs v, lateral jsonb_each(to_jsonb(v)) j;
+insert into probe_cell (view_name, key, value)
+select 'editor_outcomes', j.key, j.value
+from api.editor_outcomes v, lateral jsonb_each(to_jsonb(v)) j;
+insert into probe_cell (view_name, key, value)
+select 'editor_populations', j.key, j.value
+from api.editor_populations v, lateral jsonb_each(to_jsonb(v)) j;
+insert into probe_cell (view_name, key, value)
+select 'editor_evidence_items', j.key, j.value
+from api.editor_evidence_items v, lateral jsonb_each(to_jsonb(v)) j;
 
 reset role;
 select set_config('request.jwt.claims', '', true);

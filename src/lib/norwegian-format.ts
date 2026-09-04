@@ -120,6 +120,33 @@ export function formatTimestampAsDate(raw: string): RenderedValue {
   return { kind: 'formatted', text: DATE_FORMAT.format(parsed) }
 }
 
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat('nb-NO', {
+  dateStyle: 'long',
+  timeStyle: 'short',
+  timeZone: 'Europe/Oslo',
+})
+
+/**
+ * `timestamptz` som norsk dato *med* klokkeslett.
+ *
+ * Unntaket fra regelen over, og grunnen er at feltene er forskjellige.
+ * `formatTimestampAsDate()` brukes på datoer i klinisk bruk — publisert, sist
+ * faglig vurdert — der et klokkeslett ville antydet en presisjon beslutningen
+ * ikke har.
+ *
+ * Her er klokkeslettet derimot en del av identiteten. En kildeversjon er «denne
+ * adressen inneholdt dette på dette tidspunktet», og to hentinger fra samme
+ * adresse samme dag er to forskjellige øyeblikksbilder som ikke må kunne se like
+ * ut når noen skal velge mellom dem (DATABASE_ARCHITECTURE.md §18).
+ */
+export function formatTimestampWithClock(raw: string): RenderedValue {
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) {
+    return { kind: 'unrecognised', text: raw }
+  }
+  return { kind: 'formatted', text: DATE_TIME_FORMAT.format(parsed) }
+}
+
 // ----------------------------------------------------------------------------
 // Intervaller
 // ----------------------------------------------------------------------------
