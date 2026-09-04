@@ -18,7 +18,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(23);
+select plan(24);
 
 -- ===========================================================================
 -- Del 1 — Utgangstilstanden: identiteten er registrert og inert
@@ -242,6 +242,28 @@ select lives_ok(
   $$,
   'aktøren kan tas i bruk igjen, og identiteten virker da som før'
 );
+
+-- Også utstederen må kunne utføre handlinger. Regelen ligger på tabellen
+-- (provenance.assert_agent_identity_actors_active()), og funksjonen gir i
+-- tillegg en setning som sier hva som er galt.
+update provenance.actors
+set retired_at = now(), retirement_note = 'Prøve i 420.'
+where actor_key = 'human:peder-holman';
+
+select throws_ok(
+  $$
+    select provenance.issue_agent_identity_credential(
+      'agent-identity:extraction-verification-01', 'human:peder-holman')
+  $$,
+  '23001',
+  'Aktøren ''human:peder-holman'' er trukket tilbake og kan ikke utstede legitimasjon.',
+  'en tilbaketrukket utsteder kan ikke gi en maskin ny legitimasjon'
+);
+
+update provenance.actors
+set retired_at = null, retirement_note = null
+where actor_key = 'human:peder-holman';
+
 
 -- ===========================================================================
 -- Del 7 — Tilbakekalling er endelig

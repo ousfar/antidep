@@ -14,7 +14,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(33);
+select plan(36);
 
 -- ===========================================================================
 -- Del 1 — Tabellene og nøklene som bærer separasjonen
@@ -159,6 +159,58 @@ select throws_ok(
   $$,
   '23001', null,
   'en identitet kan ikke trekkes tilbake og få ny legitimasjon i samme operasjon'
+);
+
+-- Legitimasjonens fire felter flytter seg sammen eller ikke i det hele tatt.
+-- Auditskriveren registrerer en utstedelse på at hashen endret seg, så en
+-- skriving som beholdt hashen og likevel skrev om versjonstallet,
+-- utstedelsestidspunktet eller utstederen, ville omskrevet legitimasjonens
+-- historikk uten å legge igjen en eneste auditrad.
+select throws_ok(
+  $$
+    update provenance.agent_identities
+    set secret_version = secret_version + 1
+    where identity_key = 'agent-identity:extraction-verification-01'
+  $$,
+  '23001', null,
+  'versjonstallet kan ikke endres uten at legitimasjonen selv endres'
+);
+select throws_ok(
+  $$
+    update provenance.agent_identities
+    set secret_issued_at = now(),
+        secret_issued_by_actor_id = (select id from provenance.actors where actor_key = 'human:peder-holman'),
+        secret_issued_by_actor_type = 'human'
+    where identity_key = 'agent-identity:extraction-verification-01'
+  $$,
+  '23001', null,
+  'utstedelsestidspunkt og utsteder kan ikke skrives om uten en faktisk utstedelse'
+);
+
+-- Den som utfører handlingen, må kunne utføre handlinger. Uten regelen ville en
+-- tilbaketrukket redaktør kunne stå som den som ga en maskin evnen til å handle,
+-- og auditraden ville påstått at vedkommende gjorde det.
+select throws_ok(
+  $$
+    do $probe$
+    begin
+      update provenance.actors
+      set retired_at = now(), retirement_note = 'Prøve i 410.'
+      where actor_key = 'human:peder-holman';
+
+      insert into provenance.agent_identities
+        (actor_id, agent_role, identity_key,
+         registered_by_actor_id, registered_by_actor_type, registration_reason)
+      select e.id, 'evidence_extraction', 'agent-identity:registrert-av-tilbaketrukket',
+             h.id, 'human', 'Registrert av en tilbaketrukket aktør.'
+      from provenance.actors e, provenance.actors h
+      where e.actor_key = 'agent:evidence-extraction'
+        and h.actor_key = 'human:peder-holman';
+    end
+    $probe$
+  $$,
+  '23001', null,
+  'en tilbaketrukket aktør kan ikke stå som registrator for en agentidentitet'
 );
 
 -- ===========================================================================

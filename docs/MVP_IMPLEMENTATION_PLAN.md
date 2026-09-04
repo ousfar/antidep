@@ -1473,7 +1473,7 @@ seks siste filene bærer de seks laveste bokstavnumrene». Det stemte ikke mot l
 006a og 007a har lavere bokstavnumre enn flere av dem — så den er erstattet med den påstanden
 listen faktisk bærer.)
 
-Databaselaget teller nå 1395 pgTAP-assertions over 43 testfiler.
+Databaselaget teller nå 1399 pgTAP-assertions over 43 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -4509,14 +4509,20 @@ ett kall til `provenance.issue_agent_identity_credential(text, text)` i det milj
 leser hemmeligheten fra. Fram til da er identiteten registrert, reviewbar og ute av stand til
 å gjøre noe.
 
-**Hva som er prøvd, og hvordan.** Tre nye testfiler med til sammen 73 assertions:
+**Hva som er prøvd, og hvordan.** Tre nye testfiler med til sammen 77 assertions:
 `410_agent_identity_structure_test.sql` dekker nøklene, speilkolonnene, reglene som ikke kan
 omgås og hele tilgangsflaten; `420_agent_identity_authentication_test.sql` dekker
 legitimasjonens livssyklus, rollen som rettighetsgrense, rotasjon, tilbaketrukket aktør,
 tilbakekalling og auditsporet; `430_agent_run_lifecycle_test.sql` dekker inngangspunktene som
 `anon`, kjøringens livssyklus, speilene som ikke lar seg forfalske, og lag 2 mot
 `workflow.evidence_verifications`. Ni vaktposter i den eksisterende suiten slo ut på
-endringen, som de skal, og er oppdatert framfor omgått. Hele flyten er dessuten kjørt over
+endringen, som de skal, og er oppdatert framfor omgått. To funn fra den automatiske
+kodegjennomgangen er rettet på plass med hver sin regresjonstest: legitimasjonens fire felter
+kan bare flytte seg sammen — ellers kunne versjonstall, utstedelsestidspunkt eller utsteder
+skrives om uten den auditraden hashendringen utløser — og et menneske som er trukket tilbake,
+kan ikke stå som den som registrerte en identitet, utstedte legitimasjon eller trakk den
+tilbake. Den siste regelen ligger på tabellen og ikke bare i utstedelsesfunksjonen, fordi
+registrering og tilbakekalling skrives med rene INSERT/UPDATE. Hele flyten er dessuten kjørt over
 ekte HTTP gjennom PostgREST med publishable-nøkkelen som `anon`: feil hemmelighet og feil
 rolle gir begge 401 med identisk melding, riktig legitimasjon gir en kjøring, avslutningen gir
 200, og tabellene selv er ikke eksponert.

@@ -542,17 +542,37 @@ begin
       hint = 'Gjør én endring om gangen, slik at hver rettighetsendring får sin egen auditrad.';
   end if;
 
-  -- Legitimasjonen kan roteres, men bare framover. Et versjonstall som kunne
-  -- stå stille eller gå ned, ville gjort en rotasjon usynlig i raden.
-  if new.secret_hash is distinct from old.secret_hash
-    and new.secret_version <= old.secret_version
+  -- Legitimasjonens fire felter flytter seg sammen eller ikke i det hele tatt.
+  --
+  -- Å bare kontrollere versjonstallet når hashen endret seg, var ikke nok:
+  -- auditskriveren registrerer en utstedelse på nettopp den endringen, så en
+  -- UPDATE som beholdt hashen og likevel skrev om versjonstallet,
+  -- utstedelsestidspunktet eller utstederen, ville omskrevet legitimasjonens
+  -- historikk uten å legge igjen en eneste auditrad. At bare en privilegert
+  -- vedlikeholdsoperasjon kan gjøre det, er ikke et forsvar: vernet gjelder også
+  -- eieren av tabellen, og det er hele grunnen til at det finnes.
+  if new.secret_hash is distinct from old.secret_hash then
+    -- En rotasjon: versjonen må øke. Et versjonstall som kunne stå stille eller
+    -- gå ned, ville gjort rotasjonen usynlig i raden.
+    if new.secret_version <= old.secret_version then
+      raise exception using
+        errcode = 'restrict_violation',
+        message = format(
+          'Ny legitimasjon for agentidentitet %L må øke secret_version.', old.id
+        ),
+        hint = 'Bruk provenance.issue_agent_identity_credential(text, text), som øker versjonstallet selv.';
+    end if;
+  elsif new.secret_version is distinct from old.secret_version
+    or new.secret_issued_at is distinct from old.secret_issued_at
+    or new.secret_issued_by_actor_id is distinct from old.secret_issued_by_actor_id
+    or new.secret_issued_by_actor_type is distinct from old.secret_issued_by_actor_type
   then
     raise exception using
       errcode = 'restrict_violation',
       message = format(
-        'Ny legitimasjon for agentidentitet %L må øke secret_version.', old.id
+        'Legitimasjonsmetadata for agentidentitet %L kan bare endres sammen med selve legitimasjonen.', old.id
       ),
-      hint = 'Bruk provenance.issue_agent_identity_credential(), som øker versjonstallet selv.';
+      hint = 'Versjonstall, utstedelsestidspunkt og utsteder beskriver den legitimasjonen som faktisk ligger i raden. Utsted en ny med provenance.issue_agent_identity_credential(text, text); den skriver alle fire feltene i samme operasjon, og auditraden følger med.';
   end if;
 
   return new;
@@ -560,13 +580,95 @@ end;
 $$;
 
 comment on function provenance.freeze_agent_identity() is
-  'Immutable-row guard for provenance.agent_identities: identiteten selv (aktør, rolle, nøkkel, registrering) kan ikke endres etter innsetting, en tilbakekalt identitet kan verken gjenåpnes eller få ny legitimasjon, legitimasjonen kan bare roteres framover, tilbakekalling og rotasjon kan ikke skje i samme operasjon, og ingen identitet kan slettes. Legitimasjon og tilbakekalling er de eneste tilstandene som kan endres.';
+  'Immutable-row guard for provenance.agent_identities: identiteten selv (aktør, rolle, nøkkel, registrering) kan ikke endres etter innsetting, en tilbakekalt identitet kan verken gjenåpnes eller få ny legitimasjon, legitimasjonen kan bare roteres framover, legitimasjonens fire felter flytter seg bare sammen — slik at ingen endring i dem kan skje uten den auditraden hashendringen utløser — tilbakekalling og rotasjon kan ikke skje i samme operasjon, og ingen identitet kan slettes. Legitimasjon og tilbakekalling er de eneste tilstandene som kan endres.';
 
 revoke execute on function provenance.freeze_agent_identity() from public;
 
 create trigger agent_identities_freeze
   before update or delete on provenance.agent_identities
   for each row execute function provenance.freeze_agent_identity();
+
+-- ----------------------------------------------------------------------------
+-- 5a. Den som utfører handlingen, må kunne utføre handlinger
+--
+-- De tre menneskelige aktørreferansene på raden — registratoren, utstederen av
+-- legitimasjonen og den som trekker den tilbake — er alle påstander om at et
+-- bestemt menneske gjorde noe. Den sammensatte fremmednøkkelen og CHECK-en
+-- håndhever at det er et menneske; ingen av dem kan se om mennesket fortsatt er
+-- i bruk.
+--
+-- Resten av modellen avviser en tilbaketrukket aktør konsekvent:
+-- knowledge.assert_editor_authorized(uuid) nekter en tilbaketrukket editor å
+-- opprette noe, og provenance.authenticate_agent_identity(...) nekter en
+-- identitet hvis agentaktør er trukket tilbake. Uten denne regelen ville et
+-- tilbaketrukket menneske likevel kunne stå oppført som den som ga en maskin
+-- evnen til å handle — og auditraden ville påstått at vedkommende gjorde det.
+--
+-- Regelen ligger på tabellen og ikke bare i utstedelsesfunksjonen, av samme
+-- grunn som resten av basen legger fasiten i constraintene: registreringen og
+-- tilbakekallingen skrives i dag med rene INSERT/UPDATE, og en regel som bare
+-- fantes i én funksjon, ville ikke gjeldt dem.
+--
+-- Bare referanser denne skrivingen faktisk setter, kontrolleres. En aktør som
+-- trekkes tilbake i ettertid skal ikke gjøre det umulig å trekke tilbake en
+-- identitet vedkommende registrerte i sin tid: tilbaketrekking er en
+-- statusendring framover, ikke en underkjenning av det som allerede er gjort
+-- (ANTIDEP_CONSTITUTION.md §14).
+-- ----------------------------------------------------------------------------
+create function provenance.assert_agent_identity_actors_active()
+  returns trigger
+  language plpgsql
+  set search_path = ''
+as $$
+declare
+  v_written uuid[];
+  v_retired_actor_key text;
+begin
+  if tg_op = 'INSERT' then
+    v_written := array[
+      new.registered_by_actor_id,
+      new.secret_issued_by_actor_id,
+      new.revoked_by_actor_id
+    ];
+  else
+    v_written := array[
+      case when new.registered_by_actor_id is distinct from old.registered_by_actor_id
+           then new.registered_by_actor_id end,
+      case when new.secret_issued_by_actor_id is distinct from old.secret_issued_by_actor_id
+           then new.secret_issued_by_actor_id end,
+      case when new.revoked_by_actor_id is distinct from old.revoked_by_actor_id
+           then new.revoked_by_actor_id end
+    ];
+  end if;
+
+  select a.actor_key into v_retired_actor_key
+  from provenance.actors a
+  where a.id = any (v_written)
+    and a.retired_at is not null
+  limit 1;
+
+  if v_retired_actor_key is not null then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format(
+        'Aktøren %L er trukket tilbake og kan ikke stå som den som utførte handlingen.',
+        v_retired_actor_key
+      ),
+      hint = 'En tilbaketrukket aktør beholder sin historikk, men kan ikke utføre nye handlinger. Registrering, utstedelse av legitimasjon og tilbakekalling skal attribueres til et menneske som er i bruk.';
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function provenance.assert_agent_identity_actors_active() is
+  'Krever at hvert menneske en skriving mot provenance.agent_identities attribuerer en handling til — registratoren, utstederen av legitimasjonen, den som trekker den tilbake — er en aktør som ikke er trukket tilbake. Kontrollerer bare referansene den enkelte skrivingen faktisk setter, slik at en aktør som trekkes tilbake i ettertid ikke låser raden. Ligger på tabellen og ikke bare i utstedelsesfunksjonen, fordi registrering og tilbakekalling skrives med rene INSERT/UPDATE.';
+
+revoke execute on function provenance.assert_agent_identity_actors_active() from public;
+
+create trigger agent_identities_assert_actors_active
+  before insert or update on provenance.agent_identities
+  for each row execute function provenance.assert_agent_identity_actors_active();
 
 create function provenance.freeze_agent_run()
   returns trigger
@@ -858,6 +960,7 @@ declare
   v_actor_retired_at timestamptz;
   v_issuer_id uuid;
   v_issuer_type provenance.actor_type;
+  v_issuer_retired_at timestamptz;
   v_secret text;
 begin
   select ai.id, ai.valid_to, a.retired_at
@@ -887,18 +990,27 @@ begin
       hint = 'En tilbaketrukket aktør beholder sin historikk, men kan ikke utføre nye handlinger.';
   end if;
 
-  select a.id, a.actor_type into v_issuer_id, v_issuer_type
+  select a.id, a.actor_type, a.retired_at
+  into v_issuer_id, v_issuer_type, v_issuer_retired_at
   from provenance.actors a
   where a.actor_key = p_issued_by_actor_key;
 
-  -- Kontrollen er her i tillegg til den sammensatte fremmednøkkelen, slik at en
-  -- feil aktørnøkkel gir en setning som sier hva som er galt framfor en
-  -- fremmednøkkelfeil. Regelen selv er tabellens, ikke funksjonens.
+  -- Kontrollene er her i tillegg til den sammensatte fremmednøkkelen, CHECK-en
+  -- og triggeren i avsnitt 5a, slik at en feil aktørnøkkel gir en setning som
+  -- sier hva som er galt framfor en fremmednøkkelfeil. Reglene selv er
+  -- tabellens, ikke funksjonens.
   if v_issuer_id is null or v_issuer_type <> 'human' then
     raise exception using
       errcode = 'restrict_violation',
       message = format('%L er ikke en registrert menneskelig aktør.', p_issued_by_actor_key),
       hint = 'Bare et menneske kan gi en maskin evnen til å handle i Antidep (CONTENT_GOVERNANCE.md §14).';
+  end if;
+
+  if v_issuer_retired_at is not null then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format('Aktøren %L er trukket tilbake og kan ikke utstede legitimasjon.', p_issued_by_actor_key),
+      hint = 'En tilbaketrukket aktør beholder sin historikk, men kan ikke utføre nye handlinger. Auditraden ville ellers påstått at vedkommende ga en maskin evnen til å handle.';
   end if;
 
   -- 244 bits fra pg_strong_random gjennom gen_random_uuid(), foldet til 256
@@ -924,7 +1036,7 @@ end;
 $$;
 
 comment on function provenance.issue_agent_identity_credential(text, text) is
-  'Utsteder eller roterer legitimasjonen til en agentidentitet og returnerer klartekstverdien én gang. Verdien lagres aldri: bare hashen ligger i raden, og det finnes ingen vei til å lese hemmeligheten ut igjen — en tapt hemmelighet erstattes ved å utstede en ny, som samtidig ugyldiggjør den gamle. Utstederen må være en registrert menneskelig aktør (CONTENT_GOVERNANCE.md §14). En tilbakekalt identitet eller en tilbaketrukket aktør får ingen legitimasjon. Auditraden skrives av triggeren på tabellen, i samme transaksjon. Ingen klientrolle har EXECUTE: dette er en forvaltningsoperasjon, ikke en Data API-operasjon.';
+  'Utsteder eller roterer legitimasjonen til en agentidentitet og returnerer klartekstverdien én gang. Verdien lagres aldri: bare hashen ligger i raden, og det finnes ingen vei til å lese hemmeligheten ut igjen — en tapt hemmelighet erstattes ved å utstede en ny, som samtidig ugyldiggjør den gamle. Utstederen må være en registrert menneskelig aktør som ikke er trukket tilbake (CONTENT_GOVERNANCE.md §14). En tilbakekalt identitet eller en tilbaketrukket aktør får ingen legitimasjon. Auditraden skrives av triggeren på tabellen, i samme transaksjon. Ingen klientrolle har EXECUTE: dette er en forvaltningsoperasjon, ikke en Data API-operasjon.';
 
 revoke execute on function provenance.issue_agent_identity_credential(text, text) from public;
 
