@@ -56,6 +56,21 @@ describe('skallet', () => {
       '/sources/new',
     )
   })
+
+  it('har en lenke til Registrer evidensfunn i toppen, etter Opprett kilde', () => {
+    // Steg 3 av adminflyten (§29). Rekkefølgen er kjedens: en kilde må finnes
+    // før evidens kan knyttes til den.
+    renderRoute('/')
+    const admin = screen.getByRole('navigation', { name: 'Admin' })
+    expect(within(admin).getByRole('link', { name: 'Registrer evidensfunn' })).toHaveAttribute(
+      'href',
+      '/evidence/new',
+    )
+    const links = within(admin)
+      .getAllByRole('link')
+      .map((link) => link.textContent)
+    expect(links).toEqual(['Opprett kilde', 'Registrer evidensfunn'])
+  })
 })
 
 describe('rutingen', () => {
@@ -119,6 +134,13 @@ describe('rutingen', () => {
     // var en uuid.
     renderRoute('/sources/new')
     expect(screen.getByRole('heading', { level: 2, name: 'Opprett kilde' })).toBeInTheDocument()
+  })
+
+  it('/evidence/new treffer Registrer evidensfunn', () => {
+    renderRoute('/evidence/new')
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Registrer evidensfunn' }),
+    ).toBeInTheDocument()
   })
 
   it('setter dokumenttittelen per adresse', async () => {

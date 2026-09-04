@@ -4,6 +4,7 @@ import {
   claimEvidencePath,
   drugPath,
   homePath,
+  newEvidenceItemPath,
   newSourcePath,
   sourcePath,
   topicPath,
@@ -56,6 +57,12 @@ describe('adressene', () => {
     expect(newSourcePath()).toBe('/sources/new')
   })
 
+  it('registrer evidensfunn har ingen parameter, selv om funnet hører til én kilde', () => {
+    // Kilden velges i skjemaet, ikke i adressen — se doc-kommentaren på
+    // newEvidenceItemPath().
+    expect(newEvidenceItemPath()).toBe('/evidence/new')
+  })
+
   it('mønstrene og byggerne beskriver samme adresser', () => {
     // Et mønster som drifter fra byggeren gir lenker ruteren ikke kjenner.
     expect(ROUTE_PATTERNS.drug).toBe('/drugs/:drugSlug')
@@ -63,6 +70,7 @@ describe('adressene', () => {
     expect(ROUTE_PATTERNS.claimEvidence).toBe('/claims/:claimId/evidence')
     expect(ROUTE_PATTERNS.source).toBe('/sources/:sourceId')
     expect(ROUTE_PATTERNS.sourceNew).toBe(newSourcePath())
+    expect(ROUTE_PATTERNS.evidenceNew).toBe(newEvidenceItemPath())
     expect(ROUTE_PATTERNS.access).toBe(accessPath())
     expect(ROUTE_PATTERNS.home).toBe(homePath())
   })

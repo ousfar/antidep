@@ -33,9 +33,10 @@ select enum_has_labels(
   'audit', 'event_operation',
   array[
     'claim_published', 'claim_publication_replaced', 'claim_publication_withdrawn',
-    'claim_publication_rolled_back', 'role_granted', 'role_ended', 'source_created'
+    'claim_publication_rolled_back', 'role_granted', 'role_ended', 'source_created',
+    'evidence_item_created'
   ],
-  'audit.event_operation dekker nå også kildeopprettelse'
+  'audit.event_operation dekker nå også kildeopprettelse og evidensregistrering'
 );
 
 select has_function('api', 'create_source', 'api.create_source() finnes');
@@ -48,11 +49,12 @@ select has_trigger(
   'enhver innsatt kilde auditeres'
 );
 
--- api.create_source er den eneste funksjonen i api eller knowledge en
--- klientrolle kan kjøre. Uttømmende over begge schemaene, framfor bare et
+-- De kontrollerte skriveveiene er de eneste funksjonene i api eller knowledge
+-- en klientrolle kan kjøre. Uttømmende over begge schemaene, framfor bare et
 -- oppslag på funksjonen selv: en framtidig funksjon i knowledge skal ikke
 -- kunne bli kjørbar for en klientrolle ved et uhell (samme mønster som
--- 270_publication_access_test.sql).
+-- 270_publication_access_test.sql). Listen utvides av den migrasjonen som
+-- åpner en ny skrivevei, og bare av den.
 select is_empty(
   $$
     select p.oid::regprocedure::text, r.role_name
@@ -62,9 +64,12 @@ select is_empty(
            as r(role_name)
     where n.nspname in ('knowledge', 'api')
       and has_function_privilege(r.role_name, p.oid, 'execute')
-      and p.oid::regprocedure::text <> 'api.create_source(text,text,text,text,text,text,text,date,text)'
+      and p.oid::regprocedure::text not in (
+        'api.create_source(text,text,text,text,text,text,text,date,text)',
+        'api.create_evidence_item(uuid,text,text,text,text,uuid,text,uuid,text,text,text,text,text,text,uuid,uuid,integer,text,uuid,text,text,text,text,numeric,text,numeric,numeric,numeric,text,text)'
+      )
   $$,
-  'ingen annen funksjon i knowledge eller api er kjørbar for noen klientrolle'
+  'ingen annen funksjon i knowledge eller api enn de to skriveveiene er kjørbar for noen klientrolle'
 );
 select is_empty(
   $$
@@ -231,7 +236,7 @@ select set_config('request.jwt.claims',
 set local role authenticated;
 select throws_ok(
   $$select api.create_source('journal_article', 'Tilbaketrukket', 'Kaller C')$$,
-  '42501', 'Aktøren er trukket tilbake og kan ikke opprette kilder.',
+  '42501', 'Aktøren er trukket tilbake og kan ikke registrere nytt innhold.',
   'en tilbaketrukket aktør avvises, selv med en ellers gyldig editor-tildeling'
 );
 reset role;

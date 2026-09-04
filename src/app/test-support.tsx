@@ -25,6 +25,12 @@ import { AppLayout } from './App'
 import { AntidepClientProvider, type AntidepClientAvailability } from './antidep-client'
 import type { AntidepClient } from '../lib/supabase'
 import type {
+  EditorDrugRow,
+  EditorEvidenceItemRow,
+  EditorOutcomeRow,
+  EditorPopulationRow,
+  EditorSourceRow,
+  EditorSourceVersionRow,
   MyActorRow,
   MyRoleRow,
   PublishedClaimEvidenceRow,
@@ -45,8 +51,17 @@ export interface FakeApi {
   readonly published_claim_evidence?: FakeOutcome<PublishedClaimEvidenceRow>
   readonly my_actor?: FakeOutcome<MyActorRow>
   readonly my_roles?: FakeOutcome<MyRoleRow>
+  // Den redaksjonelle lesemodellen (migrasjon 007d), for steg 3 av adminflyten.
+  readonly editor_sources?: FakeOutcome<EditorSourceRow>
+  readonly editor_source_versions?: FakeOutcome<EditorSourceVersionRow>
+  readonly editor_drugs?: FakeOutcome<EditorDrugRow>
+  readonly editor_outcomes?: FakeOutcome<EditorOutcomeRow>
+  readonly editor_populations?: FakeOutcome<EditorPopulationRow>
+  readonly editor_evidence_items?: FakeOutcome<EditorEvidenceItemRow>
   /** Steg 2 av adminflyten (§29, §74.24): `api.create_source(...)`. */
   readonly create_source?: FakeRpcOutcome<string>
+  /** Steg 3 av adminflyten (§29): `api.create_evidence_item(...)`. */
+  readonly create_evidence_item?: FakeRpcOutcome<string>
 }
 
 interface RecordedQuery {
@@ -58,6 +73,20 @@ interface RecordedQuery {
 function outcomeFor(api: FakeApi, view: string): FakeOutcome<Record<string, unknown>> {
   const outcome = (api as Record<string, FakeOutcome<Record<string, unknown>> | undefined>)[view]
   return outcome ?? []
+}
+
+/** Standardsvaret fra en skrivevei fiksturen ikke sier noe om: den lyktes. */
+const DEFAULT_RPC_ID = '00000000-0000-4000-8000-999999999999'
+
+function fakeRpcOutcome(api: FakeApi, name: string): FakeRpcOutcome<string> {
+  switch (name) {
+    case 'create_source':
+      return api.create_source ?? { data: DEFAULT_RPC_ID }
+    case 'create_evidence_item':
+      return api.create_evidence_item ?? { data: DEFAULT_RPC_ID }
+    default:
+      throw new Error(`fakeClient.rpc(): ukjent funksjon «${name}».`)
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -170,18 +199,13 @@ export function fakeClient(
   const rpcCalls: RecordedRpcCall[] = []
 
   const client = {
-    // Steg 2 av adminflyten (§29, §74.24): den eneste skriveveien, `api.create_source(...)`.
-    // Bare `create_source` er kjent i dag; en ukjent funksjon feiler høyt
+    // Steg 2 og 3 av adminflyten (§29, §74.24): de to kontrollerte
+    // skriveveiene. Bare disse to er kjent; en ukjent funksjon feiler høyt
     // framfor å svare stille, slik at en glemt fikstur ikke ser ut som en
-    // vellykket opprettelse.
+    // vellykket registrering.
     rpc(name: string, args: unknown) {
       rpcCalls.push({ name, args })
-      if (name !== 'create_source') {
-        throw new Error(`fakeClient.rpc(): ukjent funksjon «${name}».`)
-      }
-      const outcome = api.create_source ?? {
-        data: '00000000-0000-4000-8000-999999999999' as string,
-      }
+      const outcome = fakeRpcOutcome(api, name)
       return Promise.resolve(
         'error' in outcome
           ? { data: null, error: { message: outcome.error } }
@@ -438,6 +462,106 @@ export function myRoleRow(overrides: Partial<MyRoleRow> = {}): MyRoleRow {
     scope_type: null,
     valid_from: '2026-08-20T10:00:00Z',
     valid_to: null,
+    ...overrides,
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Den redaksjonelle lesemodellen (migrasjon 007d), for steg 3 av adminflyten
+//
+// Som resten av fiksturene: syntetisk innhold, ikke ekte kilder. Grunnformene
+// er de enkleste radene som er gyldige, og testene overstyrer nøyaktig det de
+// handler om.
+// ----------------------------------------------------------------------------
+
+const EDITOR_SOURCE = '88888888-8888-4888-8888-222222222222'
+const EDITOR_SOURCE_VERSION = '88888888-8888-4888-8888-333333333333'
+const EDITOR_POPULATION = '77777777-7777-4777-8777-222222222222'
+const EDITOR_EVIDENCE_ITEM = '66666666-6666-4666-8666-222222222222'
+
+export const TEST_EDITOR_IDS = {
+  source: EDITOR_SOURCE,
+  sourceVersion: EDITOR_SOURCE_VERSION,
+  population: EDITOR_POPULATION,
+  evidenceItem: EDITOR_EVIDENCE_ITEM,
+} as const
+
+export function editorSourceRow(overrides: Partial<EditorSourceRow> = {}): EditorSourceRow {
+  return {
+    source_id: EDITOR_SOURCE,
+    source_type: 'journal_article',
+    title: 'Testkilde B: vektendring ved tolv uker',
+    authors_or_issuer: 'Testforfatter m.fl.',
+    publisher_or_journal: 'Testtidsskrift',
+    publication_date: '2021-01-01',
+    publication_date_precision: 'year',
+    source_status: 'active',
+    status_note: null,
+    ...overrides,
+  }
+}
+
+export function editorSourceVersionRow(
+  overrides: Partial<EditorSourceVersionRow> = {},
+): EditorSourceVersionRow {
+  return {
+    source_version_id: EDITOR_SOURCE_VERSION,
+    source_id: EDITOR_SOURCE,
+    retrieved_at: '2026-09-01T10:00:00Z',
+    retrieved_from: 'https://eksempel.invalid/testkilde-b',
+    external_version: null,
+    content_hash: null,
+    ...overrides,
+  }
+}
+
+export function editorDrugRow(overrides: Partial<EditorDrugRow> = {}): EditorDrugRow {
+  return {
+    drug_id: DRUG_A,
+    canonical_name: 'virkestoff a',
+    status: 'active',
+    ...overrides,
+  }
+}
+
+export function editorOutcomeRow(overrides: Partial<EditorOutcomeRow> = {}): EditorOutcomeRow {
+  return {
+    outcome_concept_id: TOPIC_WEIGHT,
+    canonical_label: 'vektendring',
+    status: 'active',
+    ...overrides,
+  }
+}
+
+export function editorPopulationRow(
+  overrides: Partial<EditorPopulationRow> = {},
+): EditorPopulationRow {
+  return {
+    population_id: EDITOR_POPULATION,
+    canonical_label: 'voksne med depressiv lidelse',
+    status: 'active',
+    ...overrides,
+  }
+}
+
+export function editorEvidenceItemRow(
+  overrides: Partial<EditorEvidenceItemRow> = {},
+): EditorEvidenceItemRow {
+  return {
+    evidence_item_id: EDITOR_EVIDENCE_ITEM,
+    source_id: EDITOR_SOURCE,
+    source_title: 'Testkilde B: vektendring ved tolv uker',
+    source_version_id: null,
+    study_design: 'randomized_controlled_trial',
+    intervention_drug_name: 'virkestoff a',
+    comparator_kind: 'none',
+    comparator_drug_name: null,
+    outcome_label: 'vektendring',
+    outcome_detail: 'Gjennomsnittlig vektendring i kilogram.',
+    reported_direction: 'increase',
+    source_locator: 'Tabell 3, side 118',
+    extraction_method: 'manual',
+    created_at: '2026-09-04T08:00:00Z',
     ...overrides,
   }
 }

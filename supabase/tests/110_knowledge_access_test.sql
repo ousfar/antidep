@@ -66,6 +66,13 @@ select is_empty(
 );
 -- Scoped til kilde- og evidenslaget; påstandslagets policyer kontrolleres i 160
 -- og hele inventaret i 290. polcmd 'r' betyr SELECT.
+--
+-- De tre `*_editor_read`-policyene kom med migrasjon 007d: en editor må se hele
+-- kilderegisteret, alle kildeversjoner og alle evidensfunn for å kunne
+-- registrere et nytt funn — det publiserte predikatet ville skjult nettopp den
+-- kilden som nettopp ble opprettet. source_identifiers har ingen slik policy:
+-- DOI og PMID er ikke noe registreringen velger mellom, og skriveveien for dem
+-- finnes ikke ennå.
 select set_eq(
   $$
     select c.relname || ':' || p.polname || ':' || p.polcmd::text
@@ -78,11 +85,14 @@ select set_eq(
   $$,
   $$
     values ('sources:sources_published_read:r'),
+           ('sources:sources_editor_read:r'),
            ('source_identifiers:source_identifiers_published_read:r'),
            ('source_versions:source_versions_published_read:r'),
-           ('evidence_items:evidence_items_published_read:r')
+           ('source_versions:source_versions_editor_read:r'),
+           ('evidence_items:evidence_items_published_read:r'),
+           ('evidence_items:evidence_items_editor_read:r')
   $$,
-  'kilde- og evidenslaget har nøyaktig sine fire lesepolicyer, og ingen skrivepolicy'
+  'kilde- og evidenslaget har nøyaktig sine sju lesepolicyer, og ingen skrivepolicy'
 );
 
 -- ---------------------------------------------------------------------------

@@ -156,9 +156,10 @@ select enum_has_labels(
   'audit', 'event_operation',
   array[
     'claim_published', 'claim_publication_replaced', 'claim_publication_withdrawn',
-    'claim_publication_rolled_back', 'role_granted', 'role_ended', 'source_created'
+    'claim_publication_rolled_back', 'role_granted', 'role_ended', 'source_created',
+    'evidence_item_created'
   ],
-  'audit.event_operation dekker publiseringshandlingene, rolleforvaltningen og kildeopprettelse (migrasjon 008a)'
+  'audit.event_operation dekker publiseringshandlingene, rolleforvaltningen, kildeopprettelse (migrasjon 008a) og evidensregistrering (migrasjon 008b)'
 );
 
 -- De fire publiseringsverdiene skal svare én-til-én til

@@ -65,6 +65,12 @@ select is_empty(
 -- Uttømmende inventar, ikke bare et fravær av brudd: en ny policy i catalog må
 -- føres opp her, og polcmd 'r' betyr SELECT. En skrivepolicy ville vært en
 -- skrivevei forbi publiseringsgaten (DATABASE_ARCHITECTURE.md §43).
+--
+-- De tre `*_editor_read`-policyene kom med migrasjon 007d og har et annet
+-- predikat enn de publiserte: de gir en editor hele katalogen, fordi et
+-- evidensfunn må kunne registreres mot et virkestoff, et endepunkt eller en
+-- populasjon Antidep ennå ikke har publisert noe om. drug_identifiers har
+-- bevisst ingen slik policy: ATC-koder er ikke noe registreringen velger mellom.
 select set_eq(
   $$
     select c.relname || ':' || p.polname || ':' || p.polcmd::text
@@ -75,11 +81,14 @@ select set_eq(
   $$,
   $$
     values ('drugs:drugs_published_read:r'),
+           ('drugs:drugs_editor_read:r'),
            ('drug_identifiers:drug_identifiers_published_read:r'),
            ('clinical_concepts:clinical_concepts_published_read:r'),
-           ('populations:populations_published_read:r')
+           ('clinical_concepts:clinical_concepts_editor_read:r'),
+           ('populations:populations_published_read:r'),
+           ('populations:populations_editor_read:r')
   $$,
-  'catalog har nøyaktig de fire lesepolicyene api-lesemodellen trenger, og ingen skrivepolicy'
+  'catalog har nøyaktig de sju lesepolicyene lesemodellene trenger, og ingen skrivepolicy'
 );
 
 -- ---------------------------------------------------------------------------

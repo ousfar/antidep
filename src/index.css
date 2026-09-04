@@ -659,10 +659,16 @@ header h1 a:hover {
 }
 
 /* ==========================================================================
-   Toppens kontolenke (§74.22)
+   Toppens konto- og adminlenker (§74.22)
+
+   Flex med gap fordi adminraden nå har to lenker: uten den løp «Opprett kilde»
+   og «Registrer evidensfunn» sammen til ett ord.
    ========================================================================== */
 
 header nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
   margin-block-start: 0.75rem;
 }
 
@@ -760,30 +766,41 @@ header nav a {
 }
 
 /* ==========================================================================
-   Opprett kilde — steg 2 av adminflyten (§29, §74.23)
+   Adminskjemaene — steg 2 og 3 av adminflyten (§29, §74.23)
 
    Gjenbruker feltoppsettet fra .login-form-familien over: samme innrykk, samme
-   inputstil. Egen klasse fordi skjemaet har flere felt og et eget bruk av
+   inputstil. Egen klasse fordi skjemaene har flere felt og et eget bruk av
    .knowledge-notice--ok, som .login-form ikke trenger.
+
+   Klassen het .create-source-form til registreringen av evidensfunn fikk samme
+   form. To kopier av samme oppsett ville drevet fra hverandre, og de to sidene
+   ville sett ulike ut uten at noen hadde bestemt det.
    ========================================================================== */
 
-.create-source-form {
+.admin-form {
   max-width: 28rem;
 }
 
-.create-source-form__intro {
+.admin-form__intro {
   max-width: 40rem;
 }
 
-.create-source-form__field {
+.admin-form__field {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   margin-block-end: 1rem;
 }
 
-.create-source-form__field input,
-.create-source-form__field select {
+.admin-form__field input,
+.admin-form__field select,
+.admin-form__field textarea {
+  /* Bredden må bindes til feltet, ikke til innholdet. En kildetittel er inntil
+     600 tegn, og en <select> vokser med sitt lengste alternativ: uten dette
+     dyttet nedtrekkslisten for kilder hele siden ut i bredden på en telefon,
+     og mobil er et førsteklasses mål (PRODUCT_INFORMATION_ARCHITECTURE.md). */
+  width: 100%;
+  max-width: 100%;
   padding: 0.5rem;
   border: 1px solid var(--color-border);
   border-radius: 0.25rem;
@@ -792,7 +809,7 @@ header nav a {
   font: inherit;
 }
 
-.create-source-form button {
+.admin-form button {
   padding: 0.5rem 1rem;
   border: 1px solid var(--color-border);
   border-radius: 0.25rem;
@@ -802,18 +819,82 @@ header nav a {
   cursor: pointer;
 }
 
-.create-source-form button:disabled {
+.admin-form button:disabled {
   color: var(--color-text-muted);
   cursor: not-allowed;
 }
 
 /* Manglende dato under en valgt presisjon. Samme form som .login-form__error:
    kantstrek og tekst, ikke farge alene (§20 øverst i denne filen). */
-.create-source-form__problem {
+.admin-form__problem {
   margin: 0 0 1rem;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-border);
   border-inline-start: 4px solid var(--color-text);
   border-radius: 0.25rem;
+  font-size: 0.9375rem;
+}
+
+/* Evidensskjemaet er langt nok til at det trenger seksjoner. Gruppene er
+   <fieldset> med <legend>, ikke overskrifter: en skjermleser leser da gruppen
+   som konteksten hvert felt står i. */
+.admin-form__section {
+  margin: 0 0 1.5rem;
+  padding: 0 0 0 1rem;
+  border: 0;
+  border-inline-start: 2px solid var(--color-border);
+}
+
+.admin-form__section legend {
+  padding: 0;
+  font-weight: 600;
+}
+
+/* Hjelpeteksten under et felt. Knyttet til feltet med aria-describedby, så den
+   leses sammen med etiketten og ikke som løs tekst etterpå. */
+.admin-form__hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+/* ==========================================================================
+   Bekreftelsen etter en registrering: funnene som står på kilden
+
+   Bevisst uten tall. Estimat, konfidensintervall, utvalgsstørrelse og tidsrom
+   bærer hver sin status, og et tall vist uten sin status er falsk presisjon
+   (ANTIDEP_CONSTITUTION.md §6). Listen er til for gjenkjenning.
+   ========================================================================== */
+
+.evidence-registered {
+  margin: 1.5rem 0;
+  max-width: 40rem;
+}
+
+.evidence-registered__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evidence-registered__item {
+  margin-block-end: 0.75rem;
+  padding-inline-start: 0.75rem;
+  border-inline-start: 2px solid var(--color-border);
+}
+
+.evidence-registered__headline {
+  margin: 0;
+  font-weight: 600;
+}
+
+.evidence-registered__meta {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+}
+
+.evidence-registered__caveat {
+  color: var(--color-text-muted);
   font-size: 0.9375rem;
 }

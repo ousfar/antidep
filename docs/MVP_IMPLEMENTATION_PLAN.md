@@ -1243,10 +1243,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ## 74. Status etter kildevisningen
 
-**Oppdatert:** 4. september 2026 (etter at de fire gjenstående migrasjonene faktisk ble kjørt
-mot det hostede prosjektet, slik at skriveveien for å opprette en kilde er deployet der og
-redaktøren er autorisert til å bruke den — se §74.26; forrige oppdatering etter `db: grant the
-editor role for source registration`, som tildelte redaktørkontoen `editor`-rollen, §74.25)
+**Oppdatert:** 4. september 2026 (etter at den første reelle kilden ble opprettet gjennom
+produksjons-UI-et, og etter at skriveveien for å registrere et EvidenceItem ble bygget — se
+§74.27; forrige oppdatering etter at de fire gjenstående migrasjonene faktisk ble kjørt mot
+det hostede prosjektet, §74.26)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1262,7 +1262,7 @@ editor role for source registration`, som tildelte redaktørkontoen `editor`-rol
 [x] Web application bootstrap
 [x] Supabase schema/security foundation
 [~] Golden evidence slice
-[!] First admin workflow
+[~] First admin workflow
 [!] First published Claim
 [x] First clinician UI
 [ ] Comparison golden slice
@@ -1284,12 +1284,19 @@ og bygger både preview per pull request og produksjon fra `main`. Koblingen er 
 på prosjektsiden hos Vercel, ikke som konfigurasjon i repoet, så fravær av `vercel.json`
 sier ingenting om status.
 
-`First admin workflow` og `First published Claim` står fortsatt som `[!]`, men grunnen har
+`First admin workflow` og `First published Claim` stod begge som `[!]`, men grunnen har
 endret seg. Fram til nå var de blokkert av en governance-beslutning som ikke var tatt: hvem er
 den navngitte kvalifiserte redaktøren? Den beslutningen er tatt, og redaktøren er registrert
 som aktør (§74.17). Det som gjenstår er ikke lenger et åpent spørsmål, men konkret arbeid som
 ikke er gjort: en reell brukerkonto, en rolletildeling, to verifikasjonsfaser og en
 godkjenning. Se §74.4.
+
+**`First admin workflow` er flyttet fra `[!]` til `[~]`.** Tre av stegene §29 lister er nå
+bygget og prøvd: «hvem er jeg, og hva har jeg lov til?» (§74.21-§74.22), «Editor oppretter
+Source» — bekreftet i produksjon med en reell kilde (§74.24, §74.27) — og «Editor registrerer
+EvidenceItem» (§74.27). Markeringen er ikke `[x]`: verifikasjon, review og publisering
+gjenstår. Den er heller ikke lenger `[!]`: ingenting blokkerer, det gjenstår arbeid.
+`First published Claim` står urørt som `[!]`, av grunnene i §74.4.
 
 **Slice 2 (§30) er ferdig.** Alle fem punktene i definition of done er dekket: klinikeren kan
 finne påstanden og se hva Antidep hevder, hva det gjelder, hvor sikker kunnskapen er, hva
@@ -1341,7 +1348,7 @@ PR G  db: add publication events and gate                                   (#15
       feat: add the controlled write path for creating a Source             (#35)  merget   migrasjon 003a, 008a, 007c
       docs: mark #34, #35 and #37 as merged in the PR log                   (#38)  merget   ingen migrasjon
       db: grant the editor role for source registration                     (#39)  merget   migrasjon 005c
-      docs: record the hosted project in sync and source creation deployed  (#41)  åpen     ingen migrasjon
+      docs: record the hosted project in sync and source creation deployed  (#41)  merget   ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1415,16 +1422,20 @@ utvider kildetabellen fra §20 og lukker et attribusjonshull migrasjon 005 etter
 Den femtende, migrasjon 008a, utvider auditvokabularet fra §25 med én ny verdi. Den sekstende,
 migrasjon 007c, utvider api-lesemodellen fra §24 en fjerde gang — med det første skrivbare
 medlemmet, adminflytens kontrollerte skrivevei for å opprette en Source (§29, §74.24). Den
-syttende og siste, migrasjon 005c, utvider medlemskapsmodellen fra §20 slik 005b gjorde, og
-tildeler den `editor`-rollen den skriveveien krever (§74.25). Filrekkefølgen er dermed 001,
-002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a, 005b, 007b, 003a, 008a, 007c, 005c —
-sortert på tidsstempel, ikke på migrasjonsnummer, og de sju siste filene bærer alle et
-bokstavnummer, altså et nummer utenfor den planlagte rekken. (Setningen sa tidligere at «de
+syttende, migrasjon 005c, utvider medlemskapsmodellen fra §20 slik 005b gjorde, og tildeler
+den `editor`-rollen den skriveveien krever (§74.25). De tre siste hører til steg 3 av
+adminflyten (§74.27): migrasjon 008b utvider auditvokabularet med enda én verdi, 007d utvider
+api-lesemodellen en femte gang — med den redaksjonelle lesemodellen registreringen trenger —
+og 007e gir den sitt andre skrivbare medlem, skriveveien for å registrere et EvidenceItem.
+Filrekkefølgen er dermed 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a, 005b,
+007b, 003a, 008a, 007c, 005c, 008b, 007d, 007e — sortert på tidsstempel, ikke på
+migrasjonsnummer, og de ti siste filene bærer alle et bokstavnummer, altså et nummer utenfor
+den planlagte rekken. (Setningen sa tidligere at «de
 seks siste filene bærer de seks laveste bokstavnumrene». Det stemte ikke mot listen over —
 006a og 007a har lavere bokstavnumre enn flere av dem — så den er erstattet med den påstanden
 listen faktisk bærer.)
 
-Databaselaget teller nå 1256 pgTAP-assertions over 38 testfiler.
+Databaselaget teller nå 1318 pgTAP-assertions over 40 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1552,16 +1563,24 @@ gatekravene i tabellen over er berørt: migrasjonen skriver ingen verifikasjon, 
 reviewbeslutning og ingen publisering, og den tildeler ingen rettighet. Den gjør bare en
 rettighet som allerede finnes, lesbar for den som har den.
 
+**Steg 2 og 3 er siden bygget, og de lukker heller ingen av de tre som gjenstår.** «Editor
+oppretter Source» (§74.24) er nå også bekreftet i produksjon: den første reelle kilden er
+opprettet gjennom skjemaet (§74.27). «Editor registrerer EvidenceItem» er bygget i samme
+omgang. Begge produserer objekter *foran* gaten: et evidensfunn er nettopp det G4 og G5 senere
+skal kreve en verifikasjon av, og verken verifikasjon, reviewbeslutning eller publisering er
+rørt.
+
 ### 74.5 Beslutninger tatt før migrasjon 007 eksponerte verdier utad
 
 Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
 
 1. **Enum kontra oppslagstabell — utsatt, og gjort billigere å utsette.** Det finnes
-   38 enum-typer, fordelt på de sytten migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
-   007, 008, 007a, 005a, 005b, 007b, 003a, 008a, 007c og 005c — i filrekkefølge, ikke i
-   nummerrekkefølge — med henholdsvis 1, 6, 11, 7, 10, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 og 0.
+   38 enum-typer, fordelt på de tjue migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
+   007, 008, 007a, 005a, 005b, 007b, 003a, 008a, 007c, 005c, 008b, 007d og 007e — i
+   filrekkefølge, ikke i nummerrekkefølge — med henholdsvis 1, 6, 11, 7, 10, 2, 0, 0, 1, 0,
+   0, 0, 0, 0, 0, 0, 0, 0, 0 og 0.
    Tallet er kontrollert mot kilden (`grep -cE '^create type ' supabase/migrations/*.sql`) og
-   mot databasen. Alle sytten ledd er nå oppgitt eksplisitt framfor å la de siste hvile på
+   mot databasen. Alle tjue ledd er nå oppgitt eksplisitt framfor å la de siste hvile på
    restpåstanden i `scripts/verify-counts.sh`; det er den formen vakten kontrollerer
    strengest. Verken 005a, 005b, 007b eller 003a legger til enum-typer: den første
    registrerer én rad i et register som allerede finnes, den andre knytter og tildeler, den
@@ -1572,7 +1591,9 @@ Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
    007c oppretter ingen egen enum-type av samme grunn som 007, 007a og 007b: den kaster
    eksisterende vokabularer til `text` i parameterlisten, av en grunn den selv forklarer
    (§74.23). 005c oppretter heller ingen: den skriver én rad i medlemskapsmodellen og bruker
-   `workflow.app_role`, som migrasjon 001 opprettet.
+   `workflow.app_role`, som migrasjon 001 opprettet. Av de tre siste er 008b en ren
+   `ALTER TYPE ... ADD VALUE` som 008a, 007d projiserer eksisterende vokabularer som `text`
+   som resten av `api`, og 007e tar dem imot som `text` som 007c.
    Viewene caster enum-kolonner til `text`, så den offentlige kontrakten er en streng
    fra et dokumentert vokabular, ikke PostgreSQL-typen. Et senere bytte til
    oppslagstabeller er dermed ikke en brytende API-endring. Castingen sparer også
@@ -4009,6 +4030,108 @@ hører til den issuen, ikke hit.
 **Hva som gjenstår.** Milepæl B mangler fortsatt tre ting (§74.4): ekstraksjonsverifikasjonene,
 claim-verifikasjonene og selve godkjenningen. Ingenting her lukker noen av dem, og
 publiseringsgaten er urørt.
+
+### 74.27 Den første reelle kilden er opprettet, og evidensregistreringen er bygget
+
+§74.26 endte med et hull den ikke kunne lukke selv: skriveveien for kilder var deployet og
+redaktøren autorisert, men **ingen vellykket `api.create_source(...)` var kjørt i
+produksjon**. Den kontrollen kunne ikke gjøres uten å skrive, og en kilde er ikke en testrad
+som kan ryddes bort uten spor.
+
+**Hullet er lukket, og det ble lukket slik det skulle: av redaktøren, gjennom skjemaet.**
+Prosjekteieren har opprettet den første reelle kilden i produksjon gjennom `/sources/new`.
+Det er første gang alle tre leddene bak skriveveien er prøvd i produksjon samtidig: RPC-flaten
+i Data API-et, `knowledge.assert_editor_authorized(...)` sin positive gren, `INSERT`-en i
+`knowledge.sources`, og audittriggeren fra migrasjon 007c. **Skriveveien for Source er dermed
+bekreftet ende-til-ende**, ikke bare deployet.
+
+Det som ble bekreftet er kjeden, ikke en enkelt funksjon. Bekreftelsen er en avlesning fra
+produksjon og ikke fra CI, og det er nettopp forskjellen §74.23 sin lærdom handler om.
+
+---
+
+**Steg 3 av «manuell adminflyt» (§29) er bygget: «Editor registrerer EvidenceItem» (§15).**
+Ingenting av kjeden etter det er rørt. Ekstraksjonsverifikasjon, ClaimRevision,
+claim-evidenslenker, review og publisering hører fortsatt til senere PR-er, én om gangen
+(§51).
+
+Tre migrasjoner, av samme grunn som steg 2 trengte tre:
+
+| Migrasjon | Hva den gjør |
+| --- | --- |
+| 008b | `audit.event_operation` får verdien `evidence_item_created`. Alene i sin egen fil, fordi `ALTER TYPE ... ADD VALUE` ikke kan brukes i samme transaksjon som verdien (§74.24) |
+| 007d | Den redaksjonelle lesemodellen: seks views i `api` og seks RLS-policyer under dem, slik at en editor kan *se* hvilke kilder, virkestoff, endepunkter og populasjoner et funn kan knyttes til |
+| 007e | Skriveveien selv: `api.create_evidence_item(...)`, audittriggeren på `knowledge.evidence_items`, og scope-utvidelsen av `knowledge.assert_editor_authorized(uuid)` |
+
+**Den redaksjonelle lesemodellen er nye policyer, ikke nye grants.** Migrasjon 007 ga allerede
+klientrollene SELECT på tabellene under lesemodellen og lot RLS avgjøre hvilke *rader* som er
+synlige; predikatet der er publisering. En editor trenger det motsatte utvalget — kilden hen
+nettopp opprettet er per definisjon ikke publisert — så 007d legger til en andre policy per
+tabell. Policyer er permissive og OR-es sammen: en editor ser hele registeret, alle andre ser
+fortsatt nøyaktig det publiserte utvalget, og ingen ny tabell er åpnet for noen.
+
+Radgrensen står ett sted, `workflow.caller_is_active_editor()`, framfor som seks kopier av
+samme predikat. Den koster ett dokumentert unntak fra en vaktpost: `210_workflow_access_test.sql`
+krevde at *ingen* funksjon i `workflow` eller `provenance` er kjørbar for en klientrolle, og
+`authenticated` må ha EXECUTE på denne for at policyuttrykkene skal kunne evalueres — prøvd
+mot stacken, ikke antatt. Unntaket er smalere enn det ser ut, og begge halvdelene er festet
+som assertions framfor som prosa: granten gjelder bare `authenticated`, og en klientrolle kan
+uansett ikke navngi schemaet `workflow`, så funksjonen er ikke kallbar utenfor policyene.
+
+**Her måtte scope-spørsmålet 007c utsatte, faktisk besvares.** 007c lot en avgrenset
+editor-tildeling opprette en Source, fordi en kilde ikke selv er avgrenset til noe klinisk
+begrep — og skrev eksplisitt at en senere skrivevei som oppretter et *avgrenset* objekt måtte
+ta stilling til scope på nytt. Et evidensfunn er avgrenset: `outcome_concept_id` peker på
+nøyaktig den typen begrep `workflow.user_roles.scope_id` avgrenser en tildeling til. Svaret er
+derfor det samme som for publisering: en uavgrenset editor-tildeling gjelder alt, en avgrenset
+gjelder sitt eget endepunkt. Sammenligningen er nøyaktig likhet og ikke et hierarki — en
+avgrensning som utvidet seg hver gang noen la til et underbegrep, ville vært en utvidelse
+ingen tildelte.
+
+**Tre kolonner er ikke parametre, og det er en integritetsbeslutning.** `extraction_method`
+er hardkodet til `manual`: en registrering gjennom skjemaet *er* en menneskelig ekstraksjon,
+og en klientoppgitt verdi ville gjort det mulig å merke en håndskrevet rad som maskinelt
+importert — en usann påstand om radens opphav som ingenting kunne motsi. `content_hash` eies
+av databasen, som før. `raw_extraction` bygges av ett tekstfelt, `p_source_quote`, under én
+nøkkel definert i migrasjonen: en jsonb-parameter ville latt skjemakoden bestemme formen på et
+kanonisk felt.
+
+**Null/ukjent-semantikken er skjemaets form, ikke et tillegg.** Fem felter bærer en
+`*_availability`, og databasen håndhever at verdien finnes hvis og bare hvis statusen sier det
+(DATABASE_ARCHITECTURE.md §19.1). Skjemaet spør derfor alltid om statusen først og viser
+verdifeltet bare når statusen er en av de to som betyr at kilden faktisk oppgir noe. Det gjør
+det umulig å fylle ut et par databasen ville avvist — og, viktigere, det tvinger fram et svar
+på *hvorfor* et tall mangler framfor å la feltet stå tomt (ANTIDEP_CONSTITUTION.md §6, §17).
+
+**Én avvisning er oversatt, og bare én.** `content_hash` er unik, så nøyaktig samme
+registrering to ganger avvises med 23505. Databasens egen tekst navngir en mekanisme framfor å
+si hva som skjedde, og dette er den eneste avvisningen som er en forventet utgang av en riktig
+utfylt form. Regelen er uendret; bare ordlyden er ny. Alt annet — availability-paringen,
+enheten som følger effektmålet, komparatoren som ikke kan være intervensjonen selv, at
+kildeversjonen tilhører samme kilde, at endepunktet er et begrep av typen `outcome` —
+propageres uendret fra databasen.
+
+**Hva som er prøvd, og hvordan.** `390_evidence_item_registration_test.sql` (35 assertions)
+dekker kontrakten, hver autorisasjonsgren inkludert den avgrensede editoren i begge retninger,
+den lykkede stien i detalj, auditraden og sju avvisninger fra tabellens egne regler.
+`400_editor_read_model_access_test.sql` (20) dekker den redaksjonelle lesemodellen, og
+kontrollerer at radgrensen og skriveveiens kontroll svarer likt for hver av seks kallere.
+Skriveveien er dessuten prøvd over ekte HTTP gjennom PostgREST med et signert token, og hele
+flyten — innlogging, registrering, bekreftelse — er kjørt i en ekte nettleser mot en lokal
+stack, på både desktop- og mobilbredde, uten konsollfeil.
+
+**Gjeld dette etterlater.** Kilden en editor nettopp har opprettet, har ingen registrert
+kildeversjon, og skjemaet kan derfor bare tilby «ingen registrert kildeversjon». Feltet er
+riktig modellert — `source_version_id` er nullbar, og NULL betyr «ikke knyttet til et
+registrert øyeblikksbilde» — men uten en versjon finnes det ingen adresse en verifikator kan
+hente kilden på nytt fra. Skriveveien for kildeversjoner er ført som GitHub-issue, og hører
+til den PR-en som bygger verifikasjonssteget.
+
+**Hva som gjenstår for Milepæl B.** Fortsatt de samme tre (§74.4): ekstraksjonsverifikasjonene,
+claim-verifikasjonene og selve godkjenningen. Steg 3 lukker ingen av dem — det produserer
+nettopp de objektene G4/G5 senere skal kontrollere.
+
+---
 
 ---
 

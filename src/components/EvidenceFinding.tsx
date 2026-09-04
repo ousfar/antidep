@@ -60,7 +60,15 @@ import {
   SourceExtractionDetails,
   SourcePublicationDetails,
 } from './SourceDetails'
-import { MEASURE_LABELS, UNIT_LABELS, stanceText, termText } from './vocabulary-labels'
+import {
+  MEASURE_LABELS,
+  REPORTED_DIRECTION_LABELS,
+  STUDY_DESIGN_LABELS,
+  UNIT_LABELS,
+  VALUE_AVAILABILITY_LABELS,
+  stanceText,
+  termText,
+} from './vocabulary-labels'
 import {
   describeEvidenceFinding,
   type AbsentAvailability,
@@ -72,12 +80,7 @@ import {
   type EvidenceValueState,
 } from '../lib/evidence-item'
 import { formatIntervalText, formatNumber, renderedText } from '../lib/norwegian-format'
-import type {
-  EvidenceDirectness,
-  PublishedClaimEvidenceRow,
-  ReportedDirection,
-  StudyDesign,
-} from '../types/api'
+import type { EvidenceDirectness, PublishedClaimEvidenceRow } from '../types/api'
 
 // ----------------------------------------------------------------------------
 // Vokabularene, oversatt
@@ -88,33 +91,17 @@ const DIRECTNESS_LABELS: Record<EvidenceDirectness, string> = {
   indirect: 'Treffer påstanden indirekte',
 }
 
-const STUDY_DESIGN_LABELS: Record<StudyDesign, string> = {
-  randomized_controlled_trial: 'Randomisert kontrollert studie',
-}
-
-/**
- * Retningen kilden selv rapporterer. `not_stated` er den fjerde verdien
- * påstandens eget retningsvokabular ikke har, og formuleringen sier eksplisitt
- * at det er kilden som ikke oppgir noe — ikke at det ikke ble funnet noe.
- */
-const REPORTED_DIRECTION_LABELS: Record<ReportedDirection, string> = {
-  increase: 'Kilden rapporterer en økning',
-  decrease: 'Kilden rapporterer en reduksjon',
-  no_clear_difference: 'Kilden fant ingen klar forskjell',
-  not_stated: 'Kilden oppgir ingen retning',
-}
-
 /**
  * De fire grunnene til at et felt står tomt. Hver av dem er en egenskap ved
  * noe forskjellig — studien, publikasjonen, funnet, ekstraksjonen — og ingen av
  * dem betyr null.
+ *
+ * Oppslaget er det delte `VALUE_AVAILABILITY_LABELS`, smalnet til de fire
+ * fraværsverdiene: `AbsentAvailability` er en delmengde av `ValueAvailability`,
+ * så oppslaget er typesikkert, og registreringsskjemaet og denne visningen kan
+ * ikke få hver sin oversettelse av «ikke målt».
  */
-const ABSENCE_LABELS: Record<AbsentAvailability, string> = {
-  not_measured: 'Ikke målt i studien',
-  not_reported: 'Ikke rapportert i kilden',
-  not_applicable: 'Ikke aktuelt for dette funnet',
-  not_extractable: 'Står i kilden, men lar seg ikke lese entydig ut',
-}
+const ABSENCE_LABELS: Record<AbsentAvailability, string> = VALUE_AVAILABILITY_LABELS
 
 const AVAILABILITY_FAULT_LABELS: Record<AvailabilityFault, string> = {
   unrecognised_availability:

@@ -1,22 +1,30 @@
 // ============================================================================
 // Radtyper for kontraktslaget `api`
 //
-// Speiler de fem viewene migrasjon 007, 007a og 007b eksponerer:
+// Speiler de elleve viewene migrasjon 007, 007a, 007b og 007d eksponerer:
 //
 //   api.published_drugs           virkestoff Antidep har publisert påstander om
 //   api.published_claims          én rad per publisert påstand
 //   api.published_claim_evidence  evidensgrunnlaget bak hver påstand
 //   api.my_actor                  kallerens egen aktørrad, eller ingen rad
 //   api.my_roles                  kallerens egne rolletildelinger som gjelder nå
+//   api.editor_sources            kildene et evidensfunn kan knyttes til
+//   api.editor_source_versions    øyeblikksbildene under hver kilde
+//   api.editor_drugs              virkestoffene i katalogen
+//   api.editor_outcomes           de kliniske begrepene som er endepunkter
+//   api.editor_populations        populasjonene i katalogen
+//   api.editor_evidence_items     evidensfunnene som er registrert
 //
-// De tre første er publisert innhold og lesbare for `anon`. De to siste er
-// kallerens eget, lesbare bare for `authenticated`, og de er ikke en del av
-// klinikerflaten: de finnes for adminflyten (MVP_IMPLEMENTATION_PLAN.md §29).
+// De tre første er publisert innhold og lesbare for `anon`. De åtte siste er
+// lesbare bare for `authenticated`, og de er ikke en del av klinikerflaten: de
+// finnes for adminflyten (MVP_IMPLEMENTATION_PLAN.md §29). `my_*` svarer på
+// hvem kalleren er, `editor_*` på hva det finnes å registrere mot.
 //
 // Kilden er migrasjonene, ikke denne filen. Kolonnekommentarene i
 // `supabase/migrations/20260820140000_api_published_read_model.sql`,
-// `20260821143000_api_publication_timestamps.sql` og
-// `20260828090000_api_caller_authorization.sql` er den normative
+// `20260821143000_api_publication_timestamps.sql`,
+// `20260828090000_api_caller_authorization.sql` og
+// `20260904091000_editor_registration_read_model.sql` er den normative
 // beskrivelsen av hva hver verdi betyr; her gjentas bare det en klient må
 // vite for ikke å lese en verdi feil.
 //
@@ -50,7 +58,8 @@
 //   claim-effect.ts      påstandens retning, komparator, effektmål, enhet
 //   evidence-item.ts     relasjonstype, direkthet, `*_availability`,
 //                        rapportert retning, studiedesign, dokumenttype,
-//                        kildestatus, datopresisjon
+//                        kildestatus, datopresisjon, ekstraksjonsmetode,
+//                        virkestoffstatus, vokabularstatus
 //
 // Alle vokabularene som i dag er lukkede unioner her, har dermed en
 // kjøretidskontroll. Et nytt vokabular skal ikke promoteres til union uten at
@@ -200,6 +209,34 @@ export const DATE_PRECISIONS = ['year', 'month', 'day'] as const
 export type DatePrecision = (typeof DATE_PRECISIONS)[number]
 
 /**
+ * Hvordan et evidensfunn ble hentet ut (migrasjon 003). Sier hvordan raden ble
+ * til, ikke om den er kontrollert: verifikasjon er en egen arbeidsflyt-
+ * registrering, og generering og verifikasjon skal ikke være samme operasjon
+ * (§10). Lukket fordi den redaksjonelle listen forgrener på verdien, og fordi
+ * en manuell ekstraksjon og en KI-assistert har ulik epistemisk status (§5, §12).
+ */
+export const EXTRACTION_METHODS = ['manual', 'ai_assisted', 'deterministic_import'] as const
+export type ExtractionMethod = (typeof EXTRACTION_METHODS)[number]
+
+/**
+ * Antideps forvaltningsstatus for et virkestoff. Ikke markedsstatus for et
+ * norsk produkt. Lukket fordi registreringsskjemaet forgrener på den: et
+ * virkestoff som ikke lenger er i bruk skal merkes i valglisten framfor å se
+ * ut som alle andre.
+ */
+export const DRUG_STATUSES = ['active', 'historical', 'withdrawn'] as const
+export type DrugStatus = (typeof DRUG_STATUSES)[number]
+
+/**
+ * Status for en oppføring i et kontrollert vokabular: `deprecated` betyr at den
+ * ikke skal brukes i nytt innhold, men beholdes fordi eksisterende innhold
+ * peker på den. Utfasing er en statusendring, ikke en sletting. Lukket av samme
+ * grunn som virkestoffstatusen.
+ */
+export const VOCABULARY_STATUSES = ['active', 'deprecated'] as const
+export type VocabularyStatus = (typeof VOCABULARY_STATUSES)[number]
+
+/**
  * Retningen én kilde selv rapporterer for utfallet.
  *
  * Ikke det samme vokabularet som påstandens `direction`, og de to må ikke slås
@@ -280,8 +317,12 @@ export type EstimateUnit = (typeof ESTIMATE_UNITS)[number]
 export type PublishedDrugRow = {
   drug_id: Uuid
   canonical_name: string
-  /** Katalogstatus som tekst. Et utfaset virkestoff kan ha publiserte påstander. */
-  status: string
+  /**
+   * Antideps forvaltningsstatus for virkestoffet. Et virkestoff som ikke lenger
+   * er i bruk kan ha publiserte påstander, så verdien skal ikke leses som at
+   * kunnskapen er trukket tilbake.
+   */
+  status: DrugStatus
   /**
    * ATC-koder på femte nivå, sortert. Array fordi et virkestoff kan ha flere.
    * `null` betyr at ingen kode er registrert i Antidep — ikke at virkestoffet
@@ -568,4 +609,104 @@ export type MyRoleRow = {
    * vises jo — og ikke en tilbakekalling som allerede har virket.
    */
   valid_to: Timestamptz | null
+}
+
+// ----------------------------------------------------------------------------
+// Den redaksjonelle lesemodellen (migrasjon 007d)
+//
+// Seks views som ikke beskriver publisert kunnskap, men hva en editor kan velge
+// mellom når et evidensfunn skal registreres — og hva som allerede er
+// registrert. `anon` har ingen SELECT på noen av dem, så et kall uten sesjon
+// gir avslag og ikke et tomt svar.
+//
+// Radgrensen er RLS: en editor ser hele registeret, en annen innlogget kaller
+// ser bare det som allerede er publisert. Et tomt svar betyr derfor «du ser
+// ingenting her», ikke «det finnes ingenting».
+// ----------------------------------------------------------------------------
+
+/** Én kilde et evidensfunn kan knyttes til. */
+export type EditorSourceRow = {
+  /** Kildens stabile identitet, og verdien `api.create_evidence_item` tar imot. */
+  source_id: Uuid
+  source_type: SourceType
+  title: string
+  authors_or_issuer: string
+  publisher_or_journal: string | null
+  /** Alltid avkortet til presisjonen under. `null` betyr at ingen dato er registrert. */
+  publication_date: DateText | null
+  /** Hvor mye av datoen over som faktisk er kjent. Uten den er datoen falsk presisjon (§6). */
+  publication_date_precision: DatePrecision | null
+  /**
+   * En `retracted` eller `withdrawn` kilde skal ikke stille passere som en
+   * normal kilde i en valgliste (§14).
+   */
+  source_status: SourceStatus
+  /** `null` betyr «ingen begrunnelse er registrert», ikke «statusen er normal». */
+  status_note: string | null
+}
+
+/** Ett registrert øyeblikksbilde av én kilde. */
+export type EditorSourceVersionRow = {
+  source_version_id: Uuid
+  source_id: Uuid
+  /** Da representasjonen ble hentet. Et hendelsestidspunkt, ikke registreringstidspunktet. */
+  retrieved_at: Timestamptz
+  /** Adressen som ble hentet og hashet, slik at hashen kan reproduseres. */
+  retrieved_from: string
+  /** `null` betyr at kilden ikke eksponerer noe versjonsmerke, ikke at versjonen er ukjent. */
+  external_version: string | null
+  /** `null` betyr at det ikke ble hashet noe øyeblikksbilde. */
+  content_hash: string | null
+}
+
+/** Ett virkestoff i katalogen, som intervensjon eller komparator. */
+export type EditorDrugRow = {
+  drug_id: Uuid
+  canonical_name: string
+  status: DrugStatus
+}
+
+/** Ett klinisk begrep av typen endepunkt. Begreper av andre typer står ikke her. */
+export type EditorOutcomeRow = {
+  outcome_concept_id: Uuid
+  canonical_label: string
+  status: VocabularyStatus
+}
+
+/** Én populasjon i katalogen. Etiketten er et håndtak, ikke gyldighetsgrensen selv. */
+export type EditorPopulationRow = {
+  population_id: Uuid
+  canonical_label: string
+  status: VocabularyStatus
+}
+
+/**
+ * Ett registrert evidensfunn, med kilden det hører til.
+ *
+ * Bevisst uten estimat, konfidensintervall, utvalgsstørrelse og tidsrom: de
+ * fire bærer hver sin `*_availability`, og et tall vist uten sin status er
+ * falsk presisjon (§6, §17). Den visningen finnes i evidensdrilldownen
+ * (`PublishedClaimEvidenceRow`). Formålet her er gjenkjenning.
+ */
+export type EditorEvidenceItemRow = {
+  evidence_item_id: Uuid
+  source_id: Uuid
+  source_title: string
+  /** `null` betyr at funnet ikke er knyttet til et registrert øyeblikksbilde. */
+  source_version_id: Uuid | null
+  /** Designet for dette funnet, ikke for dokumentet det står i. */
+  study_design: StudyDesign
+  intervention_drug_name: string
+  /** `none` betyr at funnet er armspesifikt, ikke at komparatoren er ukjent. */
+  comparator_kind: ComparatorKind
+  /** `null` når kontrasten ikke er et virkestoff. */
+  comparator_drug_name: string | null
+  outcome_label: string
+  outcome_detail: string
+  /** Retningen kilden selv rapporterer. Ikke Antideps vurdering. */
+  reported_direction: ReportedDirection
+  source_locator: string
+  /** Hvordan raden ble til. Sier ikke om den er kontrollert. */
+  extraction_method: ExtractionMethod
+  created_at: Timestamptz
 }

@@ -16,7 +16,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(33);
+select plan(34);
 
 -- ---------------------------------------------------------------------------
 -- Testdata som bare finnes inne i denne transaksjonen, slik at et tomt resultat
@@ -123,6 +123,16 @@ select is_empty(
 -- Uttømmende over schemaene framfor en håndholdt liste: en ny funksjon i
 -- workflow eller provenance skal ikke kunne bli kjørbar for en klientrolle ved
 -- at noen glemmer å føre den opp her.
+--
+-- Det ene unntaket er workflow.caller_is_active_editor(), som migrasjon 007d
+-- innførte som radgrense for den redaksjonelle lesemodellen. Unntaket er
+-- nødvendig og ikke en lettelse: EXECUTE kontrolleres i kjøretid også når
+-- funksjonen bare står i et policyuttrykk, så uten granten ville hvert oppslag
+-- i api.editor_* feilet med «permission denied for function» — prøvd mot denne
+-- stacken, ikke antatt. Unntaket er dessuten smalere enn det ser ut: granten
+-- gjelder bare authenticated, og en klientrolle kan uansett ikke *navngi*
+-- schemaet workflow. Begge halvdelene er festet under, framfor å stå her som en
+-- påstand.
 select is_empty(
   $$
     select p.oid::regprocedure::text, r.role_name
@@ -132,8 +142,22 @@ select is_empty(
            as r(role_name)
     where n.nspname in ('workflow', 'provenance')
       and has_function_privilege(r.role_name, p.oid, 'execute')
+      and not (
+        r.role_name = 'authenticated'
+        and p.oid::regprocedure::text = 'workflow.caller_is_active_editor()'
+      )
   $$,
-  'ingen klientrolle kan kjøre noen funksjon i workflow eller provenance'
+  'ingen klientrolle kan kjøre noen funksjon i workflow eller provenance, bortsett fra radgrensen authenticated trenger'
+);
+select is_empty(
+  $$
+    select r.role_name
+    from (values ('anon'), ('service_role'), ('public')) as r(role_name)
+    where has_function_privilege(
+      r.role_name, 'workflow.caller_is_active_editor()'::regprocedure, 'execute'
+    )
+  $$,
+  'radgrensen er kjørbar bare for authenticated, ikke for anon, service_role eller PUBLIC'
 );
 
 -- ---------------------------------------------------------------------------

@@ -11,16 +11,19 @@ import {
   CLAIM_DIRECTIONS,
   COMPARATOR_KINDS,
   DATE_PRECISIONS,
+  DRUG_STATUSES,
   EFFECT_MEASURES,
   ESTIMATE_UNITS,
   EVIDENCE_DIRECTNESS_VALUES,
   EVIDENCE_RELATIONSHIP_TYPES,
+  EXTRACTION_METHODS,
   KNOWLEDGE_TYPES,
   REPORTED_DIRECTIONS,
   SOURCE_STATUSES,
   SOURCE_TYPES,
   STUDY_DESIGNS,
   VALUE_AVAILABILITIES,
+  VOCABULARY_STATUSES,
   type EffectMeasure,
 } from '../src/types/api'
 
@@ -136,6 +139,9 @@ describe('de lukkede vokabularene er nøyaktig enum-ene i migrasjonene', () => {
     ['knowledge.source_type', SOURCE_TYPES],
     ['knowledge.source_status', SOURCE_STATUSES],
     ['knowledge.date_precision', DATE_PRECISIONS],
+    ['knowledge.extraction_method', EXTRACTION_METHODS],
+    ['catalog.drug_status', DRUG_STATUSES],
+    ['catalog.vocabulary_status', VOCABULARY_STATUSES],
   ] as [string, readonly string[]][])('%s', (name, declared) => {
     // Som sett, ikke som liste: rekkefølgen i TypeScript er en presentasjons-
     // detalj, mens medlemskapet er påstanden om databasen.
