@@ -130,19 +130,22 @@ endringer i Supabase Dashboard skal ikke være kilden til produksjonsschema
 (`docs/MVP_IMPLEMENTATION_PLAN.md` §54). Eksponerte schemaer i det hostede prosjektet må
 holdes i synk med `[api].schemas` her.
 
-**Det hostede prosjektet henger etter `main`, og synkingen av eksponerte schemaer er gjort.**
-Data API-ets eksponerte schemaer er satt til `api, graphql_public` — samme verdi som
-`[api].schemas` her. Men `supabase_migrations.schema_migrations` stopper på
-`20260828090000_api_caller_authorization` (007b): migrasjonene 003a, 008a, 007c og 005c er
-merget i `main` og aldri kjørt der. I produksjon finnes derfor verken `api.create_source(...)`,
-`knowledge.assert_editor_authorized()`, `knowledge.sources.created_by_actor_id` eller
-auditverdien `source_created`. Ett `supabase db push` kjører de fire i tidsstempelrekkefølge.
-Tilstanden er lest fra produksjonsdatabasen gjennom Management-API-et 3. september 2026, ikke
-gjengitt fra dashboardet; kontrollen av grensen etter forrige synking står i
-`docs/MVP_IMPLEMENTATION_PLAN.md` §74.23, og avlesningen over i §74.25. Merk at
-`supabase link` og `supabase db push` ikke kan kjøres fra en agentsesjon: den pinnede CLI-ens
-Bun-runtime klarer ikke TLS gjennom sesjonens HTTPS-proxy — prøvd på nytt, og feilen står
-(§74.23). Det er en egenskap ved agentmiljøet og ingen grunn til å endre pinningen.
+**Det hostede prosjektet er i synk med `main`, lest 4. september 2026.** Alle sytten
+migrasjonene over er kjørt der og registrert i `supabase_migrations.schema_migrations`, med
+nøyaktig de samme versjonsnumrene og navnene som filene i `migrations/`, og Data API-ets
+eksponerte schemaer er `api, graphql_public` — samme verdi som `[api].schemas` her.
+Tilstanden er lest fra produksjonsdatabasen gjennom Management-API-et, ikke gjengitt fra
+dashboardet.
+
+**Datoen står der med hensikt.** Ingen vaktpost i CI ser på det hostede prosjektet, så en
+påstand om det er sann bare til noen endrer noe uten å oppdatere setningen — nøyaktig det som
+skjedde mellom §74.18, §74.23 og §74.25, tre ganger på rad. Les tilstanden på nytt før du
+handler på den; hvordan avlesningen ble gjort, står i `docs/MVP_IMPLEMENTATION_PLAN.md` §74.26.
+
+Merk at `supabase link` og `supabase db push` ikke kan kjøres fra en agentsesjon: den pinnede
+CLI-ens Bun-runtime klarer ikke TLS gjennom sesjonens HTTPS-proxy (§74.23, prøvd på nytt 3. september 2026 og feilen står). Det er en egenskap ved agentmiljøet og ingen grunn til å
+endre pinningen; migrasjonene ble derfor kjørt gjennom Management-API-et, én fil om gangen,
+med historikkraden i samme transaksjon — samme operasjon `db push` gjør (§74.26).
 
 **Kjør aldri `supabase config push` mot det hostede prosjektet.** Kommandoen pusher hele
 `config.toml`, og filen her er i praksis `supabase init`-standardene for en lokal stack —

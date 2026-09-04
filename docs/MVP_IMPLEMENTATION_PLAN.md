@@ -1243,10 +1243,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ## 74. Status etter kildevisningen
 
-**Oppdatert:** 3. september 2026 (etter `db: grant the editor role for source registration`,
-som tildeler redaktørkontoen `editor`-rollen slik at «Opprett kilde» faktisk kan brukes — se
-§74.25; forrige oppdatering etter `feat: add the controlled write path for creating a Source`,
-som åpnet den skriveveien, §74.24)
+**Oppdatert:** 4. september 2026 (etter at de fire gjenstående migrasjonene faktisk ble kjørt
+mot det hostede prosjektet, slik at «Opprett kilde» virker i produksjon — se §74.26; forrige
+oppdatering etter `db: grant the editor role for source registration`, som tildelte
+redaktørkontoen `editor`-rollen, §74.25)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1340,7 +1340,7 @@ PR G  db: add publication events and gate                                  (#15)
       docs: record that the hosted project is migrated and api is exposed  (#37)  merget   ingen migrasjon
       feat: add the controlled write path for creating a Source            (#35)  merget   migrasjon 003a, 008a, 007c
       docs: mark #34, #35 and #37 as merged in the PR log                  (#38)  merget   ingen migrasjon
-      db: grant the editor role for source registration                    (#39)  åpen     migrasjon 005c
+      db: grant the editor role for source registration                    (#39)  merget   migrasjon 005c
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -3932,6 +3932,67 @@ mot listen den selv står ved siden av.
 **Hva som gjenstår.** Milepæl B mangler fortsatt tre ting (§74.4): ekstraksjonsverifikasjonene,
 claim-verifikasjonene og selve godkjenningen. Denne PR-en lukker ingen av dem, og åpner ikke
 publiseringsgaten.
+
+---
+
+### 74.26 Det hostede prosjektet er brakt i synk, og «Opprett kilde» virker i produksjon
+
+§74.25 fant at produksjonsdatabasen stoppet på migrasjon 007b: 003a, 008a og 007c var merget i
+`main` og aldri kjørt der, og 005c kom i tillegg. Konsekvensen var at issue 36 sitt symptom
+ikke engang var det issuen beskrev — `api.create_source(...)` fantes ikke i produksjon i det
+hele tatt. De fire er nå kjørt, etter at PR-en som innførte 005c var reviewet og merget.
+
+**Hvordan, og hvorfor ikke med `supabase db push`.** Den pinnede CLI-en kan fortsatt ikke nå
+`api.supabase.com` fra en agentsesjon (§74.23, prøvd på nytt). Migrasjonene ble derfor kjørt
+gjennom Management-API-et, én fil om gangen, hver som **én transaksjon som inneholder både
+migrasjonens egen SQL og raden i `supabase_migrations.schema_migrations`** — samme operasjon
+`db push` utfører, med samme atomisitet. Filene ble tatt uendret fra `main`; ingenting er
+skrevet for hånd, og ingen endring er gjort utenom migrasjonene. Rekkefølgen var
+tidsstempelrekkefølgen: 003a, 008a, 007c, 005c.
+
+At 008a måtte committe alene før 007c, er ikke en detalj her heller: `ALTER TYPE ... ADD VALUE`
+og bruken av den nye verdien kan ikke ligge i samme transaksjon (§74.24). Én forespørsel per
+migrasjonsfil gir nettopp det skillet.
+
+**005c tok den positive grenen, og det er første gang den er kjørt med en konto å peke på.**
+Kallet returnerte `authorized`. Migrasjonen skrev altså raden, framfor `account_missing` som i
+CI og enhver fersk lokal stack — begge grenene har dermed kjørt i et ekte miljø, ikke bare i
+testene.
+
+**Hva som er lest tilbake etterpå, som avlesning og ikke som antakelse:**
+
+| Kontroll | Svar |
+| --- | --- |
+| `supabase_migrations.schema_migrations` | sytten rader, med nøyaktig de samme versjonsnumrene og navnene som filene i `supabase/migrations/` |
+| `knowledge.sources.created_by_actor_id` | finnes, `NOT NULL`, og begge de seedede radene er attribuert |
+| `audit.event_operation` | inneholder `source_created` |
+| `api.create_source(...)`, `knowledge.assert_editor_authorized()`, `audit.record_source_event()`, audittriggeren | alle finnes |
+| `EXECUTE` på `api.create_source(...)` | bare `authenticated`; ikke `anon`, ikke `service_role` |
+| `workflow.user_roles` | to rader: den uavgrensede `reviewer` fra 27. august og den uavgrensede `editor` fra i dag, begge løpende og begge selvtildelt av `human:peder-holman`, med hver sin begrunnelse |
+| `audit.events` | to rader, én `role_granted` per tildeling, begge attribuert til redaktørens aktør |
+| Den eksisterende auditraden etter ombyggingen i 007c | står urørt, med `object_schema`/`object_table` korrekt utledet av de nye generert-kolonnene |
+| `api.my_roles`, lest gjennom klientrollen `authenticated` med redaktørens JWT-subjekt | viser begge rollene, uavgrenset, uten sluttdato |
+| `knowledge.assert_editor_authorized()` med samme subjekt | godkjenner, og returnerer redaktørens egen aktør |
+| Et nytt kall på `workflow.ensure_editor_role_grant()` | `already_authorized`, og fortsatt to tildelinger |
+
+**Ingen testkilde er opprettet i produksjon.** Den siste kontrollen kunne vært å kalle
+`api.create_source(...)` og se raden komme, men den ville lagt en oppdiktet kilde i den
+kanoniske kunnskapsbasen — og en kilde er ikke en testrad som kan ryddes bort uten spor:
+opphavet er frosset (`knowledge.freeze_source_attribution()`), og auditraden består. Kjeden er
+derfor prøvd så langt den kan prøves uten å skrive: autorisasjonskontrollen som *er* porten
+foran skriveveien, kjørt med redaktørens eget subjekt. Den første ekte kilden hører til
+redaktøren, gjennom skjemaet.
+
+**Gjelden dette etterlater.** Ingen vaktpost ser på det hostede prosjektet, og dette er tredje
+gang en påstand om det har vært usann i repoet uten at noe merket det (§74.18, §74.23, §74.25).
+At den nå er sann, endrer ikke mekanismen. Ført som GitHub-issue 40, med retningen: et steg som
+kjører `supabase db push` — eller minst leser migrasjonshistorikken og sammenligner med
+`supabase/migrations/` — i den første jobben som har nettverk til `api.supabase.com` og et
+prosjekt-token i CI.
+
+**Hva som gjenstår.** Milepæl B mangler fortsatt tre ting (§74.4): ekstraksjonsverifikasjonene,
+claim-verifikasjonene og selve godkjenningen. Ingenting her lukker noen av dem, og
+publiseringsgaten er urørt.
 
 ---
 
