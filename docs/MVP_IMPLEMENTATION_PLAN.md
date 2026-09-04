@@ -4244,17 +4244,22 @@ seedede funnene bærer «Antidep ekstraksjonsagent». Attribusjonskjeden §74.24
 prøvd med en reell menneskelig aktør i den enden den ble bygget for.
 
 **Katalogen produksjonsdatabasen har nå:** tre kilder, to registrerte kildeversjoner, tre
-evidensfunn, to virkestoff, ett endepunkt og én populasjon. Ingen verifikasjon, ingen
-reviewbeslutning og ingen publisering er registrert — de tre som gjenstår for Milepæl B
-(§74.4), uendret av dette steget.
+evidensfunn, to virkestoff, ett endepunkt og én populasjon.
+
+**Ingen ekstraksjonsverifikasjon, ingen claim-verifikasjon og ingen reviewgodkjenning er
+registrert** — de tre som gjenstår for Milepæl B (§74.4), uendret av dette steget. Ingen
+publisering er registrert heller, men publisering er ikke en fjerde gjenstående ting ved siden
+av de tre: den er det gaten slipper gjennom *når* de tre er innfridd, og kan ikke skje før.
+De to verifikasjonsfasene er dessuten to og ikke én — ekstraksjonen kontrolleres mot kilden
+(G4/G5), claim-støtten mot evidensen (G8/G9) — og å slå dem sammen ville skjult den ene.
 
 **Steg 3 av «manuell adminflyt» (§29) er dermed bekreftet i produksjon, ikke bare bygget.**
 Markeringen for `First admin workflow` står fortsatt som `[~]` av samme grunn som før, og de to
 tellemåtene skal ikke blandes. «Steg 1, 2 og 3» er §29 sin leveranse `manuell adminflyt`, der
 steg 1 er «hvem er jeg, og hva har jeg lov til?» (§74.21-§74.22). Kjeden i §15 er noe annet: ti
 ledd, og den begynner med «Editor oppretter Source». Tilgangsflaten er ikke ett av dem. **Av
-§15 sine ti ledd er dermed de to første prøvd i produksjon**, og det tredje — «separat verifier
-verifiserer ekstraksjonen» — er neste.
+§15 sine ti ledd er dermed de to første prøvd i produksjon**, og det tredje — «separat
+verifier verifiserer ekstraksjonen» — er neste.
 
 ---
 
@@ -4267,27 +4272,51 @@ av de to foregående stegene (§74.24, §74.27) og skal ikke oppfinnes på nytt:
 `SECURITY DEFINER`-funksjon i `api`, autorisasjon på sitt eget kall, attribusjon, audit, og
 views med RLS-policyer under seg.
 
-**Tre ting må avgjøres i den PR-en, og alle tre er lest ut av produksjon framfor antatt.**
+**Fire ting må avgjøres i den PR-en, og alle fire er lest ut av produksjon framfor antatt.**
 
 **1. Kildeversjoner må bygges i samme PR (issue 44).** `ANTIDEP_CONSTITUTION.md` §11 forbyr å
 godkjenne en ekstraksjon på grunnlag av et annet ledds sammendrag alene, og
 `evidence_verifications_source_access_check` håndhever det: `verified` sammen med
-`derived_summary` avvises. Verifikatoren trenger altså en adresse å hente kilden på nytt fra.
-De to seedede kildeversjonene har både adresse og innholdshash, men ingen lagret kopi
-(`storage_reference` er NULL på begge), og en kilde opprettet gjennom `/sources/new` har ingen
-versjon i det hele tatt — Efexor-kilden er nettopp det tilfellet. Uten
-`api.create_source_version(...)` er verifikasjonssteget derfor bygget for et grunnlag som bare
-tilfeldigvis finnes for de tre funnene som er registrert i dag. Issue 44 sier selv at den hører
-til denne PR-en; avlesningen bekrefter det.
+`derived_summary` avvises. En kilde opprettet gjennom `/sources/new` har ingen kildeversjon i
+det hele tatt — Efexor-kilden er nettopp det tilfellet — og et funn registrert mot den ville
+hatt ingenting å kontrolleres mot. Uten `api.create_source_version(...)` er verifikasjonssteget
+derfor bygget for et grunnlag som bare tilfeldigvis finnes for de tre funnene som er registrert
+i dag. Issue 44 sier selv at den hører til denne PR-en; avlesningen bekrefter det.
 
-**2. Rollen som verifiserer er `reviewer`, ikke en ny rolle.** `workflow.app_role` definerer
+**2. «Adresse pluss hash» er ikke uten videre et tilstrekkelig verifikasjonsgrunnlag.**
+Dette er det som må avgjøres og ikke antas. `workflow.verification_source_access` beskriver
+`verifiable_representation` som et *lagret* og etterprøvbart øyeblikksbilde, og
+`storage_reference` er NULL på begge de seedede kildeversjonene: det finnes ingen lagret kopi,
+bare en adresse og en hash å hente på nytt og sammenligne mot. `original_source` er heller ikke
+opplagt: `Source` er en tidsskriftartikkel, mens `retrieved_from` peker på en MEDLINE-post, og
+funnenes `source_locator` sier eksplisitt «Sammendrag (MEDLINE-post)». Posten er en
+bibliografisk representasjon av artikkelen, ikke artikkelen.
+
+**Databasen fanger ikke dette.** CHECK-en avviser bare `verified` + `derived_summary`; en
+`verified`-rad med `verifiable_representation` passerer uansett om kildeversjonen har en lagret
+kopi eller ikke. Integriteten hviler altså på hva verifikatoren oppgir, og det er nettopp derfor
+den skal skrives ut framfor å overlates til skjønn i øyeblikket. Den PR-en må velge én av tre,
+og valget hører til den og ikke hit:
+
+1. verifikatoren skaffer artikkelen selv og registrerer `original_source`;
+2. skriveveien for kildeversjoner lagrer et faktisk øyeblikksbilde, slik at
+   `verifiable_representation` er sann etter sin egen definisjon;
+3. semantikken presiseres eksplisitt — for eksempel at en adresse med reproduserbar hash *er*
+   en etterprøvbar representasjon — og presiseringen føres i typekommentaren og håndheves der
+   den kan håndheves.
+
+Alternativ 2 er det som gjør issue 44 til mer enn en bekvemmelighet, og er den retningen som
+krever minst nytolkning av et vokabular som allerede er skrevet. En `verified`-rad skal
+uansett ikke registreres i produksjon før spørsmålet er avgjort.
+
+**3. Rollen som verifiserer er `reviewer`, ikke en ny rolle.** `workflow.app_role` definerer
 `reviewer` som «faglig verifikasjon» (migrasjon 001), og redaktøren har allerede den
 tildelingen uavgrenset (§74.28). Scope-spørsmålet er avgjort på samme måte som for
 evidensregistreringen (§74.27): en ekstraksjonsverifikasjon er avgrenset til funnets endepunkt,
 så en avgrenset `reviewer`-tildeling gjelder sitt eget begrep og en uavgrenset gjelder alt.
 Ingen ny rolle, ingen ny tildeling.
 
-**3. Den ene tingen som ikke kan avgjøres i koden: hvem som verifiserer redaktørens egne
+**4. Den ene tingen som ikke kan avgjøres i koden: hvem som verifiserer redaktørens egne
 funn.** `workflow.evidence_verifications` krever at verifikatoren er en *annen* aktør enn den
 som opprettet funnet — Konstitusjonen §11, at generering og verifikasjon er atskilte
 operasjoner, håndhevet som en CHECK og ikke som en konvensjon. §74.4 er samtidig eksplisitt på
@@ -4302,11 +4331,14 @@ er i praksis. Avlesningen fra produksjon gjør konsekvensen konkret:
   autoriserer på den innloggede brukeren. En agentprodusert verifikasjon forutsetter den
   least privilege-identiteten §16 forutser for `agent_worker`, og den finnes ikke.
 
-Det blokkerer ikke PR-en: skriveveien kan bygges og prøves fullt ut, i begge retninger, mot de
-to seedede funnene — samme mønster som `390_evidence_item_registration_test.sql` bruker på hver
-autorisasjonsgren. Det blokkerer at kjeden kjøres helt gjennom i produksjon for et funn
-redaktøren selv har registrert. Valget står mellom å registrere en andre navngitt person og å
-bygge agentidentiteten §16 forutser; det første er klart minst, men det er et
+Det blokkerer ikke PR-en: skriveveien kan bygges og prøves fullt ut i test, i begge retninger,
+mot de to seedede funnene — samme mønster som `390_evidence_item_registration_test.sql` bruker
+på hver autorisasjonsgren. At de to funnene er *prøvbare* i test, er ikke det samme som at en
+`verified`-rad kan registreres mot dem i produksjon: det avgjøres av punkt 2.
+
+Det denne begrensningen derimot blokkerer, er at kjeden kjøres helt gjennom i produksjon for et
+funn redaktøren selv har registrert. Valget står mellom å registrere en andre navngitt person
+og å bygge agentidentiteten §16 forutser; det første er klart minst, men det er et
 governance-spørsmål og ikke et teknisk, og det føres her framfor å bli oppdaget når skriveveien
 avviser det første kallet.
 
