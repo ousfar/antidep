@@ -1349,6 +1349,7 @@ PR G  db: add publication events and gate                                   (#15
       docs: mark #34, #35 and #37 as merged in the PR log                   (#38)  merget   ingen migrasjon
       db: grant the editor role for source registration                     (#39)  merget   migrasjon 005c
       docs: record the hosted project in sync and source creation deployed  (#41)  merget   ingen migrasjon
+      feat: add the controlled write path for registering an EvidenceItem   (#43)  åpen     migrasjon 008b, 007d, 007e
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -4124,8 +4125,15 @@ stack, på både desktop- og mobilbredde, uten konsollfeil.
 kildeversjon, og skjemaet kan derfor bare tilby «ingen registrert kildeversjon». Feltet er
 riktig modellert — `source_version_id` er nullbar, og NULL betyr «ikke knyttet til et
 registrert øyeblikksbilde» — men uten en versjon finnes det ingen adresse en verifikator kan
-hente kilden på nytt fra. Skriveveien for kildeversjoner er ført som GitHub-issue, og hører
+hente kilden på nytt fra. Skriveveien for kildeversjoner er ført som GitHub-issue 44, og hører
 til den PR-en som bygger verifikasjonssteget.
+
+Den andre gjelden er katalogens rekkevidde: `catalog` inneholder fortsatt nøyaktig det første
+golden slice trengte, to virkestoff og ett endepunkt, og et evidensfunn må peke på begge
+deler. En redaktør kan derfor opprette en kilde om et hvilket som helst tema, men bare
+registrere funn om de to. Ført som GitHub-issue 45, med de tre spørsmålene den PR-en må
+avgjøre: hvilken rolle som forvalter vokabularet, attribusjon på katalogradene, og hva en
+avgrenset rolle som kan opprette begreper betyr for sin egen rekkevidde.
 
 **Hva som gjenstår for Milepæl B.** Fortsatt de samme tre (§74.4): ekstraksjonsverifikasjonene,
 claim-verifikasjonene og selve godkjenningen. Steg 3 lukker ingen av dem — det produserer
