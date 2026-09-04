@@ -1351,6 +1351,7 @@ PR G  db: add publication events and gate                                   (#15
       docs: record the hosted project in sync and source creation deployed  (#41)  merget   ingen migrasjon
       feat: add the controlled write path for registering an EvidenceItem   (#43)  merget   migrasjon 008b, 007d, 007e
       docs: record the evidence registration deployed to the hosted project (#46)  merget   ingen migrasjon
+      docs: record the first real evidence registration in production       (#47)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
