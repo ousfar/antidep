@@ -1243,10 +1243,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ## 74. Status etter kildevisningen
 
-**Oppdatert:** 3. september 2026 (etter `db: grant the editor role for source registration`,
-som tildeler redaktørkontoen `editor`-rollen slik at «Opprett kilde» faktisk kan brukes — se
-§74.25; forrige oppdatering etter `feat: add the controlled write path for creating a Source`,
-som åpnet den skriveveien, §74.24)
+**Oppdatert:** 4. september 2026 (etter at de fire gjenstående migrasjonene faktisk ble kjørt
+mot det hostede prosjektet, slik at skriveveien for å opprette en kilde er deployet der og
+redaktøren er autorisert til å bruke den — se §74.26; forrige oppdatering etter `db: grant the
+editor role for source registration`, som tildelte redaktørkontoen `editor`-rollen, §74.25)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1311,36 +1311,37 @@ påstandskort til en visning som faktisk svarer.
 ### 74.2 Faktisk PR-rekkefølge
 
 ```text
-PR A  chore: bootstrap Antidep web app                                     (#9)   merget
-PR B  db: add schema and security foundation                               (#10)  merget   migrasjon 001
-PR C  db: add drug and clinical concept catalog                            (#11)  merget   migrasjon 002
-PR D  db: add sources and evidence items                                   (#12)  merget   migrasjon 003
-PR E  db: add claims and evidence assessments                              (#13)  merget   migrasjon 004
-PR F  db: add review and provenance                                        (#14)  merget   migrasjon 005
-PR G  db: add publication events and gate                                  (#15)  merget   migrasjon 006
-      docs: record implementation status after migration 006               (#16)  merget   ingen migrasjon
-      db: make evidence item content hash unambiguous                      (#17)  merget   migrasjon 006a
-      db: add api published read model                                     (#18)  merget   migrasjon 007
-      ci: verify the numeric claims in the plan                            (#19)  merget   ingen migrasjon
-      db: add audit events                                                 (#20)  merget   migrasjon 008
-      db: expose publication and review timestamps in api                  (#21)  merget   migrasjon 007a
-      feat: add published read model client                                (#22)  merget   ingen migrasjon
-      feat: add claim card and certainty display                           (#23)  merget   ingen migrasjon
-      feat: add routing and first clinician pages                          (#24)  merget   ingen migrasjon
-      feat: add the claim evidence view                                    (#25)  merget   ingen migrasjon
-      feat: add the source view                                            (#26)  merget   ingen migrasjon
-      db: register the named qualified editor                              (#27)  merget   migrasjon 005a
-      docs: correct the record of the hosted Supabase project              (#28)  merget   ingen migrasjon
-      test: verify the api column contract                                 (#29)  merget   ingen migrasjon
-      docs: clarify collaboration and reporting rules                      (#30)  merget   ingen migrasjon
-      db: authorize the named qualified editor                             (#31)  merget   migrasjon 005b
-      db: expose the caller's own actor and roles                          (#32)  merget   migrasjon 007b
-      docs: mark #32 as merged in the PR log                               (#33)  merget   ingen migrasjon
-      feat: add sign-in and my access                                      (#34)  merget   ingen migrasjon
-      docs: record that the hosted project is migrated and api is exposed  (#37)  merget   ingen migrasjon
-      feat: add the controlled write path for creating a Source            (#35)  merget   migrasjon 003a, 008a, 007c
-      docs: mark #34, #35 and #37 as merged in the PR log                  (#38)  merget   ingen migrasjon
-      db: grant the editor role for source registration                    (#39)  åpen     migrasjon 005c
+PR A  chore: bootstrap Antidep web app                                      (#9)   merget
+PR B  db: add schema and security foundation                                (#10)  merget   migrasjon 001
+PR C  db: add drug and clinical concept catalog                             (#11)  merget   migrasjon 002
+PR D  db: add sources and evidence items                                    (#12)  merget   migrasjon 003
+PR E  db: add claims and evidence assessments                               (#13)  merget   migrasjon 004
+PR F  db: add review and provenance                                         (#14)  merget   migrasjon 005
+PR G  db: add publication events and gate                                   (#15)  merget   migrasjon 006
+      docs: record implementation status after migration 006                (#16)  merget   ingen migrasjon
+      db: make evidence item content hash unambiguous                       (#17)  merget   migrasjon 006a
+      db: add api published read model                                      (#18)  merget   migrasjon 007
+      ci: verify the numeric claims in the plan                             (#19)  merget   ingen migrasjon
+      db: add audit events                                                  (#20)  merget   migrasjon 008
+      db: expose publication and review timestamps in api                   (#21)  merget   migrasjon 007a
+      feat: add published read model client                                 (#22)  merget   ingen migrasjon
+      feat: add claim card and certainty display                            (#23)  merget   ingen migrasjon
+      feat: add routing and first clinician pages                           (#24)  merget   ingen migrasjon
+      feat: add the claim evidence view                                     (#25)  merget   ingen migrasjon
+      feat: add the source view                                             (#26)  merget   ingen migrasjon
+      db: register the named qualified editor                               (#27)  merget   migrasjon 005a
+      docs: correct the record of the hosted Supabase project               (#28)  merget   ingen migrasjon
+      test: verify the api column contract                                  (#29)  merget   ingen migrasjon
+      docs: clarify collaboration and reporting rules                       (#30)  merget   ingen migrasjon
+      db: authorize the named qualified editor                              (#31)  merget   migrasjon 005b
+      db: expose the caller's own actor and roles                           (#32)  merget   migrasjon 007b
+      docs: mark #32 as merged in the PR log                                (#33)  merget   ingen migrasjon
+      feat: add sign-in and my access                                       (#34)  merget   ingen migrasjon
+      docs: record that the hosted project is migrated and api is exposed   (#37)  merget   ingen migrasjon
+      feat: add the controlled write path for creating a Source             (#35)  merget   migrasjon 003a, 008a, 007c
+      docs: mark #34, #35 and #37 as merged in the PR log                   (#38)  merget   ingen migrasjon
+      db: grant the editor role for source registration                     (#39)  merget   migrasjon 005c
+      docs: record the hosted project in sync and source creation deployed  (#41)  åpen     ingen migrasjon
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1379,8 +1380,10 @@ da raden for #37 ble skrevet, og førte sin egen rad da den selv merget — ette
 over. #37 merget først (`4903d2a`), #35 etter (`f86b24d`), og rekkefølgen i tabellen er
 faktisk mergerekkefølge og ikke nummerrekke. #36 er en issue og ikke en PR.
 
-Titlene er commit-emnene ordrett. Kolonnebredden er derfor utvidet framfor å forkorte #37 sin
-tittel: en logg som gjengir noe annet enn historikken, kan ikke sammenlignes med den.
+Titlene er commit-emnene ordrett. Kolonnebredden er derfor utvidet framfor å forkorte en
+tittel: en logg som gjengir noe annet enn historikken, kan ikke sammenlignes med den. Det har
+skjedd to ganger — først for #37, så for den nyeste raden — og utvidelsen gjelder hele tabellen,
+slik at kolonnen står på samme sted i alle rader.
 
 Raden for denne PR-en selv føres i en egen commit på samme PR: PR-nummeret er ikke tildelt
 før PR-en er åpnet, og en foreløpig rad uten nummer ville vært en påstand tabellen ikke kan
@@ -3932,6 +3935,80 @@ mot listen den selv står ved siden av.
 **Hva som gjenstår.** Milepæl B mangler fortsatt tre ting (§74.4): ekstraksjonsverifikasjonene,
 claim-verifikasjonene og selve godkjenningen. Denne PR-en lukker ingen av dem, og åpner ikke
 publiseringsgaten.
+
+---
+
+### 74.26 Det hostede prosjektet er brakt i synk, og skriveveien for kilder er deployet
+
+§74.25 fant at produksjonsdatabasen stoppet på migrasjon 007b: 003a, 008a og 007c var merget i
+`main` og aldri kjørt der, og 005c kom i tillegg. Konsekvensen var at issue 36 sitt symptom
+ikke engang var det issuen beskrev — `api.create_source(...)` fantes ikke i produksjon i det
+hele tatt. De fire er nå kjørt, etter at PR-en som innførte 005c var reviewet og merget.
+
+**Hvordan, og hvorfor ikke med `supabase db push`.** Den pinnede CLI-en kan fortsatt ikke nå
+`api.supabase.com` fra en agentsesjon (§74.23, prøvd på nytt). Migrasjonene ble derfor kjørt
+gjennom Management-API-et, én fil om gangen, hver som **én transaksjon som inneholder både
+migrasjonens egen SQL og raden i `supabase_migrations.schema_migrations`** — samme operasjon
+`db push` utfører, med samme atomisitet. Filene ble tatt uendret fra `main`; ingenting er
+skrevet for hånd, og ingen endring er gjort utenom migrasjonene. Rekkefølgen var
+tidsstempelrekkefølgen: 003a, 008a, 007c, 005c.
+
+At 008a måtte committe alene før 007c, er ikke en detalj her heller: `ALTER TYPE ... ADD VALUE`
+og bruken av den nye verdien kan ikke ligge i samme transaksjon (§74.24). Én forespørsel per
+migrasjonsfil gir nettopp det skillet.
+
+**005c tok den positive grenen, og det er første gang den er kjørt med en konto å peke på.**
+Kallet returnerte `authorized`. Migrasjonen skrev altså raden, framfor `account_missing` som i
+CI og enhver fersk lokal stack — begge grenene har dermed kjørt i et ekte miljø, ikke bare i
+testene.
+
+**Hva som er lest tilbake etterpå, som avlesning og ikke som antakelse:**
+
+| Kontroll | Svar |
+| --- | --- |
+| `supabase_migrations.schema_migrations` | sytten rader, med nøyaktig de samme versjonsnumrene og navnene som filene i `supabase/migrations/` |
+| `knowledge.sources.created_by_actor_id` | finnes, `NOT NULL`, og begge de seedede radene er attribuert |
+| `audit.event_operation` | inneholder `source_created` |
+| `api.create_source(...)`, `knowledge.assert_editor_authorized()`, `audit.record_source_event()`, audittriggeren | alle finnes |
+| `EXECUTE` på `api.create_source(...)` | bare `authenticated`; ikke `anon`, ikke `service_role` |
+| `workflow.user_roles` | to rader: den uavgrensede `reviewer` fra 27. august og den uavgrensede `editor` fra i dag, begge løpende og begge selvtildelt av `human:peder-holman`, med hver sin begrunnelse |
+| `audit.events` | to rader, én `role_granted` per tildeling, begge attribuert til redaktørens aktør |
+| Den eksisterende auditraden etter ombyggingen i 007c | står urørt, med `object_schema`/`object_table` korrekt utledet av de nye generert-kolonnene |
+| `api.my_roles`, lest gjennom klientrollen `authenticated` med redaktørens JWT-subjekt | viser begge rollene, uavgrenset, uten sluttdato |
+| `knowledge.assert_editor_authorized()` med samme subjekt | godkjenner, og returnerer redaktørens egen aktør |
+| Et nytt kall på `workflow.ensure_editor_role_grant()` | `already_authorized`, og fortsatt to tildelinger |
+
+**Hva avlesningene over beviser, og hva de ikke beviser.** De viser at skriveveien er
+*deployet* og at redaktøren er *autorisert* til å bruke den. De viser ikke at en opprettelse
+har lyktes: **ingen vellykket `api.create_source(...)` er kjørt i produksjon.**
+`knowledge.assert_editor_authorized()` er porten foran skriveveien, ikke skriveveien selv —
+etter den gjør funksjonen en `INSERT` i `knowledge.sources`, som utløser audittriggeren fra
+migrasjon 007c, og klienten når den gjennom Data API-ets RPC-flate. Ingen av de tre leddene er
+prøvd i produksjon. De er dekket av `370_source_creation_test.sql` og
+`380_source_registration_role_test.sql` mot en lokal stack, og RPC-flaten er prøvd over ekte
+HTTP lokalt (§74.24) — men et grønt CI-miljø er ikke en avlesning fra produksjon, og det er
+nettopp den forskjellen §74.23 sin lærdom handler om.
+
+**Ingen testkilde er opprettet i produksjon, og det er et valg.** Den siste kontrollen kunne
+vært å kalle `api.create_source(...)` og se raden komme, men den ville lagt en oppdiktet kilde
+i den kanoniske kunnskapsbasen — og en kilde er ikke en testrad som kan ryddes bort uten spor:
+opphavet er frosset (`knowledge.freeze_source_attribution()`), og auditraden består. Kjeden er
+derfor prøvd så langt den kan prøves uten å skrive. Den første ekte kilden hører til
+redaktøren, gjennom skjemaet, og det er den opprettelsen som lukker dette hullet.
+
+**Gjelden dette etterlater.** Ingen vaktpost ser på det hostede prosjektet, og dette er tredje
+gang en påstand om det har vært usann i repoet uten at noe merket det (§74.18, §74.23, §74.25).
+At den nå er sann, endrer ikke mekanismen. GitHub-issue 40 gjaldt den konkrete forekomsten —
+produksjonen var fire migrasjoner bak — og er lukket av arbeidet over. **Mekanismen er ført som
+GitHub-issue 42**, med retningen: et steg som leser migrasjonshistorikken fra det hostede
+prosjektet og sammenligner den med `supabase/migrations/`, i den første jobben som har nettverk
+til `api.supabase.com` og et prosjekt-token i CI. Om det steget også skal *kjøre*
+`supabase db push`, er en større beslutning — automatisk skriving til produksjon fra CI — og
+hører til den issuen, ikke hit.
+
+**Hva som gjenstår.** Milepæl B mangler fortsatt tre ting (§74.4): ekstraksjonsverifikasjonene,
+claim-verifikasjonene og selve godkjenningen. Ingenting her lukker noen av dem, og
+publiseringsgaten er urørt.
 
 ---
 
