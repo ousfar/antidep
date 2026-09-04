@@ -1243,10 +1243,10 @@ historikk (§71). **Gjeldende status står i §74.**
 
 ## 74. Status etter kildevisningen
 
-**Oppdatert:** 4. september 2026 (etter at den første reelle kilden ble opprettet gjennom
-produksjons-UI-et, og etter at skriveveien for å registrere et EvidenceItem ble bygget — se
-§74.27; forrige oppdatering etter at de fire gjenstående migrasjonene faktisk ble kjørt mot
-det hostede prosjektet, §74.26)
+**Oppdatert:** 4. september 2026 (etter at skriveveien for å registrere et EvidenceItem ble
+merget og kjørt mot det hostede prosjektet — se §74.28; forrige oppdatering etter at den
+første reelle kilden ble opprettet gjennom produksjons-UI-et og skriveveien for evidensfunn
+ble bygget, §74.27)
 
 ### 74.1 Gjeldende statusmarkering
 
@@ -1349,7 +1349,7 @@ PR G  db: add publication events and gate                                   (#15
       docs: mark #34, #35 and #37 as merged in the PR log                   (#38)  merget   ingen migrasjon
       db: grant the editor role for source registration                     (#39)  merget   migrasjon 005c
       docs: record the hosted project in sync and source creation deployed  (#41)  merget   ingen migrasjon
-      feat: add the controlled write path for registering an EvidenceItem   (#43)  åpen     migrasjon 008b, 007d, 007e
+      feat: add the controlled write path for registering an EvidenceItem   (#43)  merget   migrasjon 008b, 007d, 007e
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -4138,6 +4138,62 @@ avgrenset rolle som kan opprette begreper betyr for sin egen rekkevidde.
 **Hva som gjenstår for Milepæl B.** Fortsatt de samme tre (§74.4): ekstraksjonsverifikasjonene,
 claim-verifikasjonene og selve godkjenningen. Steg 3 lukker ingen av dem — det produserer
 nettopp de objektene G4/G5 senere skal kontrollere.
+
+---
+
+### 74.28 Evidensregistreringen er kjørt mot det hostede prosjektet
+
+§74.27 beskrev skriveveien som *bygget*. Den var da merget i `main` og deployet som kode, men
+de tre migrasjonene var ikke kjørt mot produksjonsdatabasen — nøyaktig det avviket §74.25
+fant sist, og som issue 42 fortsatt ikke oppdager av seg selv. Migrasjonene er nå kjørt, etter
+at PR-en var reviewet og merget.
+
+**Hvordan.** Samme framgangsmåte som §74.26, og av samme grunn: den pinnede CLI-en når ikke
+`api.supabase.com` fra en agentsesjon (§74.23). Migrasjonene ble kjørt gjennom
+Management-API-et, én fil om gangen, hver som **én transaksjon som inneholder både
+migrasjonens egen SQL og raden i `supabase_migrations.schema_migrations`** — samme operasjon
+`supabase db push` utfører, med samme atomisitet. Filene er tatt uendret fra `main`, i
+tidsstempelrekkefølge: 008b, 007d, 007e. At 008b måtte committe alene før 007e, er igjen ikke
+en detalj: `ALTER TYPE ... ADD VALUE` og bruken av den nye verdien kan ikke ligge i samme
+transaksjon (§74.24), og én forespørsel per fil gir nettopp det skillet.
+
+**Hva som er lest tilbake etterpå, som avlesning og ikke som antakelse:**
+
+| Kontroll | Svar |
+| --- | --- |
+| `supabase_migrations.schema_migrations` mot `supabase/migrations/` | tjue rader, identisk liste, sammenlignet maskinelt framfor for øyet |
+| `api.editor_*` | seks views |
+| `*_editor_read` | seks RLS-policyer |
+| `api.create_evidence_item(...)` | finnes, med den 30 parametere lange signaturen |
+| `knowledge.assert_editor_authorized(uuid)` | finnes; den gamle parameterløse varianten er borte |
+| `workflow.caller_is_active_editor()`, `audit.record_evidence_item_event()`, audittriggeren | alle finnes |
+| `audit.event_operation` | inneholder `evidence_item_created` |
+| Grants på de seks views-ene | `authenticated` har SELECT på alle seks, ingenting utover SELECT; `anon` har ingenting |
+| EXECUTE på funksjonene | `authenticated` på `api.create_evidence_item`, `api.create_source` og `workflow.caller_is_active_editor`; ingen klientrolle på `knowledge.assert_editor_authorized` eller `audit.record_evidence_item_event` |
+
+**Data API-flaten er prøvd utenfra, ikke bare lest i katalogen.** En uinnlogget forespørsel mot
+`api.editor_sources` avvises med 42501, og et kall på `api.create_evidence_item` med alle
+fjorten obligatoriske parametere avvises med *permission denied for function* — ikke med
+«fant ikke funksjonen». Forskjellen er verdt å skille: den første feilen ville betydd at
+PostgREST ikke har sett den nye funksjonen ennå, den andre at den er synlig og stengt. Det er
+den andre.
+
+**Redaktørens tildeling er uavgrenset**, lest fra `workflow.user_roles`: `editor` uten
+scopebegrensning og uten sluttdato, ved siden av `reviewer` fra §74.23. Skopebegrensningen
+007e innførte, er derfor bygget og testet, men ingen tildeling i produksjon bruker den ennå.
+
+**Grensen for hva dette bekrefter, skrevet ut.** Avlesningene viser at skriveveien er deployet
+og at redaktøren er autorisert til å bruke den. De viser ikke at en registrering har lyktes:
+`INSERT`-en i `knowledge.evidence_items`, audittriggeren og `content_hash`-beregningen er
+ingen av dem kjørt i produksjon. Ingen testrad er opprettet for å lukke det hullet — et
+evidensfunn er append-only og kan ikke ryddes bort uten spor, samme resonnement som §74.26
+gjorde for kilder. Hullet lukkes slik det forrige ble lukket: av redaktøren, gjennom skjemaet.
+
+**Katalogen produksjonsdatabasen faktisk har**, som avgjør hva som kan registreres i praksis:
+tre kilder, to registrerte kildeversjoner, to virkestoff, ett endepunkt og én populasjon. De
+to gjeldspostene §74.27 førte — issue 44 for kildeversjoner og issue 45 for katalogens
+rekkevidde — er dermed ikke teoretiske: en registrering i produksjon i dag må peke på det ene
+endepunktet som finnes.
 
 ---
 
