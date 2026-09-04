@@ -191,13 +191,26 @@ Administratorrollen gir ikke automatisk faglig review- eller publiseringsmyndigh
 
 Maskinrolle med least-privilege-tilgang til eksplisitte pipelineoperasjoner.
 
-Agenten skal ikke kunne:
+`Agent Worker` er ikke én rolle, men et register. Hvert pipelineledd som skriver til
+kunnskapsbasen, har sin egen aktør, sin egen tekniske identitet og sin egen legitimasjon, og
+identiteten arver aktørens agentrolle som rettighetsgrense. En agent autentiserer seg med sin
+egen legitimasjon — aldri med en brukerkonto og aldri med en felles nøkkel som kan alt.
+
+Konsekvensene skal være håndhevet, ikke beskrevet. Agenten skal ikke kunne:
 
 - gi seg selv ny rolle
+- registrere eller utstede legitimasjon til en agentidentitet; det er en menneskelig handling
+- utføre et annet agentledds operasjon, heller ikke med gyldig legitimasjon
+- verifisere sitt eget arbeid
+- registrere en faglig godkjenning; en reviewbeslutning krever en menneskelig aktør
 - endre publiseringspolicy
 - godkjenne eget høyrisikoinnhold
 - endre tidligere publisert revisjon in place
 - slette audit/proveniens
+
+Flere uavhengige kontrollag er ønsket og er den foretrukne måten å øke kvaliteten på. Et andre
+kontrollag er en ny aktør med sin egen identitet og sin egen kjøring — ikke flere rettigheter
+på en identitet som allerede finnes.
 
 ---
 
@@ -400,6 +413,11 @@ Antidep skal ikke la produsentkilder dominere syntesen bare fordi de er lettest 
 ## 25. KI-innhold er alltid forslag før verifikasjon
 
 Språkmodelloutput skal som utgangspunkt ha status som arbeidsprodukt, ikke kunnskap.
+
+Verifikasjonen som løfter det fra forslag til kontrollert, kan selv være KI-produsert — det er
+hovedveien — så lenge den er en separat operasjon, utført av en annen aktør, mot
+kildematerialet. Det er kontrollens uavhengighet som gjør den til en kontroll, ikke at den
+utføres av et menneske.
 
 Status skal eksplisitt skille mellom eksempelvis:
 
@@ -772,6 +790,13 @@ Antidep bør minst ha:
 - definert ansvar for evidensmetodikk
 
 I en liten oppstartsgruppe kan samme person inneha flere roller, men systemet skal fortsatt logisk skille handlingene.
+
+Det redaksjonelle arbeidet foran den kliniske godkjenningen — kildesøk, ekstraksjon,
+kontroll av ekstraksjonen, påstandsformulering, motprøving og kildestøttekontroll — utføres
+normalt av agenter med hver sin identitet, ikke av mennesker. Kravet om at handlingene skal
+skilles logisk, er derfor ikke svakere når aktørene er maskiner: det er strengere, fordi
+skillet er håndhevet i databasen framfor å hvile på at to personer holder oppgavene fra
+hverandre.
 
 ## 57. Minimumsgates for MVP
 

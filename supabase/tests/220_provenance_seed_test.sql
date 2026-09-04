@@ -39,7 +39,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(17);
+select plan(20);
 
 -- ---------------------------------------------------------------------------
 -- Aktørene som faktisk produserte de eksisterende radene, og redaktøren
@@ -57,8 +57,54 @@ select results_eq(
   $$,
   $$values ('agent:claim-synthesis', 'agent', 'claim_synthesis', 'Antidep synteseagent'),
            ('agent:evidence-extraction', 'agent', 'evidence_extraction', 'Antidep ekstraksjonsagent'),
+           ('agent:extraction-verification', 'agent', 'extraction_verification', 'Antidep ekstraksjonsverifikator'),
            ('human:peder-holman', 'human', null, 'Peder Holman')$$,
-  'aktørregisteret inneholder de to KI-rollene fra migrasjon 003 og 004, og den navngitte redaktøren fra 005a'
+  'aktørregisteret inneholder de tre KI-rollene fra migrasjon 003, 004 og 005f, og den navngitte redaktøren fra 005a'
+);
+
+-- ---------------------------------------------------------------------------
+-- Den første tekniske agentidentiteten (migrasjon 005f)
+--
+-- Tre påstander som hver for seg er det migrasjonen faktisk lover, og som
+-- hver for seg ville vært en sikkerhetsendring om de sluttet å holde.
+-- ---------------------------------------------------------------------------
+select results_eq(
+  $$
+    select ai.identity_key,
+           verifier.actor_key,
+           ai.agent_role::text,
+           registrar.actor_key,
+           ai.registered_by_actor_type::text,
+           ai.secret_hash is null,
+           ai.secret_version,
+           ai.valid_to is null
+    from provenance.agent_identities ai
+    join provenance.actors verifier on verifier.id = ai.actor_id
+    join provenance.actors registrar on registrar.id = ai.registered_by_actor_id
+    order by ai.identity_key
+  $$,
+  $$values ('agent-identity:extraction-verification-01', 'agent:extraction-verification',
+            'extraction_verification', 'human:peder-holman', 'human', true, 0, true)$$,
+  'identitetsregisteret inneholder nøyaktig ekstraksjonsverifikatoren, registrert av den navngitte redaktøren og uten utstedt legitimasjon'
+);
+
+-- Identiteten er inert etter migrasjonen, og det skal den være til legitimasjonen
+-- utstedes i det miljøet kjøreren leser den fra (migrasjon 005f). En identitet
+-- som kunne autentisere seg rett etter en migrasjon, ville betydd at en
+-- hemmelighet lå i repoet.
+select throws_ok(
+  $$select provenance.authenticate_agent_identity(
+      'agent-identity:extraction-verification-01', 'hva som helst',
+      'extraction_verification'::provenance.agent_role)$$,
+  '42501', 'Agentidentiteten kunne ikke autentiseres for denne operasjonen.',
+  'en identitet uten utstedt legitimasjon kan ikke autentisere seg'
+);
+
+-- Ingen agentkjøring er registrert. En kjøring i migrert tilstand ville betydd
+-- at en KI-operasjon var utført uten at noen ba om den.
+select is(
+  (select count(*) from provenance.agent_runs), 0::bigint,
+  'ingen agentkjøring er registrert i migrert tilstand'
 );
 -- Lengdegulvet er ikke pynt. Databasens CHECK krever bare 1-2000 tegn, så en
 -- beskrivelse på ett tegn passerer den — og passerte også den tidligere

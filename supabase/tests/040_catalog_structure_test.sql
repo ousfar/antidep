@@ -12,7 +12,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(40);
+select plan(41);
 
 -- ---------------------------------------------------------------------------
 -- Tabellene i migrasjon 002, og ingen flere
@@ -79,16 +79,35 @@ select set_eq(
     where n.nspname = 'provenance'
       and c.relkind in ('r', 'p', 'v', 'm')
   $$,
-  $$values ('actors')$$,
-  'provenance inneholder nøyaktig aktørtabellen fra migrasjon 005'
+  $$values ('actors'), ('agent_identities'), ('agent_runs')$$,
+  'provenance inneholder nøyaktig aktørtabellen fra migrasjon 005 og de to agenttabellene fra 005e'
 );
 
--- provenance.agent_runs er bevisst utsatt til migrasjonen som innfører den
--- første automatiske evidenspipelinen, og skal ikke ha sneket seg inn før den
--- har en faktisk skrivevei (MVP_IMPLEMENTATION_PLAN.md §22).
-select hasnt_table(
+-- provenance.agent_runs var bevisst utsatt til det fantes en faktisk skrivevei
+-- inn i den (MVP_IMPLEMENTATION_PLAN.md §22). Migrasjon 005e ga den en:
+-- api.begin_agent_run(...) og api.complete_agent_run(...). Vaktposten er derfor
+-- snudd framfor fjernet — den påstod at tabellen ikke fantes, og påstår nå at
+-- den bærer nøyaktig de premissene DATABASE_ARCHITECTURE.md §33 krever av en
+-- agentkjøring. En kolonne som forsvant, ville gjort en KI-operasjon
+-- urekonstruerbar uten at noe sa fra.
+select has_table(
   'provenance', 'agent_runs',
-  'provenance.agent_runs er ikke opprettet ennå'
+  'provenance.agent_runs finnes etter migrasjon 005e'
+);
+select set_eq(
+  $$
+    select a.attname
+    from pg_attribute a
+    where a.attrelid = 'provenance.agent_runs'::regclass
+      and a.attnum > 0 and not a.attisdropped
+  $$,
+  $$values ('id'), ('agent_identity_id'), ('actor_id'), ('agent_role'),
+           ('provider'), ('model'), ('model_version'),
+           ('prompt_template_version'), ('pipeline_version'),
+           ('status'), ('input_manifest'), ('output_manifest'),
+           ('failure_reason'), ('started_at'), ('completed_at'),
+           ('created_at'), ('updated_at')$$,
+  'provenance.agent_runs bærer rolle, identitet, modell- og pipelineversjon, input, output og tidspunkter (DATABASE_ARCHITECTURE.md §33)'
 );
 
 -- audit fikk auditloggen i migrasjon 008, og ikke noe mer. Vaktposten er derfor

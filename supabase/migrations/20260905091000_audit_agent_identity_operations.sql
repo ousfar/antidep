@@ -1,0 +1,45 @@
+-- ============================================================================
+-- Migrasjon 008c — audit.event_operation får de tre agentidentitetsverdiene
+--
+-- Utvider auditvokabularet fra migrasjon 008 (§25), som 008a og 008b, og står
+-- utenfor den planlagte rekken i MVP_IMPLEMENTATION_PLAN.md §18-§27.
+--
+-- ----------------------------------------------------------------------------
+-- Hvorfor akkurat tre verdier, og ikke én til for hver agentkjøring
+--
+-- audit.events er loggen for «sikkerhets- og forvaltningskritiske operasjoner»
+-- (DATABASE_ARCHITECTURE.md §35). En agentidentitet er en maskin som får lov å
+-- handle i Antidep: den er en rettighetstildeling, på linje med role_granted, og
+-- livssyklusen har nøyaktig tre punkter der rettigheten endrer seg:
+--
+--   agent_identity_registered           identiteten opprettes (kan ennå ikke
+--                                       autentisere: uten legitimasjon er den
+--                                       inert)
+--   agent_identity_credential_issued    legitimasjonen utstedes eller roteres —
+--                                       det er her maskinen faktisk får evnen
+--                                       til å handle
+--   agent_identity_revoked              rettigheten trekkes tilbake
+--
+-- Selve agentkjøringene er bevisst *ikke* med. En kjøring er proveniens og ikke
+-- en rettighetsendring, og provenance.agent_runs er allerede sin egen
+-- append-orienterte logg med input, output, modell- og pipelineversjon (§33).
+-- Å speile hver kjøring i audit.events ville druknet de forvaltningskritiske
+-- hendelsene i normal drift — og gjort auditloggen mindre lesbar, ikke mer
+-- fullstendig. Koblingen den andre veien finnes allerede: audit.events har
+-- request_or_run_id, som er nettopp den kjøringen en skrivende agentoperasjon
+-- hørte til (§74.7).
+--
+-- ----------------------------------------------------------------------------
+-- Hvorfor migrasjonen står alene
+--
+-- Samme grunn som 008a og 008b: `ALTER TYPE ... ADD VALUE` kan ikke brukes i
+-- samme transaksjon som verdien (§74.24). Migrasjonen gjør derfor ingenting
+-- annet — ingen CASE-gren utvides her. Fram til migrasjon 005e har kjørt, kan
+-- audit.events ikke motta en rad med noen av disse operasjonene: object_schema
+-- og object_table ville gitt NULL og feilet på sin egen NOT NULL, og
+-- events_snapshot_shape_check ville truffet ELSE false.
+-- ============================================================================
+
+alter type audit.event_operation add value 'agent_identity_registered';
+alter type audit.event_operation add value 'agent_identity_credential_issued';
+alter type audit.event_operation add value 'agent_identity_revoked';

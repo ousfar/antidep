@@ -779,14 +779,50 @@ Aktørtyper kan minst være:
 
 En menneskelig aktør kan kobles til `auth.users`, men faglig historikk skal ikke forsvinne dersom brukerprofilen senere deaktiveres.
 
+## 32.1 `provenance.agent_identities`
+
+En agent kan ikke ha en brukerkonto (§32 sitt skille mellom aktørtyper er avgjørende, ikke
+kosmetisk), og `service_role` er ikke applikasjonens universalnøkkel (§49). En KI-prosess som
+skal skrive til kunnskapsbasen, trenger derfor en egen teknisk identitet:
+
+```text
+agent_identity_id PK
+actor_id FK → provenance.actors     (unik: én identitet per agentaktør)
+agent_role                          (speil av aktørens rolle, låst av sammensatt FK)
+identity_key                        (stabil maskinnøkkel)
+secret_hash NULL                    (hashet legitimasjon; NULL = ikke utstedt)
+secret_version
+secret_issued_at NULL
+secret_issued_by_actor_id NULL      (må være en human-aktør)
+valid_from
+valid_to NULL                       (tilbakekalling; krever aktør og begrunnelse)
+registered_by_actor_id              (må være en human-aktør)
+registration_reason
+```
+
+Rollen er rettighetsgrensen. Autentiseringen krever den rollen operasjonen faktisk trenger, så
+en identitet i ett pipelineledd kan ikke utføre et annet pipelineledds operasjon — heller ikke
+med gyldig legitimasjon. Flere uavhengige kontrollag skaleres ved å registrere flere aktører
+med samme rolle, ikke ved å gi én identitet flere roller.
+
+Legitimasjonen skal aldri lagres i klartekst, og hashen bør bindes til identitetsnøkkelen slik
+at en lekket hash ikke kan spilles av mot en annen identitet. Registrering, utstedelse og
+tilbakekalling er rettighetsendringer og skal auditeres (§35).
+
+At bare et menneske kan registrere en agentidentitet eller utstede legitimasjon til den, skal
+være håndhevet deklarativt, ikke bare beskrevet: en agent som kunne registrere agenter, ville
+vært en rettighetseskalering med ett ekstra ledd.
+
 ## 33. `provenance.agent_runs`
 
 Hver KI-kjøring som produserer eller verifiserer kunnskapsobjekter bør registrere:
 
 ```text
 agent_run_id PK
+agent_identity_id FK → provenance.agent_identities
+actor_id                            (speil, låst av sammensatt FK)
+agent_role                          (speil, låst av sammensatt FK)
 work_unit_id FK NULL
-agent_role
 provider
 model
 model_version_or_identifier
@@ -800,6 +836,14 @@ output_manifest
 ```
 
 Promptens fulle innhold trenger ikke nødvendigvis ligge direkte i raden dersom det finnes en versjonert, innholdsadressert promptartefakt.
+
+Aktør og rolle bør ligge som speilkolonner låst til identiteten, og kjøringen bør selv være
+refererbar på `(id, actor_id)` og `(id, agent_role)`. Da kan et objekt en kjøring produserte,
+kreve deklarativt at det ble produsert av den kjøringen det attribueres til, og i riktig rolle
+— framfor at hver skrivevei kontrollerer det i funksjonskode (§59).
+
+En kjøring åpnes én gang og lukkes én gang. Premissene bør være uforanderlige, og ingen kjøring
+bør kunne slettes: en kjøring som kunne omskrives i ettertid, dokumenterer ingenting.
 
 ## 34. Proveniens er en graf
 
@@ -1000,6 +1044,10 @@ En første modell bør støtte minst:
 | `agent_worker` | Avgrenset maskintilgang til eksplisitte pipeline-operasjoner |
 
 En person kan ha flere roller.
+
+`agent_worker` er ikke en rad i medlemskapsmodellen i §47: en agent har ingen brukerkonto å
+knytte en tildeling til. Den hører til `provenance.agent_identities` (§32.1), der
+rettighetsgrensen er agentrollen på aktøren framfor et `role_code` på en konto.
 
 ## 46. Autorisasjonsdata skal ikke komme fra brukerredigerbar metadata
 
@@ -1329,6 +1377,7 @@ user_roles
 
 ```text
 actors
+agent_identities
 agent_runs
 ```
 

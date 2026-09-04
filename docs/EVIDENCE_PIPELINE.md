@@ -981,6 +981,11 @@ Pipeline BØR kunne opprette en eksplisitt review-/avvikssak med:
 
 Rollene under er logiske ansvarsgrenser. De kan implementeres med ulike modeller og teknologier over tid.
 
+Ansvarsgrensen skal samtidig være en teknisk grense: hver rolle som faktisk skriver til
+kunnskapsbasen, har en egen aktør med en egen identitet og en egen legitimasjon, og
+autentiseringen krever den rollen operasjonen trenger. En rolle som bare er et navn i en
+prompt, er ingen grense.
+
 | Rolle | Primær input | Primær output | Skal ikke gjøre |
 |---|---|---|---|
 | `QueryPlanner` | klinisk informasjonsbehov | strukturert arbeidsenhet og søkeplan | konkludere klinisk |
@@ -1039,6 +1044,11 @@ For hver vesentlig KI-operasjon BØR proveniensen kunne registrere:
 - kjøretidspunkt
 
 Full deterministisk reproduserbarhet kan ikke alltid garanteres for språkmodeller, men Antidep skal kunne rekonstruere **hva som ble kjørt med hvilke premisser**.
+
+Premissene registreres per kjøring og ikke per objekt: agentrolle, leverandør, modell,
+modellversjon, promptmalversjon, pipelineversjon, input, output, utfall og tidspunkter. En
+kjøring uten dem skal ikke kunne registreres — et felt som kan stå tomt, står tomt akkurat i
+de kjøringene det betyr mest å kunne lese i ettertid.
 
 ## 66. Modellbytte skal ikke endre kunnskapsmodellen
 
@@ -1216,9 +1226,9 @@ En første produksjonsdyktig evidenspipeline BØR prioritere robusthet fremfor m
 ### 80.1 Anbefalt første operative flyt
 
 ```text
-1. Menneske definerer/aksepterer EvidenceWorkUnit
+1. Menneske eller QueryPlanner definerer EvidenceWorkUnit
 2. Agent foreslår kandidatkilder
-3. Menneske eller source-assessor godkjenner kilder
+3. SourceAssessor godkjenner kilder
 4. Agent ekstraherer strukturerte EvidenceItem
 5. Separat agent verifiserer ekstraksjonen mot kildene
 6. Claim-agent foreslår atomiske påstander
@@ -1230,13 +1240,35 @@ En første produksjonsdyktig evidenspipeline BØR prioritere robusthet fremfor m
 12. Endringer og review-frister overvåkes
 ```
 
-Dette gir høy grad av KI-assistanse uten å gjøre KI til endelig faglig autoritet.
+**Leddene 1-9 skal kunne kjøres av agenter, og det er hovedveien.** Antidep er agent-first:
+målet er at KI-agenter gjør mest mulig av det redaksjonelle arbeidet, og at kvaliteten sikres
+med flere uavhengige kontrollag framfor med manuelt menneskearbeid. Et menneske skal kunne
+tre inn i hvilket som helst av disse leddene når det er ønskelig eller nødvendig (§69), men
+det er unntaket, ikke normalveien.
+
+Ledd 10 er unntaket som ikke kan automatiseres bort. `ANTIDEP_CONSTITUTION.md` §12 krever
+menneskelig faglig godkjenning før første publisering, og kravet er håndhevet i databasen: en
+reviewbeslutning krever en aktør av typen `human`. En endring av det er en revisjon av
+Konstitusjonen, ikke en pipelinekonfigurasjon.
+
+Hvert agentledd har sin egen aktør, sin egen tekniske identitet og sin egen rolle. Rollen er
+rettighetsgrensen: en identitet slipper bare gjennom autentiseringen for den rollen
+operasjonen krever, så et ledd kan ikke utføre et annet ledds operasjon. Et andre uavhengig
+kontrollag i samme rolle er en ny aktør med sin egen identitet — ikke en utvidelse av
+rettighetene til den første.
+
+Dette gir høy grad av KI-automatisering uten å gjøre KI til endelig faglig autoritet.
 
 ## 81. Automatisering kan økes gradvis
 
 Når Antidep har reelle evalueringsdata for egen pipeline, kan lavrisikoledd automatiseres mer.
 
 Økt autonomi skal begrunnes i observerte kvalitetsdata, ikke bare i at en nyere modell virker mer kapabel.
+
+Mer autonomi betyr i første rekke **flere uavhengige kontrollag**, ikke færre kontroller: to
+verifikatorer med hver sin identitet som er uenige, er et bedre utfall enn én som ikke ble
+motsagt (§64). Å fjerne et kontrolledd er en governance-endring og skal begrunnes særskilt; å
+legge til et er en konfigurasjonsendring.
 
 ---
 

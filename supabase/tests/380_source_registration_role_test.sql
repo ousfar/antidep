@@ -74,13 +74,23 @@ select is_empty(
 
 -- Aktørraden kommer fra migrasjon 005a og skal alltid finnes. Mangler den, er
 -- migrasjonskjeden brutt, og det skal feile høyt framfor å bli en stille no-op
--- som ser ut som «kontoen manglet». throws_ok ruller tilbake slettingen sammen
+-- som ser ut som «kontoen manglet». throws_ok ruller tilbake endringen sammen
 -- med feilen.
+--
+-- Aktørraden kan ikke lenger slettes: migrasjon 005f registrerte den første
+-- agentidentiteten, og både identiteten og auditraden den la igjen, peker på
+-- redaktøren med RESTRICT. Proben endrer derfor aktørnøkkelen framfor å slette
+-- raden, slik at oppslaget funksjonen gjør ikke finner noe. Samme framgangsmåte
+-- som i 350_editor_authorization_test.sql, og av samme grunn.
 select throws_ok(
   $$
     do $probe$
     begin
-      delete from provenance.actors where actor_key = 'human:peder-holman';
+      alter table provenance.actors disable trigger actors_freeze_identity;
+      update provenance.actors
+      set actor_key = 'human:ikke-registrert'
+      where actor_key = 'human:peder-holman';
+      alter table provenance.actors enable trigger actors_freeze_identity;
       perform workflow.ensure_editor_role_grant();
     end
     $probe$

@@ -53,11 +53,25 @@ select is(
 -- Mangler den, er migrasjonskjeden brutt, og det skal feile høyt framfor å bli
 -- en stille no-op som ser ut som «kontoen manglet». throws_ok ruller tilbake
 -- slettingen sammen med feilen.
+-- Aktørraden kan ikke lenger slettes: migrasjon 005f registrerte den første
+-- agentidentiteten, og både identiteten og auditraden den la igjen, peker på
+-- redaktøren med RESTRICT. Det er nettopp meningen — et menneskes attribusjon
+-- skal ikke kunne forsvinne under en maskin som handler i hens navn, og en
+-- auditrad skal ikke kunne miste aktøren sin.
+--
+-- Proben stiller derfor den samme tilstanden på en måte som ikke rører noe av
+-- det: aktørnøkkelen endres, slik at oppslaget funksjonen gjør ikke finner noe.
+-- Det krever at aktøridentitetsvernet slås av, og det er skrevet ut framfor å
+-- skjules — throws_ok ruller hele transaksjonen tilbake etterpå.
 select throws_ok(
   $$
     do $probe$
     begin
-      delete from provenance.actors where actor_key = 'human:peder-holman';
+      alter table provenance.actors disable trigger actors_freeze_identity;
+      update provenance.actors
+      set actor_key = 'human:ikke-registrert'
+      where actor_key = 'human:peder-holman';
+      alter table provenance.actors enable trigger actors_freeze_identity;
       perform workflow.ensure_named_editor_authorization();
     end
     $probe$
@@ -148,8 +162,13 @@ select results_eq(
            e.new_revision_or_snapshot->>'role_code'
     from audit.events e
     join provenance.actors a on a.id = e.actor_id
+    order by e.occurred_at
   $$,
-  $$values ('role_granted', 'workflow', 'user_roles', 'human:peder-holman', 'reviewer')$$,
+  -- Den første raden kommer fra migrasjon 005f og er migrert tilstand, ikke noe
+  -- denne testen gjør. Den står med i assertionen framfor å filtreres bort:
+  -- listen er uttømmende, så en uventet auditrad slår fortsatt ut.
+  $$values ('agent_identity_registered', 'provenance', 'agent_identities', 'human:peder-holman', null),
+           ('role_granted', 'workflow', 'user_roles', 'human:peder-holman', 'reviewer')$$,
   'tildelingen legger igjen én auditrad, attribuert til aktøren som tildelte rollen'
 );
 
