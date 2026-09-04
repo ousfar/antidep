@@ -4175,9 +4175,9 @@ transaksjon (§74.24), og én forespørsel per fil gir nettopp det skillet.
 **Data API-flaten er prøvd utenfra, ikke bare lest i katalogen.** En uinnlogget forespørsel mot
 `api.editor_sources` avvises med 42501, og et kall på `api.create_evidence_item` med alle
 fjorten obligatoriske parametere avvises med *permission denied for function* — ikke med
-«fant ikke funksjonen». Forskjellen er verdt å skille: den første feilen ville betydd at
-PostgREST ikke har sett den nye funksjonen ennå, den andre at den er synlig og stengt. Det er
-den andre.
+PostgREST sin `PGRST202`, «fant ikke funksjonen». Forskjellen er verdt å skille: `PGRST202`
+ville betydd at PostgREST ikke har sett den nye funksjonen ennå, mens *permission denied for
+function* betyr at den er synlig og stengt. Det er den siste som kom.
 
 **Redaktørens tildeling er uavgrenset**, lest fra `workflow.user_roles`: `editor` uten
 scopebegrensning og uten sluttdato, ved siden av `reviewer` fra §74.23. Skopebegrensningen
