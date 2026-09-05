@@ -76,12 +76,16 @@ select enum_has_labels(
   array['human', 'agent', 'deterministic_process', 'external_import', 'system'],
   'provenance.actor_type dekker aktørtypene i DATABASE_ARCHITECTURE.md §32'
 );
+-- Rekkefølgen er pipelinerekkefølgen og ikke tilfeldig: migrasjon 005d la
+-- extraction_verification inn rett etter leddet den kontrollerer, framfor
+-- bakerst. enum_has_labels() sammenligner ordnet, så vakten fanger også at en
+-- senere verdi settes inn på feil sted.
 select enum_has_labels(
   'provenance', 'agent_role',
   array['source_discovery', 'source_quality_assessment', 'evidence_extraction',
-        'claim_synthesis', 'adversarial_review', 'citation_support_verification',
-        'editorial_compression'],
-  'provenance.agent_role dekker de sju agentrollene i ANTIDEP_CONSTITUTION.md §10'
+        'extraction_verification', 'claim_synthesis', 'adversarial_review',
+        'citation_support_verification', 'editorial_compression'],
+  'provenance.agent_role dekker de sju agentrollene i ANTIDEP_CONSTITUTION.md §10 og ekstraksjonsverifikatoren i EVIDENCE_PIPELINE.md §61'
 );
 select enum_has_labels(
   'workflow', 'role_scope_type', array['clinical_concept'],

@@ -215,9 +215,21 @@ select lives_ok(
   'eieren kan lese auditloggen'
 );
 
-select ok(
-  (select count(*) = 0 from audit.events),
-  'auditloggen er tom i migrert tilstand: ingenting er publisert og ingen rolle er tildelt (MVP_IMPLEMENTATION_PLAN.md §74.4)'
+-- Vaktposten sto som «tom» fram til migrasjon 005f. Den registreringen er
+-- nettopp en forvaltningskritisk operasjon — en maskin fikk en identitet i
+-- Antidep — og skal derfor legge igjen en rad. Påstanden er strammet framfor
+-- svekket: loggen inneholder nøyaktig den ene raden, og fortsatt ingen
+-- publisering, ingen rolletildeling og ingen utstedt legitimasjon
+-- (MVP_IMPLEMENTATION_PLAN.md §74.4).
+select results_eq(
+  $$
+    select e.operation::text, e.object_schema, e.object_table, a.actor_key
+    from audit.events e
+    join provenance.actors a on a.id = e.actor_id
+    order by e.occurred_at
+  $$,
+  $$values ('agent_identity_registered', 'provenance', 'agent_identities', 'human:peder-holman')$$,
+  'auditloggen inneholder nøyaktig registreringen av den første agentidentiteten, attribuert til et menneske'
 );
 
 select * from finish();

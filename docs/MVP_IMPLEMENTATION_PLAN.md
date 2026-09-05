@@ -370,6 +370,12 @@ Følgende applikasjonsroller implementeres først:
 
 Agentbrukere skal ikke representeres som vanlige menneskelige editor-brukere.
 
+`agent_worker` er derfor ikke en verdi i `workflow.app_role`, men et eget register:
+`provenance.agent_identities`. Hver agentidentitet er knyttet til én agentaktør, arver
+aktørens agentrolle som rettighetsgrense, og autentiserer seg med sin egen legitimasjon
+framfor med en brukerkonto eller med `service_role`. Flere agentledd betyr flere aktører og
+flere identiteter, ikke flere rettigheter på én identitet (§74.31).
+
 ---
 
 # Del VI — Databaseimplementasjon i rekkefølge
@@ -766,6 +772,13 @@ Implementer i denne rekkefølgen:
 
 Grunnen til at discovery ikke nødvendigvis kommer først teknisk, er at ekstraksjon/verifikasjon kan testes på et lite manuelt kuratert kildesett før man bygger robust søkeorkestrering.
 
+Hver av dem er en egen aktør med sin egen tekniske identitet og sin egen rolle, ikke en
+konfigurasjon av den samme identiteten. Rollen er rettighetsgrensen: en identitet slipper bare
+gjennom autentiseringen for den rollen operasjonen krever, så et agentledd kan ikke utføre et
+annet agentledds operasjon selv med gyldig legitimasjon. Et andre uavhengig kontrollag i samme
+rolle er en ny aktør med sin egen identitet og sin egen kjøring, og begge kontrollene består
+ved siden av hverandre.
+
 ## 39. Agent-output skal være strukturert
 
 Agentene skal produsere validerbare objekter, ikke fritekst som direkte lagres som publisert kunnskap.
@@ -941,6 +954,23 @@ En ekstraksjonsagent skal ikke kunne publisere.
 En source discovery-agent skal ikke kunne endre Claims.
 
 En verifier skal kunne skrive verifikasjonsresultat, ikke overskrive inputobjektet som verifiseres.
+
+Grensene skal være håndhevet i databasen og ikke være en promptkonvensjon. Tre uavhengige lag
+bærer dem:
+
+1. **Rollen.** En agentidentitet har nøyaktig én agentrolle, og autentiseringen krever den
+   rollen operasjonen faktisk trenger. En identitet i ekstraksjonsrollen avvises for en
+   verifikasjonsoperasjon før den rører et kunnskapsobjekt.
+2. **Aktøren.** `workflow.evidence_verifications` og `workflow.claim_verifications` avviser en
+   rad der kontrolløren er samme aktør som den som laget objektet, uansett hvordan raden kom
+   dit.
+3. **Kjøringen.** `provenance.agent_runs` bærer aktør og rolle som speilkolonner låst til
+   identiteten, og eksponerer dem som unike nøkler, slik at en skrivevei kan kreve
+   deklarativt at et objekt ble produsert av den kjøringen det attribueres til.
+
+En agentidentitet kan bare registreres, få legitimasjon eller trekkes tilbake av en
+menneskelig aktør. En agent som kunne registrere agenter, ville vært en rettighetseskalering
+med ett ekstra ledd.
 
 ## 50. Ingen pasientdata i MVP
 
@@ -1351,7 +1381,8 @@ PR G  db: add publication events and gate                                   (#15
       docs: record the hosted project in sync and source creation deployed  (#41)  merget   ingen migrasjon
       feat: add the controlled write path for registering an EvidenceItem   (#43)  merget   migrasjon 008b, 007d, 007e
       docs: record the evidence registration deployed to the hosted project (#46)  merget   ingen migrasjon
-      docs: record the first real evidence registration in production       (#47)  åpen     ingen migrasjon
+      docs: record the first real evidence registration in production       (#47)  merget   ingen migrasjon
+      db: add technical agent identity and agent runs                        (#48)  åpen     migrasjon 005d, 008c, 005e, 005f
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
@@ -1430,15 +1461,19 @@ den `editor`-rollen den skriveveien krever (§74.25). De tre siste hører til st
 adminflyten (§74.27): migrasjon 008b utvider auditvokabularet med enda én verdi, 007d utvider
 api-lesemodellen en femte gang — med den redaksjonelle lesemodellen registreringen trenger —
 og 007e gir den sitt andre skrivbare medlem, skriveveien for å registrere et EvidenceItem.
+De fire siste hører til agentidentiteten (§74.31): 005d utvider agentrollevokabularet med
+`extraction_verification`, 008c utvider auditvokabularet med agentidentitetenes tre
+livssyklushendelser, 005e bygger identitets- og kjøringsmodellen med sine to
+api-inngangspunkter, og 005f registrerer den første agentidentiteten.
 Filrekkefølgen er dermed 001, 002, 003, 004, 005, 006, 006a, 007, 008, 007a, 005a, 005b,
-007b, 003a, 008a, 007c, 005c, 008b, 007d, 007e — sortert på tidsstempel, ikke på
-migrasjonsnummer, og de ti siste filene bærer alle et bokstavnummer, altså et nummer utenfor
-den planlagte rekken. (Setningen sa tidligere at «de
+007b, 003a, 008a, 007c, 005c, 008b, 007d, 007e, 005d, 008c, 005e, 005f — sortert på
+tidsstempel, ikke på migrasjonsnummer, og de fjorten siste filene bærer alle et bokstavnummer,
+altså et nummer utenfor den planlagte rekken. (Setningen sa tidligere at «de
 seks siste filene bærer de seks laveste bokstavnumrene». Det stemte ikke mot listen over —
 006a og 007a har lavere bokstavnumre enn flere av dem — så den er erstattet med den påstanden
 listen faktisk bærer.)
 
-Databaselaget teller nå 1318 pgTAP-assertions over 40 testfiler.
+Databaselaget teller nå 1405 pgTAP-assertions over 43 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -1545,6 +1580,14 @@ claim-verifikasjonene og selve godkjenningen.**
 > hostede prosjektet, og der er ingen migrasjon kjørt (§74.18). Redaktøren har derfor fortsatt
 > ingen rolle i noen database.» Begge setningene er nå usanne; se §74.23.
 
+**De tre som gjenstår er uendret, men den ene av dem har fått en vei fram.** §74.30 punkt 4
+fant at ingen kunne registrere ekstraksjonsverifikasjonen av redaktørens eget evidensfunn:
+regelen krever en annen aktør, og de to KI-aktørene hadde ingen måte å autentisere seg på.
+Valget stod mellom å registrere en andre navngitt person og å bygge agentidentiteten §16
+forutser. Beslutningen er tatt — Antidep er agent-first — og identiteten er bygget (§74.31).
+Verifikasjonen selv er fortsatt ikke registrert, så G4/G5 er urørt; det som er borte, er
+hindringen foran dem.
+
 G8 er verdt å merke seg særskilt, fordi den er lett å utelate når kravene listes opp: G9 leser
 utfallet på den gjeldende claim-verifikasjonen, mens G8 er kravet om at det finnes en i det
 hele tatt. Med en tom tabell feiler begge, på hver sin måte. Dette er sjette gang et tall
@@ -1579,12 +1622,12 @@ bak G4/G5, er planlagt i §74.30.
 Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
 
 1. **Enum kontra oppslagstabell — utsatt, og gjort billigere å utsette.** Det finnes
-   38 enum-typer, fordelt på de tjue migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
-   007, 008, 007a, 005a, 005b, 007b, 003a, 008a, 007c, 005c, 008b, 007d og 007e — i
-   filrekkefølge, ikke i nummerrekkefølge — med henholdsvis 1, 6, 11, 7, 10, 2, 0, 0, 1, 0,
-   0, 0, 0, 0, 0, 0, 0, 0, 0 og 0.
+   39 enum-typer, fordelt på de tjuefire migrasjonsfilene 001, 002, 003, 004, 005, 006, 006a,
+   007, 008, 007a, 005a, 005b, 007b, 003a, 008a, 007c, 005c, 008b, 007d, 007e, 005d, 008c,
+   005e og 005f — i filrekkefølge, ikke i nummerrekkefølge — med henholdsvis 1, 6, 11, 7, 10,
+   2, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 og 0.
    Tallet er kontrollert mot kilden (`grep -cE '^create type ' supabase/migrations/*.sql`) og
-   mot databasen. Alle tjue ledd er nå oppgitt eksplisitt framfor å la de siste hvile på
+   mot databasen. Alle tjuefire ledd er nå oppgitt eksplisitt framfor å la de siste hvile på
    restpåstanden i `scripts/verify-counts.sh`; det er den formen vakten kontrollerer
    strengest. Verken 005a, 005b, 007b eller 003a legger til enum-typer: den første
    registrerer én rad i et register som allerede finnes, den andre knytter og tildeler, den
@@ -1595,9 +1638,12 @@ Alle tre er avgjort, og avgjørelsene er nå offentlig kontrakt:
    007c oppretter ingen egen enum-type av samme grunn som 007, 007a og 007b: den kaster
    eksisterende vokabularer til `text` i parameterlisten, av en grunn den selv forklarer
    (§74.23). 005c oppretter heller ingen: den skriver én rad i medlemskapsmodellen og bruker
-   `workflow.app_role`, som migrasjon 001 opprettet. Av de tre siste er 008b en ren
+   `workflow.app_role`, som migrasjon 001 opprettet. Av de tre neste er 008b en ren
    `ALTER TYPE ... ADD VALUE` som 008a, 007d projiserer eksisterende vokabularer som `text`
-   som resten av `api`, og 007e tar dem imot som `text` som 007c.
+   som resten av `api`, og 007e tar dem imot som `text` som 007c. Av de fire siste er 005d og
+   008c begge rene `ALTER TYPE ... ADD VALUE`, 005f skriver to rader uten å innføre noe
+   vokabular, og bare 005e oppretter en ny type — `provenance.agent_run_status`. Den er den
+   ene som løfter totalen fra 38 til 39.
    Viewene caster enum-kolonner til `text`, så den offentlige kontrakten er en streng
    fra et dokumentert vokabular, ikke PostgreSQL-typen. Et senere bytte til
    oppslagstabeller er dermed ikke en brytende API-endring. Castingen sparer også
@@ -1657,7 +1703,8 @@ gyldighetslogikk bør lese dette før `now()` brukes i et predikat.
 | Felles hjelpefunksjoner (`catalog.set_row_timestamps()`, `catalog.set_created_at()`, `knowledge.reject_append_only_mutation()`) brukes fra flere schemaer | Lav; plasseringen er misvisende. Migrasjon 008 gjorde den mer misvisende: `audit.events` bruker begge de to siste, så `catalog` og `knowledge` eier nå hjelpefunksjoner for et schema som ikke har noe med noen av dem å gjøre | Et `util`-schema endrer `DATABASE_ARCHITECTURE.md` §6 og hver schemauttømmende vaktpost i testpakken. Egen beslutning |
 | Fysisk sletting av en rolletildeling er selv uauditert | En rolletildeling kan fjernes fysisk uten at det står hvem som fjernet den. Auditradene for tildelingen og avslutningen består — det er nettopp derfor `object_id` ikke har fremmednøkkel — men slettingen selv etterlater ingen rad. En trigger kan ikke navngi den som sletter, fordi `DELETE` ikke bærer en aktør, og `audit.events.actor_id` er med hensikt `NOT NULL` | Admin-flyten (§48). Der går slettingen gjennom en kontrollert funksjon som kjenner aktøren, og `DATABASE_ARCHITECTURE.md` §36 sitt krav om «særskilt audit» ved fysisk sletting kan innfris |
 | Endringer på `provenance.actors` auditeres ikke | Aktørraden er festepunktet for all attribusjon, og visningsnavn, beskrivelse og tilbaketrekking kan endres uten spor. Identiteten er riktignok frosset av `provenance.freeze_actor_identity()`, så det som kan endres er presentasjon og livssyklus, ikke hvem aktøren er | Samme trigger som over, og av samme grunn: tabellen har ingen kolonne som sier hvem som endret raden, så en trigger har ingen aktør å registrere |
-| `audit.events.request_or_run_id` har ingen produsent | Auditrader kan ikke grupperes etter forespørselen eller agentkjøringen de hørte til, så en operasjon som består av flere skrivinger framstår som uavhengige hendelser | `provenance.agent_runs`, eller det første admin-RPC-laget som har en forespørselsidentitet å sende med |
+| `audit.events.request_or_run_id` har ingen produsent | Auditrader kan ikke grupperes etter forespørselen eller agentkjøringen de hørte til, så en operasjon som består av flere skrivinger framstår som uavhengige hendelser. `provenance.agent_runs` finnes nå (§74.31) og er den identiteten kolonnen ble laget for, men ingen skrivevei sender den ennå: en kjøring rører ingen kunnskapsobjekter, så det er først den første skrivende agentoperasjonen som har en kjøring å oppgi | Den første skrivende agentoperasjonen — ekstraksjonsverifikasjonen — eller det første admin-RPC-laget som har en forespørselsidentitet å sende med |
+| Agentflaten har ingen rate limiting | `api.begin_agent_run(...)` og `api.complete_agent_run(...)` er kjørbare for `anon`, fordi en agent ikke har brukerkonto (§16). Legitimasjonen bærer sikkerheten: 256 bits fra databasens egen kryptografiske tilfeldighetskilde, ingen lesing eller skriving før autentiseringen har lyktes, og identiske avvisninger for alle feilmodi, slik at flaten ikke kan brukes til å telle opp identiteter. Det som mangler er en grense for hvor mange forsøk som kan gjøres. Å logge mislykkede forsøk i basen ville gitt en uautentisert skrivevei, altså byttet en teoretisk risiko mot en reell | Ført som GitHub-issue 49. Hører til et lag som kan telle uten å skrive i den kanoniske basen — plattformens egen rate limiting, en kant foran Data API-et, eller en agentkjører som ikke eksponerer flaten utad i det hele tatt |
 | Den synlige `notice` fra migrasjon 005b er ikke maskinelt kontrollert | §74.18 krevde at raden ikke skal utebli i stillhet når brukerkontoen mangler, og migrasjonen gir derfor en `notice`. pgTAP kan ikke observere en `notice`, så den delen av kravet hviler på at et menneske leser utdataene fra `supabase db push`. Statusen `account_missing` som funksjonen returnerer, er den halvdelen som *er* kontrollert (`350_editor_authorization_test.sql` assertion 1), og en mutasjon som degraderer `raise notice` til `raise debug` overlever derfor hele suiten | Den første vaktposten som uansett må lese utdataene fra en migrasjonskjøring — eller en avvikling av behovet, ved at kontoen finnes i alle miljøer og grenen ikke lenger kan tas |
 | En basiskolonne kan miste sin `NOT NULL` uten at kolonnekontrakten fanger det | Kolonnenavn og kolonnetyper i `api` er nå uttømmende kontrollert mot katalogen, og nullbarheten er målt på faktiske rader (§74.19). Målingen fanger en kolonne som blir nullbar fordi joinen, uttrykket eller projeksjonen endres — den minimale probe-raden går da NULL. Den fanger ikke at en basiskolonne under viewet stille mister sin `NOT NULL`: probe-fiksturen navngir kolonnen i sin `insert`, så den fortsetter å sette en verdi, og raden ser lik ut. Klienten ville lest en kolonne som `string` mens databasen kan svare `null` | Enten en avledning som knytter hver ikke-nullbare api-kolonne til den basiskolonnen den kommer fra og krever `attnotnull` der — det krever en kolonnekartlegging gjennom viewdefinisjonen, som PostgreSQL ikke eksponerer ferdig — eller den første migrasjonen som gjør en basiskolonne nullbar. Migrasjonen må da endre kontraktsraden i `supabase/tests/340_api_column_contract_test.sql` og radtypen sammen |
 | Ingen regel binder et kontrastivt effektmål til en komparator | `knowledge.claim_revisions` tillater fortsatt `magnitude_measure = 'mean_difference'` sammen med `comparator_kind = 'none'`, og en redaktør kan skrive kombinasjonen. Migrasjon 003 tillater nøyaktig det samme paret på `knowledge.evidence_items`, så gjelden gjelder begge tabellene. Presentasjonslaget nekter nå å tolke den på begge (§74.13, §74.15) gjennom én felles avledning, men det er et forsvar i visningen, ikke en invariant: dataene er like ugyldige, og enhver annen leser av `api` ser dem rå | Migrasjonen som legger til betingelsen, eller admin-flyten (§29), som er første sted en redaktør kan skrive kombinasjonen. Regelen må ta stilling til `mean_change`, som er en endring fra behandlingsstart og korrekt har `none` |
@@ -4356,6 +4403,163 @@ og det er hensikten: en kontroll som ikke konkluderte, er ikke en bekreftelse
 (ANTIDEP_CONSTITUTION.md §6, §11). Av de tre som gjenstår for Milepæl B (§74.4) lukker steget
 altså det første, for de funnene som faktisk blir bekreftet, og etterlater claim-verifikasjonen
 (G8/G9) og den menneskelige godkjenningen (G11/G12/G13).
+
+---
+
+### 74.31 Prosjektbeslutning: Antidep er agent-first, og agentidentiteten er bygget
+
+§74.30 punkt 4 endte med et spørsmål koden ikke kunne avgjøre: hvem som verifiserer
+redaktørens egne evidensfunn. `workflow.evidence_verifications` krever en *annen* aktør enn
+den som laget funnet — ANTIDEP_CONSTITUTION.md §11, håndhevet som en CHECK — og de to
+KI-aktørene hadde ingen brukerkonto og dermed ingen måte å kalle en skrivevei på. Valget stod
+mellom å registrere en andre navngitt person og å bygge den agentidentiteten §16 forutser.
+
+**Beslutningen er tatt av prosjekteieren: Antidep skal være agent-first.** Målet er at
+KI-agenter gjør mest mulig av det redaksjonelle arbeidet, og at kvaliteten sikres med flere
+uavhengige agentledd framfor med manuelt menneskearbeid. Menneskelig kontroll skal brukes der
+den trengs eller ønskes, men den automatiserte fler-agent-flyten er hovedveien i
+prøveprosjektet. En andre navngitt person ble derfor ikke registrert.
+
+**Det som er endret i normene, og det som ikke er det.** §16, §38 og §49 er skrevet om til å
+beskrive flere agentroller med hver sin identitet og hver sin rettighetsgrense.
+EVIDENCE_PIPELINE.md §80.1 og §81 sier ikke lenger at manuell kjøring er normalveien, og
+CONTENT_GOVERNANCE.md §14 beskriver `Agent Worker` som en faktisk identitetsmodell framfor som
+en liste over hva en agent ikke skal kunne.
+
+**ANTIDEP_CONSTITUTION.md er uendret, og §12 gjelder fullt ut.** KI kan foreslå og
+kontrollere; den endelige faglige godkjenningen før første publisering er forbeholdt en
+navngitt kvalifisert redaktør. `workflow.review_decisions` krever fortsatt en aktør av typen
+`human`, deklarativt håndhevet med sammensatt fremmednøkkel, og ingen agentrolle kan komme
+utenom den. Det samme gjelder publisering. Skal en agent kunne godkjenne eller publisere, må
+selve Konstitusjonen revideres gjennom faglig gjennomgang og versjonskontroll — det er en
+governance-beslutning som hører til prosjekteieren, ikke en implementasjonsdetalj, og koden
+skal ikke kunne ta den (Konstitusjonens innledning og styringsregel).
+
+---
+
+**Fire migrasjoner, og ingen av dem rører kunnskapsobjektene.**
+
+| Migrasjon | Hva den gjør |
+| --- | --- |
+| 005d | `provenance.agent_role` får `extraction_verification`. Alene i sin egen fil, fordi `ALTER TYPE ... ADD VALUE` ikke kan brukes i samme transaksjon som verdien (§74.24) |
+| 008c | `audit.event_operation` får de tre livssyklushendelsene til en agentidentitet. Alene, av samme grunn |
+| 005e | Selve mekanismen: `provenance.agent_identities`, `provenance.agent_runs`, autentiseringen, utstedelsen av legitimasjon, auditskriveren og de to api-inngangspunktene |
+| 005f | Den første agentidentiteten: ekstraksjonsverifikatoren, registrert av den navngitte redaktøren og uten utstedt legitimasjon |
+
+**Hvorfor rollen måtte legges til framfor lånes.** Konstitusjonen §10 lister sju roller
+KI-arbeidet «minst» skal deles i, og migrasjon 005 skrev nøyaktig de sju. EVIDENCE_PIPELINE.md
+§61 deler ett av dem i to: `ExtractionVerifier` kontrollerer ekstraksjonen mot kilden, mens
+`CitationVerifier` kontrollerer at evidensen støtter påstanden. De har forskjellig input,
+forskjellig output og hver sin tabell. Å gjenbruke `citation_support_verification` for begge
+ville gitt én rolle to mandater, og gjort rollen ubrukelig nettopp som rettighetsgrense.
+
+**Hvorfor identiteten er en legitimasjon og ikke en brukerkonto.**
+`actors_auth_user_is_human_check` forbyr at en agent har en rad i `auth.users`, og §16 sier
+hvorfor. `service_role` var det opplagte alternativet og er avvist av
+DATABASE_ARCHITECTURE.md §49: den omgår RLS, er én felles nøkkel med full tilgang, og gir
+ingen rolleseparasjon mellom agentledd — en nøkkel som kan alt, kan også verifisere sitt eget
+arbeid. Identiteten er derfor en egen rad med sin egen hemmelighet, hashet med sha256 av
+«identitetsnøkkel:hemmelighet» og aldri lagret i klartekst. Ingen extension er innført:
+`sha256()` og `gen_random_uuid()` er begge i PostgreSQL-kjernen.
+
+**Tre uavhengige lag håndhever at en agent ikke kan verifisere sitt eget arbeid**, og de er
+prøvd hver for seg:
+
+1. **Rollen.** En identitet har nøyaktig én agentrolle, og autentiseringen krever den rollen
+   operasjonen trenger. Verifikatoridentiteten avvises for et ekstraksjonssteg selv med
+   korrekt legitimasjon — prøvd i `420_agent_identity_authentication_test.sql` og over ekte
+   HTTP.
+2. **Aktøren.** `evidence_verifications_separate_actor_check` avviser en rad der kontrolløren
+   er den samme aktøren som laget funnet, uansett hvordan raden kom dit.
+3. **Kjøringen.** `provenance.agent_runs` bærer aktør og rolle som speilkolonner låst til
+   identiteten av sammensatte fremmednøkler, og eksponerer `(id, actor_id)` og
+   `(id, agent_role)` som unike nøkler. Neste PR kan derfor kreve deklarativt at en
+   verifikasjon peker på en kjøring i riktig rolle, utført av den aktøren raden attribueres
+   til (DATABASE_ARCHITECTURE.md §59), framfor å kontrollere det i funksjonskode.
+
+**Registrering er en menneskelig handling, og det er en regel.** En agentidentitet kan bare
+registreres, få legitimasjon eller trekkes tilbake av en aktør av typen `human`, håndhevet med
+sammensatt fremmednøkkel og CHECK. En agent som kunne registrere agenter, ville vært en
+rettighetseskalering med ett ekstra ledd (CONTENT_GOVERNANCE.md §14).
+
+**Kjøringen er det som gjør en KI-operasjon rekonstruerbar.** `provenance.agent_runs` er
+DATABASE_ARCHITECTURE.md §33 og EVIDENCE_PIPELINE.md §65 bygget: rolle, identitet, leverandør,
+modell, modellversjon, promptmalversjon, pipelineversjon, inputmanifest, outputmanifest,
+status og tidspunkter. Alle fem versjonsfeltene er NOT NULL — en kjøring som kunne unnlate å
+oppgi dem, ville vært den uversjonerte KI-operasjonen Konstitusjonen §20 forbyr, og feltet
+ville stått tomt akkurat i de kjøringene det betyr mest å kunne lese i ettertid. Kjøringen
+åpnes én gang og lukkes én gang; premissene er uforanderlige og ingen kjøring kan slettes.
+
+**EXECUTE går til `anon`, og det er en avveining som er skrevet ut.** En agent har ingen
+brukerkonto, så en kaller uten brukersesjon er `anon` i Data API-et. Alternativene var
+`service_role` (avvist av §49) eller en menneskelig konto brukt av en maskin (avvist av §16).
+Legitimasjonen og ikke Data API-rollen er derfor kontrollen: funksjonene leser og skriver
+ingenting før autentiseringen har lyktes, alle avvisninger er identiske, rollen er en del av
+autentiseringen, og en vellykket autentisering gir ingenting annet enn retten til å åpne og
+lukke en kjøring — som ikke rører ett kunnskapsobjekt. Restrisikoen er at flaten ikke har rate
+limiting i basen; den er ført som gjeld (§74.7) og som GitHub-issue 49, framfor løst med
+en halv mekanisme.
+
+**Legitimasjonen er ikke utstedt, og det er med hensikt.** Migrasjon 005f registrerer
+identiteten med `secret_hash` NULL, og en identitet uten utstedt legitimasjon kan ikke
+autentisere seg i det hele tatt. En hemmelighet generert av en migrasjon måtte enten ligget i
+repoet eller blitt returnert til den som kjørte den — altså gjennom en agentsesjons logg og
+videre inn i en transkripsjon. Utstedelsen hører derfor til den PR-en som bygger kjøreren, med
+ett kall til `provenance.issue_agent_identity_credential(text, text)` i det miljøet kjøreren
+leser hemmeligheten fra. Fram til da er identiteten registrert, reviewbar og ute av stand til
+å gjøre noe.
+
+**Hva som er prøvd, og hvordan.** Tre nye testfiler med til sammen 83 assertions:
+`410_agent_identity_structure_test.sql` dekker nøklene, speilkolonnene, reglene som ikke kan
+omgås og hele tilgangsflaten; `420_agent_identity_authentication_test.sql` dekker
+legitimasjonens livssyklus, rollen som rettighetsgrense, rotasjon, tilbaketrukket aktør,
+tilbakekalling og auditsporet; `430_agent_run_lifecycle_test.sql` dekker inngangspunktene som
+`anon`, kjøringens livssyklus, speilene som ikke lar seg forfalske, og lag 2 mot
+`workflow.evidence_verifications`. Ni vaktposter i den eksisterende suiten slo ut på
+endringen, som de skal, og er oppdatert framfor omgått. Fem funn fra kodegjennomgangen er rettet
+på plass, hvert med sin regresjonstest, og alle fem handler om det samme: at de tre
+rettighetsendringene i en agentidentitets livssyklus faktisk er tre, og at hver av dem
+etterlater sin egen auditrad.
+
+- Legitimasjonens fire felter kan bare flytte seg sammen. Ellers kunne versjonstall,
+  utstedelsestidspunkt eller utsteder skrives om uten den auditraden hashendringen utløser.
+- Et menneske som er trukket tilbake, kan ikke stå som den som registrerte en identitet,
+  utstedte legitimasjon eller trakk den tilbake. Regelen ligger på tabellen og ikke bare i
+  utstedelsesfunksjonen, fordi registrering og tilbakekalling skrives med rene INSERT/UPDATE.
+- En identitet begynner alltid inert. Auditskriveren registrerer en INSERT som nøyaktig én
+  hendelse, så en registrering som samtidig utstedte legitimasjon eller trakk identiteten
+  tilbake, ville utført to rettighetsendringer til uten å loggføre dem.
+- Hva som teller som «utfører handlingen», avgjøres av tilstandsendringen og ikke av om
+  aktørkolonnen flyttet seg: en rotasjon med samme utsteder som sist kontrolleres på nytt.
+  Aktørradene låses med `for share`, slik at en samtidig tilbaketrekking ikke kan gli inn
+  mellom kontrollen og skrivingen.
+- Regelen har to ledd, ikke ett. En tilbaketrukket aktør kan heller ikke *få* nye
+  rettigheter: agentaktøren selv kontrolleres ved registrering og ved rotasjon. En
+  legitimasjon utstedt mens aktøren var ute av bruk, ville blitt gyldig i det aktøren tas i
+  bruk igjen — uten at noen hadde utstedt noe etter reaktiveringen. Tilbakekalling er unntatt:
+  å rydde opp i en identitet hvis aktør allerede er ute av bruk, skal alltid være mulig. Hele flyten er dessuten kjørt over
+ekte HTTP gjennom PostgREST med publishable-nøkkelen som `anon`: feil hemmelighet og feil
+rolle gir begge 401 med identisk melding, riktig legitimasjon gir en kjøring, avslutningen gir
+200, og tabellene selv er ikke eksponert.
+
+**Hva denne PR-en bevisst ikke gjør.** Den bygger ikke skriveveien inn i
+`workflow.evidence_verifications` — den hører til neste PR og bruker mekanismen her. Den
+utsteder ingen legitimasjon i produksjon, registrerer ingen verifikasjon, ingen
+reviewbeslutning og ingen publisering, og den åpner ikke publiseringsgaten. Den svekker ingen
+eksisterende kontroll: ingen CHECK, ingen policy, ingen grant og ingen gate er fjernet eller
+myknet opp.
+
+**Hva som gjenstår for Milepæl B.** Fortsatt de samme tre (§74.4): ekstraksjonsverifikasjonene,
+claim-verifikasjonene og selve godkjenningen. Denne PR-en lukker ingen av dem — den fjerner
+hindringen foran den første.
+
+**Neste steg er uendret fra §74.30, med fire punkter avgjort framfor tre.** Skriveveien for
+ekstraksjonsverifikasjonen skal fortsatt bygges sammen med kildeversjoner (issue 44), og
+spørsmålet om hva som er et tilstrekkelig verifikasjonsgrunnlag (§74.30 punkt 2) er fortsatt
+det som må avgjøres og ikke antas. Rollen som verifiserer er nå to ting og ikke én: `reviewer`
+for et menneske som verifiserer gjennom skjemaet, og agentidentiteten
+`agent-identity:extraction-verification-01` for den automatiserte veien. Begge skriver til
+samme tabell, og separasjonskravet gjelder likt for begge.
 
 ---
 

@@ -1,0 +1,54 @@
+-- ============================================================================
+-- Migrasjon 005d — provenance.agent_role får verdien extraction_verification
+--
+-- Utvider aktørvokabularet fra migrasjon 005 (§22) og står utenfor den planlagte
+-- rekken i MVP_IMPLEMENTATION_PLAN.md §18-§27, og får derfor en bokstav.
+-- Nummeret 009 er fortsatt reservert for DrugProduct-/importfundamentet (§26).
+--
+-- ----------------------------------------------------------------------------
+-- Hvorfor verdien mangler, og hvorfor den ikke kan lånes fra en eksisterende
+--
+-- ANTIDEP_CONSTITUTION.md §10 lister sju agentroller KI-arbeidet «minst» skal
+-- deles i, og migrasjon 005 skrev nøyaktig de sju inn i provenance.agent_role.
+-- Ordet er «minst»: lista er en nedre grense for hvor grovt arbeidet kan deles,
+-- ikke en øvre grense for hvor fint.
+--
+-- EVIDENCE_PIPELINE.md §61 deler ett av de sju leddene i to, og skillet er ikke
+-- kosmetisk:
+--
+--   ExtractionVerifier   kilde + EvidenceItem  → verifikasjonsrapport
+--   CitationVerifier     påstand + evidens     → validerte relasjonstyper
+--
+-- Den første kontrollerer at ekstraksjonen gjengir kilden riktig (§25,
+-- workflow.evidence_verifications). Den andre kontrollerer at evidensen faktisk
+-- støtter påstanden (§39, workflow.claim_verifications). De har forskjellig
+-- input, forskjellig output og hver sin tabell, og en identitet som kan gjøre
+-- den ene skal ikke automatisk kunne gjøre den andre — det er hele poenget med
+-- least privilege per rolle (MVP_IMPLEMENTATION_PLAN.md §49).
+--
+-- Å gjenbruke citation_support_verification for ekstraksjonskontroll ville
+-- derfor gitt én rolle to mandater, og gjort rollen ubrukelig nettopp som
+-- rettighetsgrense. Verdien legges til framfor å lånes.
+--
+-- ----------------------------------------------------------------------------
+-- Hvorfor plasseringen er eksplisitt
+--
+-- Rekkefølgen i enumet er pipelinerekkefølgen, og typekommentaren leser den som
+-- en liste. En verdi lagt til bakerst ville sortert etter editorial_compression,
+-- altså etter det siste leddet i kjeden, og lista ville sluttet å beskrive
+-- rekkefølgen den ser ut til å beskrive. `after 'evidence_extraction'` plasserer
+-- kontrollen der den hører hjemme: rett etter leddet den kontrollerer.
+--
+-- ----------------------------------------------------------------------------
+-- Hvorfor migrasjonen står alene
+--
+-- `ALTER TYPE ... ADD VALUE` kan ikke brukes i samme transaksjon som verdien
+-- (MVP_IMPLEMENTATION_PLAN.md §74.24). Migrasjonen gjør derfor ingenting annet,
+-- og verdien tas først i bruk av migrasjon 005f, som registrerer den første
+-- verifikatoraktøren.
+-- ============================================================================
+
+alter type provenance.agent_role add value 'extraction_verification' after 'evidence_extraction';
+
+comment on type provenance.agent_role is
+  'De eksplisitte agentrollene ANTIDEP_CONSTITUTION.md §10 krever at KI-arbeidet deles i, i pipelinerekkefølge: kildesøk, kildekvalitetsvurdering, data- og evidensekstraksjon, kontroll av ekstraksjonen mot kilden, påstandsformulering og syntese, motargumenterende kontroll, sitat- og kildestøtteverifikasjon og redaksjonell komprimering. §10 sier «minst»: extraction_verification er EVIDENCE_PIPELINE.md §61 sin ExtractionVerifier, som er et annet mandat enn citation_support_verification (§39) — den ene kontrollerer ekstraksjonen mot kilden, den andre påstanden mot evidensen. Rollen ligger på aktøren fordi den er stabil på tvers av modellversjoner, og den er samtidig rettighetsgrensen en agentidentitet autentiseres mot (provenance.agent_identities, migrasjon 005e). Leverandør, modell og promptversjon hører til den enkelte kjøringen (provenance.agent_runs) og skal aldri bli en egenskap ved kunnskapsobjektet (ANTIDEP_CONSTITUTION.md §20).';

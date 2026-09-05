@@ -34,9 +34,10 @@ select enum_has_labels(
   array[
     'claim_published', 'claim_publication_replaced', 'claim_publication_withdrawn',
     'claim_publication_rolled_back', 'role_granted', 'role_ended', 'source_created',
-    'evidence_item_created'
+    'evidence_item_created', 'agent_identity_registered',
+    'agent_identity_credential_issued', 'agent_identity_revoked'
   ],
-  'audit.event_operation dekker nå også kildeopprettelse og evidensregistrering'
+  'audit.event_operation dekker nå også kildeopprettelse, evidensregistrering og agentidentitetenes livssyklus'
 );
 
 select has_function('api', 'create_source', 'api.create_source() finnes');
@@ -66,10 +67,18 @@ select is_empty(
       and has_function_privilege(r.role_name, p.oid, 'execute')
       and p.oid::regprocedure::text not in (
         'api.create_source(text,text,text,text,text,text,text,date,text)',
-        'api.create_evidence_item(uuid,text,text,text,text,uuid,text,uuid,text,text,text,text,text,text,uuid,uuid,integer,text,uuid,text,text,text,text,numeric,text,numeric,numeric,numeric,text,text)'
+        'api.create_evidence_item(uuid,text,text,text,text,uuid,text,uuid,text,text,text,text,text,text,uuid,uuid,integer,text,uuid,text,text,text,text,numeric,text,numeric,numeric,numeric,text,text)',
+        -- Migrasjon 005e. De to eneste funksjonene i api som anon kan kjøre, og
+        -- de rører ingen kunnskapsobjekter: de åpner og lukker en agentkjøring,
+        -- og gjør ingenting før legitimasjonen er autentisert. Hvilke roller som
+        -- faktisk har EXECUTE på hvilken funksjon, kontrolleres i
+        -- 410_agent_identity_structure_test.sql; her er poenget at listen er
+        -- uttømmende.
+        'api.begin_agent_run(text,text,text,text,text,text,text,text,jsonb)',
+        'api.complete_agent_run(text,text,uuid,text,jsonb,text)'
       )
   $$,
-  'ingen annen funksjon i knowledge eller api enn de to skriveveiene er kjørbar for noen klientrolle'
+  'ingen annen funksjon i knowledge eller api enn de fire kontrollerte inngangspunktene er kjørbar for noen klientrolle'
 );
 select is_empty(
   $$
