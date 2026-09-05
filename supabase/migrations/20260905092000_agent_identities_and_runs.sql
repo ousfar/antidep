@@ -609,11 +609,26 @@ create trigger agent_identities_freeze
 -- tilbakekallingen skrives i dag med rene INSERT/UPDATE, og en regel som bare
 -- fantes i én funksjon, ville ikke gjeldt dem.
 --
--- Bare referanser denne skrivingen faktisk setter, kontrolleres. En aktør som
--- trekkes tilbake i ettertid skal ikke gjøre det umulig å trekke tilbake en
--- identitet vedkommende registrerte i sin tid: tilbaketrekking er en
--- statusendring framover, ikke en underkjenning av det som allerede er gjort
--- (ANTIDEP_CONSTITUTION.md §14).
+-- Bare referanser denne skrivingen faktisk *attribuerer en handling til*,
+-- kontrolleres. En aktør som trekkes tilbake i ettertid skal ikke gjøre det
+-- umulig å trekke tilbake en identitet vedkommende registrerte i sin tid:
+-- tilbaketrekking er en statusendring framover, ikke en underkjenning av det som
+-- allerede er gjort (ANTIDEP_CONSTITUTION.md §14).
+--
+-- Hva som teller som «attribuerer en handling», avgjøres av tilstandsendringen
+-- og ikke av om aktørkolonnen flyttet seg. En rotasjon utført av samme menneske
+-- som sist, endrer hash, versjon og tidspunkt, men lar utsteder-ID-en stå: den
+-- skrivingen påstår likevel at vedkommende utstedte en ny legitimasjon nå, og
+-- auditraden sier det. En regel som bare så på om ID-en endret seg, ville derfor
+-- sluppet gjennom en rotasjon i navnet til en aktør som var trukket tilbake i
+-- mellomtiden. Samme resonnement gjelder tilbakekallingen og `valid_to`.
+--
+-- Aktørradene låses med `for share` før de leses. Uten låsen finnes et vindu
+-- mellom kontrollen og skrivingen: utstedelsesfunksjonen kunne lese aktøren som
+-- aktiv, en parallell transaksjon kunne trekke den tilbake, og triggeren ville
+-- ikke sett det. Med låsen må de to transaksjonene stille seg i kø — kommer
+-- tilbaketrekkingen først, ser triggeren den og avviser; kommer den etterpå,
+-- var aktøren faktisk aktiv da handlingen ble utført.
 -- ----------------------------------------------------------------------------
 create function provenance.assert_agent_identity_actors_active()
   returns trigger
@@ -634,12 +649,25 @@ begin
     v_written := array[
       case when new.registered_by_actor_id is distinct from old.registered_by_actor_id
            then new.registered_by_actor_id end,
-      case when new.secret_issued_by_actor_id is distinct from old.secret_issued_by_actor_id
+      -- Utstedelsen er handlingen, ikke bytte av utsteder: en rotasjon med samme
+      -- menneske som sist attribuerer likevel en ny legitimasjon til det
+      -- mennesket.
+      case when new.secret_hash is distinct from old.secret_hash
+             or new.secret_issued_by_actor_id is distinct from old.secret_issued_by_actor_id
            then new.secret_issued_by_actor_id end,
-      case when new.revoked_by_actor_id is distinct from old.revoked_by_actor_id
+      case when new.valid_to is distinct from old.valid_to
+             or new.revoked_by_actor_id is distinct from old.revoked_by_actor_id
            then new.revoked_by_actor_id end
     ];
   end if;
+
+  -- Låsen først, lesningen etterpå: predikatet under returnerer bare de
+  -- tilbaketrukne radene, så en lås festet der ville ikke holdt igjen en
+  -- samtidig tilbaketrekking av en aktør som ennå er aktiv.
+  perform 1
+  from provenance.actors a
+  where a.id = any (v_written)
+  for share;
 
   select a.actor_key into v_retired_actor_key
   from provenance.actors a
@@ -662,13 +690,79 @@ end;
 $$;
 
 comment on function provenance.assert_agent_identity_actors_active() is
-  'Krever at hvert menneske en skriving mot provenance.agent_identities attribuerer en handling til — registratoren, utstederen av legitimasjonen, den som trekker den tilbake — er en aktør som ikke er trukket tilbake. Kontrollerer bare referansene den enkelte skrivingen faktisk setter, slik at en aktør som trekkes tilbake i ettertid ikke låser raden. Ligger på tabellen og ikke bare i utstedelsesfunksjonen, fordi registrering og tilbakekalling skrives med rene INSERT/UPDATE.';
+  'Krever at hvert menneske en skriving mot provenance.agent_identities attribuerer en handling til — registratoren, utstederen av legitimasjonen, den som trekker den tilbake — er en aktør som ikke er trukket tilbake. Hva som teller som en handling, avgjøres av tilstandsendringen og ikke av om aktørkolonnen flyttet seg: en rotasjon med samme utsteder som sist kontrolleres på nytt. Referanser skrivingen ikke rører, kontrolleres ikke, slik at en aktør som trekkes tilbake i ettertid ikke låser raden. Aktørradene låses med for share, slik at en samtidig tilbaketrekking ikke kan gli inn mellom kontrollen og skrivingen. Ligger på tabellen og ikke bare i utstedelsesfunksjonen, fordi registrering og tilbakekalling skrives med rene INSERT/UPDATE.';
 
 revoke execute on function provenance.assert_agent_identity_actors_active() from public;
 
 create trigger agent_identities_assert_actors_active
   before insert or update on provenance.agent_identities
   for each row execute function provenance.assert_agent_identity_actors_active();
+
+-- ----------------------------------------------------------------------------
+-- 5b. En identitet begynner alltid inert
+--
+-- De tre auditoperasjonene (008c) hviler på at registrering, utstedelse av
+-- legitimasjon og tilbakekalling er tre *separate* skrivinger. Auditskriveren
+-- registrerer en INSERT som nøyaktig én hendelse — `agent_identity_registered` —
+-- og kan ikke registrere to.
+--
+-- Uten dette vernet kunne én privilegert INSERT satt `secret_hash` og `valid_to`
+-- med det samme: identiteten ville vært i stand til å autentisere seg fra første
+-- øyeblikk, eventuelt allerede tilbakekalt, og auditloggen ville bare vist at
+-- den ble registrert. De to andre rettighetsendringene ville skjedd uten spor.
+-- CHECK-ene i tabellen fanger det ikke: de kontrollerer at feltene er innbyrdes
+-- konsistente, ikke at de er tomme ved registrering. Og freeze_agent_identity()
+-- gjelder bare UPDATE og DELETE.
+--
+-- Starttilstanden er derfor den migrasjon 005f faktisk skriver, og den er nå en
+-- regel framfor en beskrivelse: ingen legitimasjon, ingen tilbakekalling. Begge
+-- deler kommer etterpå, hver med sin egen skriving og sin egen auditrad.
+-- ----------------------------------------------------------------------------
+create function provenance.assert_agent_identity_starts_inert()
+  returns trigger
+  language plpgsql
+  set search_path = ''
+as $$
+begin
+  if new.secret_hash is not null
+    or new.secret_version <> 0
+    or new.secret_issued_at is not null
+    or new.secret_issued_by_actor_id is not null
+  then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format(
+        'Agentidentiteten %L kan ikke registreres med legitimasjon allerede utstedt.',
+        new.identity_key
+      ),
+      hint = 'Registrer identiteten uten legitimasjon, og utsted den etterpå med provenance.issue_agent_identity_credential(text, text). Å opprette og å gi evnen til å handle er to rettighetsendringer, og de skal ha hver sin auditrad.';
+  end if;
+
+  if new.valid_to is not null
+    or new.revoked_by_actor_id is not null
+    or new.revocation_reason is not null
+  then
+    raise exception using
+      errcode = 'restrict_violation',
+      message = format(
+        'Agentidentiteten %L kan ikke registreres som allerede tilbakekalt.',
+        new.identity_key
+      ),
+      hint = 'En tilbakekalling er en egen handling med sin egen auditrad. Registrer identiteten, og trekk den eventuelt tilbake etterpå — eller la være å registrere den.';
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function provenance.assert_agent_identity_starts_inert() is
+  'Krever at en agentidentitet registreres i den inerte tilstanden migrasjon 005f faktisk skriver: ingen utstedt legitimasjon og ingen tilbakekalling. Finnes fordi auditskriveren registrerer en INSERT som nøyaktig én hendelse: uten vernet kunne én skriving både registrere, utstede legitimasjon og tilbakekalle, mens loggen bare viste registreringen. Utstedelse og tilbakekalling er egne skrivinger med hver sin auditrad.';
+
+revoke execute on function provenance.assert_agent_identity_starts_inert() from public;
+
+create trigger agent_identities_assert_starts_inert
+  before insert on provenance.agent_identities
+  for each row execute function provenance.assert_agent_identity_starts_inert();
 
 create function provenance.freeze_agent_run()
   returns trigger

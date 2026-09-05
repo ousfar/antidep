@@ -18,7 +18,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(24);
+select plan(25);
 
 -- ===========================================================================
 -- Del 1 — Utgangstilstanden: identiteten er registrert og inert
@@ -258,6 +258,24 @@ select throws_ok(
   '23001',
   'Aktøren ''human:peder-holman'' er trukket tilbake og kan ikke utstede legitimasjon.',
   'en tilbaketrukket utsteder kan ikke gi en maskin ny legitimasjon'
+);
+
+-- Rotasjonen er handlingen, ikke bytte av utsteder. Samme menneske har allerede
+-- utstedt to ganger over; når det mennesket trekkes tilbake, skal en tredje
+-- rotasjon i vedkommendes navn avvises selv om utsteder-ID-en står stille — det
+-- er tilstandsendringen og ikke kolonnen som attribuerer handlingen. Dette er
+-- den direkte, privilegerte veien utenom funksjonen, og den er nettopp det
+-- tabellvernet finnes for.
+select throws_ok(
+  $$
+    update provenance.agent_identities ai
+    set secret_hash = 'sha256-v1:' || repeat('b', 64),
+        secret_version = ai.secret_version + 1,
+        secret_issued_at = now()
+    where ai.identity_key = 'agent-identity:extraction-verification-01'
+  $$,
+  '23001', null,
+  'en rotasjon med uendret utsteder avvises når den utstederen er trukket tilbake'
 );
 
 update provenance.actors

@@ -14,7 +14,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(36);
+select plan(38);
 
 -- ===========================================================================
 -- Del 1 — Tabellene og nøklene som bærer separasjonen
@@ -185,6 +185,44 @@ select throws_ok(
   $$,
   '23001', null,
   'utstedelsestidspunkt og utsteder kan ikke skrives om uten en faktisk utstedelse'
+);
+
+-- En identitet begynner alltid inert. Auditskriveren registrerer en INSERT som
+-- nøyaktig én hendelse, så en registrering som samtidig utstedte legitimasjon
+-- eller trakk identiteten tilbake, ville utført to rettighetsendringer til og
+-- bare loggført den ene.
+select throws_ok(
+  $$
+    insert into provenance.agent_identities
+      (actor_id, agent_role, identity_key,
+       registered_by_actor_id, registered_by_actor_type, registration_reason,
+       secret_hash, secret_version, secret_issued_at,
+       secret_issued_by_actor_id, secret_issued_by_actor_type)
+    select e.id, 'evidence_extraction', 'agent-identity:ferdig-credentialed',
+           h.id, 'human', 'Registrert med legitimasjon allerede utstedt.',
+           'sha256-v1:' || repeat('a', 64), 1, now(), h.id, 'human'
+    from provenance.actors e, provenance.actors h
+    where e.actor_key = 'agent:evidence-extraction'
+      and h.actor_key = 'human:peder-holman'
+  $$,
+  '23001', null,
+  'en agentidentitet kan ikke registreres med legitimasjon allerede utstedt'
+);
+select throws_ok(
+  $$
+    insert into provenance.agent_identities
+      (actor_id, agent_role, identity_key,
+       registered_by_actor_id, registered_by_actor_type, registration_reason,
+       valid_to, revoked_by_actor_id, revoked_by_actor_type, revocation_reason)
+    select e.id, 'evidence_extraction', 'agent-identity:ferdig-tilbakekalt',
+           h.id, 'human', 'Registrert som allerede tilbakekalt.',
+           now() + interval '1 hour', h.id, 'human', 'Tilbakekalt ved registrering.'
+    from provenance.actors e, provenance.actors h
+    where e.actor_key = 'agent:evidence-extraction'
+      and h.actor_key = 'human:peder-holman'
+  $$,
+  '23001', null,
+  'en agentidentitet kan ikke registreres som allerede tilbakekalt'
 );
 
 -- Den som utfører handlingen, må kunne utføre handlinger. Uten regelen ville en
