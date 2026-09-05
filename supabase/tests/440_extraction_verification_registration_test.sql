@@ -16,7 +16,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(22);
+select plan(23);
 
 -- ===========================================================================
 -- Del 1 — Kontrakten
@@ -110,8 +110,24 @@ values (
   'Testforfatter 440', (select id from fixture where name = 'editor')
 );
 
+-- Et lagret øyeblikksbilde av kilden (knowledge.source_versions,
+-- migrasjon 20260819064500). Finnes for at det første evidensfunnet skal ha et
+-- reelt grunnlag å registrere `verifiable_representation` mot: uten denne
+-- raden, og uten evidensfunnets source_version_id koblet til den, ville
+-- outcome := 'verified' + source_access := 'verifiable_representation' vært en
+-- påstand uten grunnlag, som §74.30 punkt 1 krever at funksjonen avviser (se
+-- avsnitt 8).
+insert into knowledge.source_versions (
+  id, source_id, retrieved_at, retrieved_from, content_hash
+)
+values (
+  '44000000-0000-4000-8000-000000000021', '44000000-0000-4000-8000-000000000001',
+  now(), 'https://example.test/440-kilde',
+  'sha256:' || repeat('a', 64)
+);
+
 insert into knowledge.evidence_items (
-  id, source_id, design_code, population_availability, population_detail,
+  id, source_id, source_version_id, design_code, population_availability, population_detail,
   sample_size_availability, intervention_drug_id, comparator_kind,
   outcome_concept_id, outcome_detail, timepoint_availability,
   reported_direction, estimate_availability, confidence_interval_availability,
@@ -119,6 +135,7 @@ insert into knowledge.evidence_items (
 )
 values (
   '44000000-0000-4000-8000-000000000011', '44000000-0000-4000-8000-000000000001',
+  '44000000-0000-4000-8000-000000000021',
   'randomized_controlled_trial', 'not_reported', 'Prøve i 440.',
   'not_reported', (select id from fixture where name = 'sertralin'), 'none',
   (select id from fixture where name = 'weight'), 'Funn laget av ekstraksjonsagenten, for 440.',
@@ -126,7 +143,11 @@ values (
   'Avsnitt 1', 'ai_assisted', (select id from fixture where name = 'extractor')
 ),
 (
+  -- Har en lagret kildeversjon, av samme grunn som 000011: denne raden brukes
+  -- til å prøve selvverifikasjonsregelen (del 7), ikke source_version-sjekken,
+  -- og skal derfor ikke i tillegg trigge den nye avvisningen fra §74.30 punkt 1.
   '44000000-0000-4000-8000-000000000012', '44000000-0000-4000-8000-000000000001',
+  '44000000-0000-4000-8000-000000000021',
   'randomized_controlled_trial', 'not_reported', 'Prøve i 440.',
   'not_reported', (select id from fixture where name = 'sertralin'), 'none',
   (select id from fixture where name = 'weight'), 'Funn laget av verifikatoren selv, for 440.',
@@ -135,11 +156,25 @@ values (
 ),
 (
   '44000000-0000-4000-8000-000000000013', '44000000-0000-4000-8000-000000000001',
+  null,
   'randomized_controlled_trial', 'not_reported', 'Prøve i 440.',
   'not_reported', (select id from fixture where name = 'sertralin'), 'none',
   (select id from fixture where name = 'weight'), 'Funn laget av redaktøren, brukt bare til å prøve forfalskningsforsøk.',
   'not_reported', 'not_stated', 'not_reported', 'not_reported',
   'Avsnitt 3', 'manual', (select id from fixture where name = 'editor')
+),
+(
+  -- Uten lagret kildeversjon (source_version_id NULL). Brukes i avsnitt 8 til å
+  -- prøve at `verifiable_representation` avvises når det ikke finnes noe å vise
+  -- til, uten å blande inn selvverifikasjonsregelen 000012 finnes for.
+  '44000000-0000-4000-8000-000000000014', '44000000-0000-4000-8000-000000000001',
+  null,
+  'randomized_controlled_trial', 'not_reported', 'Prøve i 440.',
+  'not_reported', (select id from fixture where name = 'sertralin'), 'none',
+  (select id from fixture where name = 'weight'),
+  'Funn laget av ekstraksjonsagenten, uten lagret kildeversjon, for 440.',
+  'not_reported', 'not_stated', 'not_reported', 'not_reported',
+  'Avsnitt 4', 'ai_assisted', (select id from fixture where name = 'extractor')
 );
 
 -- En andre agentidentitet, i rollen evidence_extraction, registrert bare for
@@ -402,6 +437,26 @@ select throws_ok(
   $$,
   'P0002', null,
   'et evidensfunn som ikke finnes avvises eksplisitt, framfor å feile på en fremmednøkkel lenger nede'
+);
+
+-- §74.30 punkt 1: `verifiable_representation` uten noe lagret grunnlag å vise
+-- til skal avvises av funksjonen selv, ikke bare stole på kallerens ord.
+-- 000014 har ingen source_version_id, i motsetning til 000011 fikstureren i
+-- del 2 kobler til en faktisk knowledge.source_versions-rad.
+select throws_ok(
+  $$
+    select api.register_extraction_verification(
+      p_identity_key := 'agent-identity:extraction-verification-01',
+      p_secret := (select secret from cred where label = 'verifier'),
+      p_agent_run_id := (select id from run where label = 'verifier-open'),
+      p_evidence_item_id := '44000000-0000-4000-8000-000000000014',
+      p_outcome := 'verified', p_source_access := 'verifiable_representation',
+      p_checked_fields := array['source_locator'],
+      p_rationale := 'Prøve i 440: forsøk på å registrere verifiable_representation uten lagret kildeversjon.'
+    )
+  $$,
+  '22023', 'Evidensfunnet har ingen lagret kildeversjon å vise til.',
+  'verifiable_representation avvises når evidensfunnet ikke har noen lagret, etterprøvbar kildeversjon å vise til'
 );
 reset role;
 
