@@ -589,13 +589,28 @@ create trigger agent_identities_freeze
   for each row execute function provenance.freeze_agent_identity();
 
 -- ----------------------------------------------------------------------------
--- 5a. Den som utfører handlingen, må kunne utføre handlinger
+-- 5a. En tilbaketrukket aktør kan verken utføre handlinger eller få nye
+--     rettigheter
 --
--- De tre menneskelige aktørreferansene på raden — registratoren, utstederen av
+-- Regelen har to ledd, og de gjelder hver sin ende av raden.
+--
+-- De tre menneskelige aktørreferansene — registratoren, utstederen av
 -- legitimasjonen og den som trekker den tilbake — er alle påstander om at et
 -- bestemt menneske gjorde noe. Den sammensatte fremmednøkkelen og CHECK-en
 -- håndhever at det er et menneske; ingen av dem kan se om mennesket fortsatt er
 -- i bruk.
+--
+-- Agentaktøren står i den andre enden: den *mottar* evnen til å handle. En
+-- identitet opprettet for en tilbaketrukket agentaktør, eller en legitimasjon
+-- rotert til en, ville gitt en rettighet til noe som er tatt ut av bruk — og
+-- fordi en tilbaketrekking kan omgjøres, ville den nye legitimasjonen blitt
+-- gyldig i det `retired_at` nulles, uten at noen hadde utstedt noe etter
+-- reaktiveringen. Agentaktøren kontrolleres derfor ved registrering og ved
+-- rotasjon.
+--
+-- Ikke ved tilbakekalling: å trekke tilbake en identitet hvis aktør allerede er
+-- tatt ut av bruk, er nettopp den ryddingen modellen skal tillate. En regel som
+-- blokkerte det, ville gjort rekkefølgen mellom to opprydninger til en felle.
 --
 -- Resten av modellen avviser en tilbaketrukket aktør konsekvent:
 -- knowledge.assert_editor_authorized(uuid) nekter en tilbaketrukket editor å
@@ -641,12 +656,18 @@ declare
 begin
   if tg_op = 'INSERT' then
     v_written := array[
+      -- Registreringen gir agentaktøren en identitet.
+      new.actor_id,
       new.registered_by_actor_id,
       new.secret_issued_by_actor_id,
       new.revoked_by_actor_id
     ];
   else
     v_written := array[
+      -- En rotasjon gir agentaktøren en ny gyldig legitimasjon. En
+      -- tilbakekalling gir den ingenting, og skal alltid være mulig.
+      case when new.secret_hash is distinct from old.secret_hash
+           then new.actor_id end,
       case when new.registered_by_actor_id is distinct from old.registered_by_actor_id
            then new.registered_by_actor_id end,
       -- Utstedelsen er handlingen, ikke bytte av utsteder: en rotasjon med samme
@@ -679,10 +700,10 @@ begin
     raise exception using
       errcode = 'restrict_violation',
       message = format(
-        'Aktøren %L er trukket tilbake og kan ikke stå som den som utførte handlingen.',
+        'Aktøren %L er trukket tilbake og kan verken utføre handlinger eller få nye rettigheter.',
         v_retired_actor_key
       ),
-      hint = 'En tilbaketrukket aktør beholder sin historikk, men kan ikke utføre nye handlinger. Registrering, utstedelse av legitimasjon og tilbakekalling skal attribueres til et menneske som er i bruk.';
+      hint = 'En tilbaketrukket aktør beholder sin historikk, men er ute av bruk. Registrering, utstedelse av legitimasjon og tilbakekalling skal attribueres til et menneske som er i bruk, og en agentidentitet kan verken opprettes for eller roteres til en agentaktør som er trukket tilbake. Å trekke tilbake en identitet er alltid mulig.';
   end if;
 
   return new;
@@ -690,7 +711,7 @@ end;
 $$;
 
 comment on function provenance.assert_agent_identity_actors_active() is
-  'Krever at hvert menneske en skriving mot provenance.agent_identities attribuerer en handling til — registratoren, utstederen av legitimasjonen, den som trekker den tilbake — er en aktør som ikke er trukket tilbake. Hva som teller som en handling, avgjøres av tilstandsendringen og ikke av om aktørkolonnen flyttet seg: en rotasjon med samme utsteder som sist kontrolleres på nytt. Referanser skrivingen ikke rører, kontrolleres ikke, slik at en aktør som trekkes tilbake i ettertid ikke låser raden. Aktørradene låses med for share, slik at en samtidig tilbaketrekking ikke kan gli inn mellom kontrollen og skrivingen. Ligger på tabellen og ikke bare i utstedelsesfunksjonen, fordi registrering og tilbakekalling skrives med rene INSERT/UPDATE.';
+  'Krever at ingen tilbaketrukket aktør verken utfører en handling eller får en ny rettighet gjennom en skriving mot provenance.agent_identities. Det gjelder de tre menneskene som registrerer, utsteder legitimasjon og trekker tilbake, og det gjelder agentaktøren selv ved registrering og ved rotasjon — en legitimasjon utstedt til en tilbaketrukket agentaktør ville blitt gyldig i det aktøren tas i bruk igjen, uten en ny utstedelse. Tilbakekalling er unntatt: å rydde opp i en identitet hvis aktør allerede er ute av bruk, skal alltid være mulig. Hva som teller som en handling, avgjøres av tilstandsendringen og ikke av om aktørkolonnen flyttet seg: en rotasjon med samme utsteder som sist kontrolleres på nytt. Referanser skrivingen ikke rører, kontrolleres ikke, slik at en aktør som trekkes tilbake i ettertid ikke låser raden. Aktørradene låses med for share, slik at en samtidig tilbaketrekking ikke kan gli inn mellom kontrollen og skrivingen. Ligger på tabellen og ikke bare i utstedelsesfunksjonen, fordi registrering og tilbakekalling skrives med rene INSERT/UPDATE.';
 
 revoke execute on function provenance.assert_agent_identity_actors_active() from public;
 

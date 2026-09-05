@@ -14,7 +14,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(39);
 
 -- ===========================================================================
 -- Del 1 — Tabellene og nøklene som bærer separasjonen
@@ -249,6 +249,32 @@ select throws_ok(
   $$,
   '23001', null,
   'en tilbaketrukket aktør kan ikke stå som registrator for en agentidentitet'
+);
+
+-- Den andre enden av samme regel: en identitet kan ikke opprettes for en
+-- agentaktør som er tatt ut av bruk. Rettigheten ville ligget der og ventet på
+-- at aktøren ble reaktivert.
+select throws_ok(
+  $$
+    do $probe$
+    begin
+      update provenance.actors
+      set retired_at = now(), retirement_note = 'Prøve i 410.'
+      where actor_key = 'agent:evidence-extraction';
+
+      insert into provenance.agent_identities
+        (actor_id, agent_role, identity_key,
+         registered_by_actor_id, registered_by_actor_type, registration_reason)
+      select e.id, 'evidence_extraction', 'agent-identity:tilbaketrukket-aktor',
+             h.id, 'human', 'Identitet for en tilbaketrukket agentaktør.'
+      from provenance.actors e, provenance.actors h
+      where e.actor_key = 'agent:evidence-extraction'
+        and h.actor_key = 'human:peder-holman';
+    end
+    $probe$
+  $$,
+  '23001', null,
+  'en agentidentitet kan ikke opprettes for en agentaktør som er trukket tilbake'
 );
 
 -- ===========================================================================

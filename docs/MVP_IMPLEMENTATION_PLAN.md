@@ -1473,7 +1473,7 @@ seks siste filene bærer de seks laveste bokstavnumrene». Det stemte ikke mot l
 006a og 007a har lavere bokstavnumre enn flere av dem — så den er erstattet med den påstanden
 listen faktisk bærer.)
 
-Databaselaget teller nå 1402 pgTAP-assertions over 43 testfiler.
+Databaselaget teller nå 1405 pgTAP-assertions over 43 testfiler.
 
 Tallene i dette avsnittet og i §74.5 kontrolleres maskinelt av
 `scripts/verify-counts.sh`, som kjører i CI. Bakgrunnen er §74.8: to ganger har et tall
@@ -4509,15 +4509,15 @@ ett kall til `provenance.issue_agent_identity_credential(text, text)` i det milj
 leser hemmeligheten fra. Fram til da er identiteten registrert, reviewbar og ute av stand til
 å gjøre noe.
 
-**Hva som er prøvd, og hvordan.** Tre nye testfiler med til sammen 80 assertions:
+**Hva som er prøvd, og hvordan.** Tre nye testfiler med til sammen 83 assertions:
 `410_agent_identity_structure_test.sql` dekker nøklene, speilkolonnene, reglene som ikke kan
 omgås og hele tilgangsflaten; `420_agent_identity_authentication_test.sql` dekker
 legitimasjonens livssyklus, rollen som rettighetsgrense, rotasjon, tilbaketrukket aktør,
 tilbakekalling og auditsporet; `430_agent_run_lifecycle_test.sql` dekker inngangspunktene som
 `anon`, kjøringens livssyklus, speilene som ikke lar seg forfalske, og lag 2 mot
 `workflow.evidence_verifications`. Ni vaktposter i den eksisterende suiten slo ut på
-endringen, som de skal, og er oppdatert framfor omgått. Fire funn fra kodegjennomgangen er rettet
-på plass, hvert med sin regresjonstest, og alle fire handler om det samme: at de tre
+endringen, som de skal, og er oppdatert framfor omgått. Fem funn fra kodegjennomgangen er rettet
+på plass, hvert med sin regresjonstest, og alle fem handler om det samme: at de tre
 rettighetsendringene i en agentidentitets livssyklus faktisk er tre, og at hver av dem
 etterlater sin egen auditrad.
 
@@ -4532,7 +4532,12 @@ etterlater sin egen auditrad.
 - Hva som teller som «utfører handlingen», avgjøres av tilstandsendringen og ikke av om
   aktørkolonnen flyttet seg: en rotasjon med samme utsteder som sist kontrolleres på nytt.
   Aktørradene låses med `for share`, slik at en samtidig tilbaketrekking ikke kan gli inn
-  mellom kontrollen og skrivingen. Hele flyten er dessuten kjørt over
+  mellom kontrollen og skrivingen.
+- Regelen har to ledd, ikke ett. En tilbaketrukket aktør kan heller ikke *få* nye
+  rettigheter: agentaktøren selv kontrolleres ved registrering og ved rotasjon. En
+  legitimasjon utstedt mens aktøren var ute av bruk, ville blitt gyldig i det aktøren tas i
+  bruk igjen — uten at noen hadde utstedt noe etter reaktiveringen. Tilbakekalling er unntatt:
+  å rydde opp i en identitet hvis aktør allerede er ute av bruk, skal alltid være mulig. Hele flyten er dessuten kjørt over
 ekte HTTP gjennom PostgREST med publishable-nøkkelen som `anon`: feil hemmelighet og feil
 rolle gir begge 401 med identisk melding, riktig legitimasjon gir en kjøring, avslutningen gir
 200, og tabellene selv er ikke eksponert.

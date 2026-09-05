@@ -18,7 +18,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(25);
+select plan(27);
 
 -- ===========================================================================
 -- Del 1 — Utgangstilstanden: identiteten er registrert og inert
@@ -229,6 +229,22 @@ select throws_ok(
   'en tilbaketrukket aktør får ingen ny legitimasjon'
 );
 
+-- Samme regel, men på den privilegerte veien utenom funksjonen. Uten den ville
+-- en direkte rotasjon lyktes, og legitimasjonen ville blitt gyldig i det
+-- aktøren tas i bruk igjen — uten at noen hadde utstedt noe etter
+-- reaktiveringen.
+select throws_ok(
+  $$
+    update provenance.agent_identities ai
+    set secret_hash = 'sha256-v1:' || repeat('c', 64),
+        secret_version = ai.secret_version + 1,
+        secret_issued_at = now()
+    where ai.identity_key = 'agent-identity:extraction-verification-01'
+  $$,
+  '23001', null,
+  'legitimasjonen kan ikke roteres direkte mens agentaktøren er trukket tilbake'
+);
+
 update provenance.actors
 set retired_at = null, retirement_note = null
 where actor_key = 'agent:extraction-verification';
@@ -241,6 +257,17 @@ select lives_ok(
       'extraction_verification'::provenance.agent_role)
   $$,
   'aktøren kan tas i bruk igjen, og identiteten virker da som før'
+);
+
+-- Reaktiveringen åpner den veien som var stengt, og den skal åpnes av en ny
+-- utstedelse etterpå — ikke av en rotasjon som ble utført mens aktøren var ute
+-- av bruk.
+select lives_ok(
+  $$
+    select provenance.issue_agent_identity_credential(
+      'agent-identity:extraction-verification-01', 'human:peder-holman')
+  $$,
+  'etter reaktivering kan legitimasjonen utstedes på nytt'
 );
 
 -- Også utstederen må kunne utføre handlinger. Regelen ligger på tabellen
@@ -342,8 +369,9 @@ select results_eq(
   $$values ('agent_identity_registered', 'human:peder-holman', false),
            ('agent_identity_credential_issued', 'human:peder-holman', false),
            ('agent_identity_credential_issued', 'human:peder-holman', false),
+           ('agent_identity_credential_issued', 'human:peder-holman', false),
            ('agent_identity_revoked', 'human:peder-holman', false)$$,
-  'registrering, begge utstedelsene og tilbakekallingen står i auditloggen, uten legitimasjonshashen'
+  'registrering, alle tre utstedelsene og tilbakekallingen står i auditloggen, uten legitimasjonshashen'
 );
 
 select finish();
