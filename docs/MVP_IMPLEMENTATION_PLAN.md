@@ -1383,7 +1383,7 @@ PR G  db: add publication events and gate                                   (#15
       docs: record the evidence registration deployed to the hosted project (#46)  merget   ingen migrasjon
       docs: record the first real evidence registration in production       (#47)  merget   ingen migrasjon
       db: add technical agent identity and agent runs                        (#48)  merget   migrasjon 005d, 008c, 005e, 005f
-      db: add the extraction verification registration write path            (#49)  åpen     migrasjon 008d, 005g
+      db: add the extraction verification registration write path            (#50)  åpen     migrasjon 008d, 005g
 ```
 
 Avviket fra §68 er bevisst: én migrasjon per PR gir mindre og mer reviewbare enheter,
